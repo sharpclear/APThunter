@@ -447,6 +447,34 @@ const menuData = [
     keepAlive: true,
     locale: 'menu.menu4.menu2',
   },
+  {
+    id: 48,
+    parentId: 1,
+    path: '/dashboard/attributes',
+    component: '/dashboard/attributes',
+    title: '属性分析',
+    keepAlive: true,
+    locale: 'menu.dashboard.attributes',
+  },
+  {
+    id: 49,
+    parentId: 1,
+    path: '/dashboard/profile',
+    component: '/dashboard/profile',
+    title: '组织画像',
+    keepAlive: true,
+    locale: 'menu.dashboard.profile',
+  },
+  {
+    id: 50,
+    parentId: 3,
+    title: '订阅与预警',
+    path: '/form/alert',
+    component: '/form/alert',
+    name: 'FormAlert',
+    keepAlive: false,
+    locale: 'menu.form.alert',
+  },
 ]
 
 export const accessMenuData = [

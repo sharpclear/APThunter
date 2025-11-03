@@ -4,7 +4,7 @@ import Step2 from './components/step2.vue'
 import Step3 from './components/step3.vue'
 
 defineOptions({
-  name: 'StepForm',
+  name: 'Stepdetection',
 })
 const state = reactive({
   currentTab: 0,

@@ -40,40 +40,40 @@ export default [
     ],
   },
   {
-    path: '/form',
-    redirect: '/form/basic-form',
-    name: 'Form',
+    path: '/detection',
+    redirect: '/detection/malicious-detection',
+    name: 'detection',
     meta: {
-      title: '表单页',
-      icon: 'FormOutlined',
+      title: '检测任务',
+      icon: 'detectionOutlined',
     },
     component: basicRouteMap.RouteView,
     children: [
       {
-        path: '/form/basic-form',
-        name: 'FormBasic',
-        component: () => import('~/pages/form/basic-form/index.vue'),
+        path: '/detection/malicious-detection',
+        name: 'detectionBasic',
+        component: () => import('~/pages/detection/malicious-detection/index.vue'),
         meta: {
-          title: '基础表单',
-          locale: 'menu.form.basic-form',
+          title: '恶意性检测',
+          locale: 'menu.detection.malicious-detection',
         },
       },
       {
-        path: '/form/step-form',
-        name: 'FormStep',
-        component: () => import('~/pages/form/step-form/index.vue'),
+        path: '/detection/step-detection',
+        name: 'detectionStep',
+        component: () => import('~/pages/detection/step-detection/index.vue'),
         meta: {
           title: '分步表单',
-          locale: 'menu.form.step-form',
+          locale: 'menu.detection.step-detection',
         },
       },
       {
-        path: '/form/advanced-form',
-        name: 'FormAdvanced',
-        component: () => import('~/pages/form/advanced-form/index.vue'),
+        path: '/detection/mytask',
+        name: 'MyTask',
+        component: () => import('~/pages/detection/mytask/index.vue'),
         meta: {
-          title: '高级表单',
-          locale: 'menu.form.advanced-form',
+          title: '仿冒域名检测',
+          locale: 'menu.detection.mytask',
         },
       },
     ],
@@ -117,83 +117,61 @@ export default [
     ],
   },
   {
-    path: '/menu',
-    redirect: '/menu/menu1',
-    name: 'Menu',
+    path: '/models',
+    redirect: '/models/model-training',
+    name: 'ModleManagement',
     meta: {
-      title: '菜单',
+      title: '模型管理',
       icon: 'BarsOutlined',
     },
     component: basicRouteMap.RouteView,
     children: [
       {
-        path: '/menu/menu1',
-        name: 'MenuMenu11',
-        component: () => import('~/pages/menu/menu1.vue'),
+        path: '/models/model-training',
+        name: 'ModelTraining',
+        component: () => import('~/pages/models/model-training/index.vue'),
         meta: {
-          title: '菜单1',
+          title: '模型训练',
+          locale: 'menu.models.model-training',
         },
       },
       {
-        path: '/menu/menu2',
-        name: 'MenuMenu12',
-        component: () => import('~/pages/menu/menu2.vue'),
+        path: '/models/model-market',
+        name: 'ModelMarket',
+        component: () => import('~/pages/models/model-market/index.vue'),
         meta: {
-          title: '菜单2',
+          title: '模型市场',
+          locale: 'menu.models.model-market',
         },
       },
       {
-        path: '/menu/menu3',
-        redirect: '/menu/menu3/menu1',
-        name: 'MenuMenu1-1',
+        path: '/models/my-model/index',
+        redirect: '/models/my-model/menu1',
+        name: 'MyModel',
+        component: () => import('~/pages/models/my-model/index.vue'),
         meta: {
-          title: '菜单1-1',
+          title: '我的模型',
+          locale: 'menu.models.my-model',
         },
-        children: [
+      },
+      /* children: [
           {
-            path: '/menu/menu3/menu1',
+            path: '/menu/my-model/menu1',
             name: 'MenuMenu111',
-            component: () => import('~/pages/menu/menu-1-1/menu1.vue'),
+            component: () => import('~/pages/menu/my-model/menu1.vue'),
             meta: {
               title: '菜单1-1-1',
             },
           },
           {
-            path: '/menu/menu3/menu2',
+            path: '/menu/my-model/menu2',
             name: 'MenuMenu112',
-            component: () => import('~/pages/menu/menu-1-1/menu2.vue'),
+            component: () => import('~/pages/menu/my-model/menu2.vue'),
             meta: {
               title: '菜单1-1-2',
             },
           },
-        ],
-      },
-      {
-        path: '/menu/menu4',
-        redirect: '/menu/menu4/menu1',
-        name: 'MenuMenu2-1',
-        meta: {
-          title: '菜单2-1',
-        },
-        children: [
-          {
-            path: '/menu/menu4/menu1',
-            name: 'MenuMenu211',
-            component: () => import('~/pages/menu/menu-2-1/menu1.vue'),
-            meta: {
-              title: '菜单2-1-1',
-            },
-          },
-          {
-            path: '/menu/menu4/menu2',
-            name: 'MenuMenu212',
-            component: () => import('~/pages/menu/menu-2-1/menu2.vue'),
-            meta: {
-              title: '菜单2-1-2',
-            },
-          },
-        ],
-      },
+        ], */
     ],
   },
   {

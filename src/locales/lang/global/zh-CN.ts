@@ -81,7 +81,7 @@ export default {
   'menu.dashboard.analysis': '分析页',
   'menu.dashboard.monitor': '数据统计',
   'menu.dashboard.workplace': '时空分布',
-  'menu.dashboard.attributes': '属性分析', // 域名属性分析
+  'menu.dashboard.attributes': '域名属性分析', // 域名属性分析
   'menu.dashboard.profile': '组织画像', // 组织画像
   'menu.exception.403': '403',
   'menu.exception.404': '404',

@@ -9,7 +9,7 @@ export default [
     name: 'Dashboard',
     meta: {
       title: '仪表盘',
-      icon: 'DashboardOutlined',
+      icon: 'RadarChartOutlined',
     },
     component: basicRouteMap.RouteView,
     children: [

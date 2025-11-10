@@ -16,7 +16,7 @@ const menuData = [
     id: 1,
     parentId: null,
     title: '仪表盘',
-    icon: 'DashboardOutlined',
+    icon: 'RadarChartOutlined',
     component: 'RouteView',
     redirect: '/dashboard/analysis',
     path: '/dashboard',

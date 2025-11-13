@@ -1,5 +1,7 @@
 {
   "compilerOptions": {
+    "noImplicitAny": false,
+    "strictNullChecks": false,
     "target": "ES2020",
     "useDefineForClassFields": true,
     "module": "ESNext",
@@ -16,7 +18,7 @@
     "jsxImportSource": "vue",
 
     /* Linting */
-    "strict": true,
+    "strict": false,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,

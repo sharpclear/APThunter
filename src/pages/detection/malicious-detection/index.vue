@@ -74,12 +74,30 @@ async function handleSubmit() {
     return message.warning('请选择日期范围')
   }
   submitLoading.value = true
-  setTimeout(() => {
-    submitLoading.value = false
-    message.success('检测任务已提交！')
+  try {
+    const fd = new FormData()
+    fd.append('model', String(selectedModel.value))
+    fd.append('dataSource', dataSource.value)
+    fd.append('withAttribution', String(withAttribution.value))
+    if (dataSource.value === 'upload' && uploadFile.value) {
+      fd.append('file', uploadFile.value)
+    }
+    else {
+      fd.append('dateRange', JSON.stringify(dateRange.value || []))
+    }
+    const resp = await fetch('/api/tasks', { method: 'POST', body: fd })
+    if (!resp.ok)
+      throw new Error('提交失败')
+    const json = await resp.json()
+    message.success(`检测任务已提交！ task: ${json.task_id || ''}`)
     resetForm()
-  }, 1200)
-  // 实际API接口提交代码见前面方案注释
+  }
+  catch (e) {
+    message.error('提交失败')
+  }
+  finally {
+    submitLoading.value = false
+  }
 }
 function resetForm() {
   selectedModel.value = ''
@@ -136,11 +154,29 @@ async function handleImpersonationSubmit() {
     return message.warning('请选择日期范围')
   }
   impersonationSubmitLoading.value = true
-  setTimeout(() => {
-    impersonationSubmitLoading.value = false
-    message.success('仿冒域名检测任务已提交！')
+  try {
+    const fd = new FormData()
+    fd.append('officialFile', officialDomainFile.value as File)
+    fd.append('detectionSource', detectionDomainSource.value)
+    if (detectionDomainSource.value === 'upload' && detectionDomainFile.value) {
+      fd.append('detectionFile', detectionDomainFile.value as File)
+    }
+    else {
+      fd.append('detectionDateRange', JSON.stringify(detectionDomainDateRange.value || []))
+    }
+    const resp = await fetch('/api/impersonation-tasks', { method: 'POST', body: fd })
+    if (!resp.ok)
+      throw new Error('提交失败')
+    const json = await resp.json()
+    message.success(`仿冒域名检测任务已提交！ task: ${json.task_id || ''}`)
     resetImpersonationForm()
-  }, 1200)
+  }
+  catch {
+    message.error('提交失败')
+  }
+  finally {
+    impersonationSubmitLoading.value = false
+  }
 }
 </script>
 

@@ -1,5 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv
+ENV/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Node
+node_modules/
+dist/
+build/
+.npm
+.pnpm-store/
+.pnpm-debug.log*
+.yarn/
+.yarn-integrity
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,31 +65,41 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# Docker
+.dockerignore
+docker-compose.override.yml
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+# Database
+*.db
+*.sqlite
+*.sqlite3
 
-# Vitepress
-docs/.vitepress/dist
-docs/.vitepress/cache
+# Temporary files
+*.tmp
+*.temp
+.cache/
+.temp/
+.tmp/
 
-*.log*
-.nitro
-.cache
-.mist
-.output
+# Model files (if large, consider using Git LFS)
+# Uncomment if model files are too large
+# backend/app/models/pretrained_model/
+# backend/app/models/saved_model_ML/
 
-types/components.d.ts
+# Coverage reports
+coverage/
+.nyc_output/
+*.lcov
+
+# Build artifacts
+*.tar.gz
+*.zip
+*.rar
+
+# Git 备份目录
+.git.backup/
+**/.git.backup/
+
+# Windows 下载标识文件
+*Zone.Identifier
+**/*Zone.Identifier

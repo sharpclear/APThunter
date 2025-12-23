@@ -1,98 +1,372 @@
-<div align="center"> <a href="https://github.com/antdv-pro/antdv-pro"> <img alt="VbenAdmin Logo" width="200" height="200" src="./public/logo.svg"> </a> <br> <br>
+# ATDV Pro - 恶意域名检测系统
 
-<h1>Antdv Pro</h1>
+## 项目简介
 
-</div>
+基于 FastAPI + Vue3 的恶意域名检测系统，支持恶意性检测和仿冒域名检测功能。项目采用 Docker Compose 一键部署，包含完整的前后端服务、数据库和对象存储。
 
-![gitee](https://gitee.com/antdv-pro/antdv-pro/badge/star.svg)
-![github](https://img.shields.io/github/stars/antdv-pro/antdv-pro?style=social)
+## 系统要求
 
-**English** | [简体中文](./README.zh-CN.md)
+- **Docker**: >= 20.10
+- **Docker Compose**: >= 2.0
+- **内存**: 至少 4GB 可用内存（推荐 8GB+）
+- **磁盘空间**: 至少 10GB 可用空间
+- **操作系统**: Linux / macOS / Windows (WSL2)
 
-## Introduction
+## 快速开始
 
-AntdvPro is a complete set of enterprise-level mid-backend front-end/design solutions based on Vue3, Vite4, ant-design-vue4, Pinia, UnoCSS and Typescript. It refers to the design pattern of Ali react version antd-pro, using the latest and most popular The front-end technology stack has built-in dynamic routing, multi-theme, multi-layout and other functions, which can help you quickly build enterprise-level mid-background product prototypes.
-
-## Features
-
-* pnpm: Using the latest pnpm as a package management tool, it can greatly reduce the size of node_modules, speed up the installation speed of packages, and can also share dependencies to reduce disk usage.
-* vite: vite as a front-end development tool, it can greatly speed up the start-up speed of the project, and also supports hot updates, which can greatly improve development efficiency.
-* vue3: vue3.3.x as the front-end framework, the basic code is written in script-setup, with less code and low maintenance cost.
-* nitro mock: Use nitro as the server's mock data, decoupled from the project, and more flexible and easy to use.
-* ant-design-vue4: ant-design-vue4 as the UI framework, the author of admin-pro is also a core member of ant-design-vue, which can provide long-term maintenance support.
-* pinia: pinia as a state management tool, it can greatly improve the readability and maintainability of the code, and also supports Typescript.
-* UnoCSS: Atomic CSS framework, reduce the troubles caused by thinking about some common class names, and improve our development efficiency.
-* Code specification: We have encapsulated a set of eslint-based code specification configuration files, which can be used out of the box to unify the problems brought by different teams.
-* Theme: The design specifications of antd-pro of the react version are used, and a set of theme modes based on vue are developed. On this basis, some new functions are added to meet various different needs as much as possible.
-* Request function: Based on axios, a set of request functions with complete types and some basic interceptor encapsulations are encapsulated. You only need to make corresponding implementation adjustments according to the requirements to meet the different needs of various projects.
-* Mobile compatibility: We have tried our best to make the basic framework compatible with the mobile terminal mode, but because our main goal is the enterprise-level mid-background product, we have not made too much adaptation to the mobile terminal. If your project needs to adapt to the mobile terminal, you can refer to our code for corresponding adjustments.
-
-## Preview
-
-[antdv-pro](https://antdv-pro.com) -  Test Account: admin/admin
-
-[antdv-pro-js](https://github.com/antdv-pro/antdv-pro/tree/feat-js) - Javascript version
-
-[antdv-pro-js-gitee](https://gitee.com/antdv-pro/antdv-pro/tree/feat-js/) - Gitee Javascript version
-
-[antdv-pro-docs](https://docs.antdv-pro.com) - Documentation
-
-## Community
-
-QQ Group: apply wechat group
-
-Wechat: aibayanyu2022
-
-Wechat Group: Add author WeChat
-
-Discord: [discord](https://discord.gg/tPb4G6gXmm)
-
-## Useage
+### 1. 克隆项目
 
 ```bash
-
-# Install degit
-npm  i -g degit
-
-# Pull the code
-degit antdv-pro/antdv-pro [your project name]
-
-#  Switch to the project directory
-cd [your project name]
-
-# Install
-pnpm install
-
-# Development
-pnpm dev
+git clone <your-repo-url>
+cd atdv-pro
 ```
 
-## Contribute
+### 2. 一键启动所有服务
 
-We are very welcome to have you participate in our open source project.
+```bash
+docker-compose up -d
+```
 
-**Pull Request:**
+### 3. 等待服务启动
 
-1. Fork code!
-2. Create your own branch: `git checkout -b feat-xxxx`
-3. Submit your changes: `git commit -am 'feat(function): add xxxxx'`
-4. Push your branch: `git push origin feat-xxxx`
-5. submit`pull request`
+首次启动需要下载镜像和构建，可能需要 5-10 分钟。查看启动日志：
 
-Thank you to all the people who already contributed to antdv-pro!
+```bash
+# 查看所有服务日志
+docker-compose logs -f
 
-<a href="https://github.com/antdv-pro/antdv-pro/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=antdv-pro/antdv-pro&max=100&columns=15" />
-</a>
+# 查看特定服务日志
+docker-compose logs -f backend
+docker-compose logs -f frontend
+```
 
-## Support
+### 4. 验证服务状态
 
-If you like our project, you can support us by clicking the "Star" button in the upper right corner. Your support is my motivation. Thank you ~
+```bash
+docker-compose ps
+```
 
-Thanks to the open source project license provided by [Jetbrains](https://www.jetbrains.com/?from=antdv-pro).
+所有服务状态应为 `Up` 或 `Up (healthy)`。
 
-## Sponsor
+### 5. 访问应用
 
-If you like our project, you can sponsor us to help us maintain the project better.
+- **前端应用**: http://localhost
+- **后端 API 文档**: http://localhost:8000/docs
+- **后端 API**: http://localhost:8000/api
+- **MinIO 控制台**: http://localhost:9001
+  - 用户名: `minioadmin`
+  - 密码: `123456789`
 
-[Alipay/Wechat](https://docs.antdv-pro.com/other/sponsor.html)
+## 服务说明
+
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| Frontend | 80 | Vue3 + Ant Design Vue 前端应用 |
+| Backend | 8000 | FastAPI 后端服务 |
+| MySQL | 3306 | 数据库服务 |
+| MinIO API | 9000 | 对象存储 API |
+| MinIO Console | 9001 | MinIO 管理控制台 |
+
+## 常用命令
+
+### 启动和停止
+
+```bash
+# 启动所有服务（后台运行）
+docker-compose up -d
+
+# 启动并查看日志
+docker-compose up
+
+# 停止所有服务
+docker-compose down
+
+# 停止并删除数据卷（⚠️ 会删除所有数据）
+docker-compose down -v
+```
+
+### 查看状态和日志
+
+```bash
+# 查看服务状态
+docker-compose ps
+
+# 查看所有服务日志
+docker-compose logs -f
+
+# 查看特定服务日志
+docker-compose logs -f [service_name]
+
+# 查看最近 100 行日志
+docker-compose logs --tail=100 [service_name]
+```
+
+### 重启服务
+
+```bash
+# 重启所有服务
+docker-compose restart
+
+# 重启特定服务
+docker-compose restart [service_name]
+```
+
+### 重建服务
+
+```bash
+# 重新构建并启动服务
+docker-compose up -d --build
+
+# 仅重新构建特定服务
+docker-compose build [service_name]
+```
+
+## 配置说明
+
+### 修改数据库配置
+
+编辑 `docker-compose.yml` 中的 MySQL 服务配置：
+
+```yaml
+mysql:
+  environment:
+    MYSQL_ROOT_PASSWORD: your_root_password
+    MYSQL_DATABASE: your_database_name
+    MYSQL_USER: your_username
+    MYSQL_PASSWORD: your_password
+```
+
+同时需要更新 `backend` 服务中的 `MYSQL_URL` 环境变量。
+
+### 修改 MinIO 配置
+
+编辑 `docker-compose.yml` 中的 MinIO 服务配置：
+
+```yaml
+minio:
+  environment:
+    MINIO_ROOT_USER: your_access_key
+    MINIO_ROOT_PASSWORD: your_secret_key
+```
+
+同时需要更新 `backend` 服务中的 MinIO 相关环境变量。
+
+### 修改端口映射
+
+如果端口冲突，可以修改 `docker-compose.yml` 中的端口映射：
+
+```yaml
+services:
+  frontend:
+    ports:
+      - "8080:80"  # 将前端改为 8080 端口
+  backend:
+    ports:
+      - "8001:8000"  # 将后端改为 8001 端口
+```
+
+### 环境变量说明
+
+后端服务支持以下环境变量：
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `MINIO_ENDPOINT` | MinIO 服务地址 | `minio:9000` |
+| `MINIO_ACCESS_KEY` | MinIO 访问密钥 | `minioadmin` |
+| `MINIO_SECRET_KEY` | MinIO 密钥 | `123456789` |
+| `MINIO_BUCKET` | MinIO 存储桶名称 | `uploads` |
+| `MYSQL_URL` | MySQL 数据库连接字符串 | 见 docker-compose.yml |
+| `IMPERSONATION_MODEL_NAME` | 仿冒检测模型名称 | `impersonation_detector` |
+
+## 故障排查
+
+### 服务无法启动
+
+1. **检查端口占用**
+   ```bash
+   # Linux/macOS
+   lsof -i :80
+   lsof -i :8000
+   lsof -i :3306
+   
+   # Windows
+   netstat -ano | findstr :80
+   ```
+
+2. **检查磁盘空间**
+   ```bash
+   df -h
+   ```
+
+3. **查看详细错误日志**
+   ```bash
+   docker-compose logs [service_name]
+   ```
+
+### 前端无法访问后端 API
+
+1. **检查后端服务是否正常运行**
+   ```bash
+   curl http://localhost:8000/docs
+   ```
+
+2. **检查 nginx 配置**
+   ```bash
+   docker-compose exec frontend nginx -t
+   ```
+
+3. **检查网络连接**
+   ```bash
+   docker-compose exec frontend ping backend
+   ```
+
+### 数据库连接失败
+
+1. **等待 MySQL 完全启动**
+   - 首次启动 MySQL 需要初始化，可能需要 1-2 分钟
+   - 检查健康状态: `docker-compose ps mysql`
+
+2. **检查数据库日志**
+   ```bash
+   docker-compose logs mysql
+   ```
+
+3. **手动连接测试**
+   ```bash
+   docker-compose exec mysql mysql -u apthunter -p4CyUhr2zu6! apthunter_new
+   ```
+
+### 构建失败
+
+1. **清理 Docker 缓存**
+   ```bash
+   docker system prune -a
+   ```
+
+2. **重新构建**
+   ```bash
+   docker-compose build --no-cache
+   ```
+
+### MinIO 无法访问
+
+1. **检查 MinIO 服务状态**
+   ```bash
+   docker-compose ps minio
+   ```
+
+2. **检查 MinIO 日志**
+   ```bash
+   docker-compose logs minio
+   ```
+
+3. **访问控制台**
+   - 浏览器访问: http://localhost:9001
+   - 使用默认账号登录
+
+## 数据持久化
+
+项目使用 Docker volumes 持久化数据：
+
+- `mysql_data`: MySQL 数据库数据
+- `minio_data`: MinIO 对象存储数据
+- `backend_data`: 后端应用数据
+
+数据存储在 Docker 管理的 volumes 中，即使删除容器也不会丢失数据。
+
+## 开发模式
+
+### 前端开发
+
+如果需要修改前端代码并实时查看效果：
+
+1. 停止前端容器
+   ```bash
+   docker-compose stop frontend
+   ```
+
+2. 在本地启动前端开发服务器
+   ```bash
+   cd frontend
+   pnpm install
+   pnpm dev
+   ```
+
+3. 修改 `frontend/src/pages/detection/malicious-detection/index.vue` 中的 `API_BASE` 为 `http://localhost:8000`
+
+### 后端开发
+
+如果需要修改后端代码：
+
+1. 停止后端容器
+   ```bash
+   docker-compose stop backend
+   ```
+
+2. 在本地启动后端服务
+   ```bash
+   cd backend
+   python -m venv venv
+   source venv/bin/activate  # Windows: venv\Scripts\activate
+   pip install -r requirements.txt
+   uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+   ```
+
+## 项目结构
+
+```
+atdv-pro/
+├── backend/              # 后端服务
+│   ├── app/             # 应用代码
+│   ├── Dockerfile       # 后端 Docker 配置
+│   └── requirements.txt  # Python 依赖
+├── frontend/            # 前端服务
+│   ├── src/             # 源代码
+│   ├── Dockerfile       # 前端 Docker 配置
+│   └── default.conf     # Nginx 配置
+├── nginx/               # Nginx 配置
+│   └── nginx.conf       # Nginx 主配置
+├── docker-compose.yml   # Docker Compose 配置
+└── README.md            # 项目说明文档
+```
+
+## 安全建议
+
+⚠️ **生产环境部署前请务必修改以下配置：**
+
+1. **修改所有默认密码**
+   - MySQL root 密码
+   - MySQL 用户密码
+   - MinIO 访问密钥
+
+2. **使用环境变量文件**
+   - 创建 `.env` 文件存储敏感信息
+   - 不要将 `.env` 文件提交到版本控制
+
+3. **配置防火墙**
+   - 仅开放必要的端口
+   - 限制数据库和 MinIO 的访问
+
+4. **启用 HTTPS**
+   - 配置 SSL 证书
+   - 修改 nginx 配置支持 HTTPS
+
+## 技术支持
+
+如有问题，请：
+
+1. 查看本文档的故障排查部分
+2. 检查服务日志: `docker-compose logs`
+3. 提交 Issue 或联系项目维护者
+
+## 许可证
+
+[添加您的许可证信息]
+
+## 更新日志
+
+### v1.0.0
+- 初始版本
+- 支持恶意性检测和仿冒域名检测
+- Docker Compose 一键部署
+

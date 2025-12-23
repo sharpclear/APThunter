@@ -1,5 +1,6 @@
 name: Lint
 
+
 on:
   push:
     branches:
@@ -24,4 +25,5 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: Lint
+        working-directory: ./frontend
         run: pnpm run lint

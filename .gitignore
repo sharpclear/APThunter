@@ -83,7 +83,7 @@ docker-compose.override.yml
 
 # Model files (if large, consider using Git LFS)
 # Uncomment if model files are too large
-# backend/app/models/pretrained_model/
+backend/app/models/pretrained_model/
 # backend/app/models/saved_model_ML/
 
 # Coverage reports

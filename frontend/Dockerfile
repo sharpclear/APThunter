@@ -12,7 +12,7 @@ RUN corepack enable && corepack prepare pnpm@10.17.1 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # 安装依赖（使用 pnpm 的冻结锁文件）
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 # 复制源代码
 COPY . .

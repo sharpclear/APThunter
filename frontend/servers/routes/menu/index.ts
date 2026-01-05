@@ -327,12 +327,12 @@ const menuData = [
   {
     id: 4,
     parentId: 3,
-    title: '恶意性检测',
+    title: '创建任务',
     component: '/detection/malicious-detection/index',
     path: '/detection/malicious-detection',
-    name: 'MaliciousDetection',
+    name: 'CreateTask',
     keepAlive: false,
-    locale: 'menu.detection.malicious-detection',
+    locale: 'menu.detection.create-task',
   },
   {
     id: 36,

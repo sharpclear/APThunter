@@ -5,22 +5,57 @@ FROM python:3.10-slim AS builder
 # 设置工作目录
 WORKDIR /app
 
-# 安装系统依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
+# 配置 Debian 使用国内镜像源（加速下载，减少构建时间）
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list 2>/dev/null || \
+    (echo "deb https://mirrors.aliyun.com/debian/ bookworm main" > /etc/apt/sources.list && \
+     echo "deb https://mirrors.aliyun.com/debian-security/ bookworm-security main" >> /etc/apt/sources.list && \
+     echo "deb https://mirrors.aliyun.com/debian/ bookworm-updates main" >> /etc/apt/sources.list)
+
+# 安装系统依赖（分步安装，减少单次内存占用）
+# 先更新包列表
+RUN apt-get update
+
+# 单独安装 gcc（减少内存峰值）
+RUN apt-get install -y --no-install-recommends gcc && \
+    rm -rf /var/lib/apt/lists/*
+
+# 再次更新并安装 g++
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends g++ && \
+    rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件
 COPY requirements.txt .
 
-# 安装 Python 依赖到临时目录
-RUN pip install -i https://pypi.tuna.tsinghua.edu.cn/simple/ --no-cache-dir --user -r requirements.txt
+# 安装 Python 依赖到临时目录（增加超时时间）
+# 配置 pip 使用国内镜像源（解决依赖包下载超时问题）
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple && \
+    pip config set global.trusted-host pypi.tuna.tsinghua.edu.cn
+
+# 先安装 CPU 版本的 PyTorch（使用 PyTorch 官方源，但依赖从国内镜像下载）
+RUN pip install --default-timeout=1000 \
+    --user \
+    torch>=2.7.1 \
+    --extra-index-url https://download.pytorch.org/whl/cpu
+
+# 安装其他依赖
+RUN pip install --default-timeout=1000 \
+    --user \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple/ \
+    -r requirements.txt
 
 # 第二阶段：运行阶段
 FROM python:3.10-slim
 
-# 设置工作目录
+# 配置 Debian 使用国内镜像源
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list 2>/dev/null || \
+    (echo "deb https://mirrors.aliyun.com/debian/ bookworm main" > /etc/apt/sources.list && \
+     echo "deb https://mirrors.aliyun.com/debian-security/ bookworm-security main" >> /etc/apt/sources.list && \
+     echo "deb https://mirrors.aliyun.com/debian/ bookworm-updates main" >> /etc/apt/sources.list)
+
+# 设置工作目录（先设置为 /app，用于复制文件）
 WORKDIR /app
 
 # 安装运行时系统依赖
@@ -38,6 +73,9 @@ ENV PATH=/root/.local/bin:$PATH
 # 复制应用代码
 COPY app/ ./app/
 
+# 切换到应用目录（关键修改：与本地运行方式一致）
+WORKDIR /app/app
+
 # 设置 Python 环境变量
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
@@ -49,12 +87,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8000/docs || exit 1
 
-# 启动命令（使用 uvicorn 运行 FastAPI 应用）
-# 可以通过环境变量覆盖 host 和 port
-# 如果需要 GPU 支持，请使用 nvidia/cuda 基础镜像，例如：
-# FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04
-# 并安装 Python 3.10
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 启动命令（关键修改：使用 main:app 而不是 app.main:app）
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # 环境变量说明（可在运行时通过 -e 或 docker-compose.yml 设置）：
 # - MINIO_ENDPOINT: MinIO 服务地址（默认: localhost:9000）

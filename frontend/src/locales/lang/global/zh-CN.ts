@@ -87,7 +87,8 @@ export default {
   'menu.exception.404': '404',
   'menu.exception.500': '500',
   'menu.detection': '检测任务',
-  'menu.detection.malicious-detection': '恶意性检测',
+  'menu.detection.malicious-detection': '恶意性检测', // 保留以兼容旧代码
+  'menu.detection.create-task': '创建任务',
   'menu.detection.step-detection': '分步表单',
   'menu.detection.step-detection.info': '分步表单（填写转账信息）',
   'menu.detection.step-detection.confirm': '分步表单（确认转账信息）',

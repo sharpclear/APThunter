@@ -54,8 +54,8 @@ export default [
         name: 'detectionBasic',
         component: () => import('~/pages/detection/malicious-detection/index.vue'),
         meta: {
-          title: '恶意性检测',
-          locale: 'menu.detection.malicious-detection',
+          title: '创建任务',
+          locale: 'menu.detection.create-task',
         },
       },
       {

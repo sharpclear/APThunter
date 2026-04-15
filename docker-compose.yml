@@ -1,0 +1,259 @@
+# 拓扑：frontend(nginx) → backend；backend / celery-worker → mysql、redis、minio。
+# 对外默认仅暴露 Web 80；MySQL、MinIO、FastAPI 绑定 127.0.0.1，便于本机排障且减少局域网暴露。
+# MySQL 宿主机端口用 3307，避免与本机已安装的 MySQL（占 3306）冲突。
+# Nginx 访问日志挂载至 ./logs/nginx（目录已 .gitignore）。
+
+services:
+  # MySQL 数据库服务
+  mysql:
+    image: mysql:8.0
+    container_name: atdv-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword123
+      MYSQL_DATABASE: apthunter_new
+      MYSQL_USER: apthunter
+      MYSQL_PASSWORD: 4CyUhr2zu6!
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # 挂载数据库初始化脚本（按文件名顺序执行）
+      - ./backend/db/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - atdv-network
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --secure-file-priv=""
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword123"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO 对象存储服务
+  minio:
+    image: minio/minio:latest
+    container_name: atdv-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: 123456789
+    ports:
+      - "127.0.0.1:9000:9000"  # API（本机调试）
+      - "127.0.0.1:9001:9001"  # 控制台（本机调试）
+    volumes:
+      - minio_data:/data
+    networks:
+      - atdv-network
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Redis（Celery broker / result backend，仅容器网络内访问）
+  redis:
+    image: redis:7-alpine
+    container_name: atdv-redis
+    restart: unless-stopped
+    networks:
+      - atdv-network
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 系统启动后自动补全域名属性（WHOIS/DNS/SSL）
+  domain-bootstrap:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: atdv-domain-bootstrap
+    restart: "no"
+    working_dir: /app/app
+    command:
+      - python
+      - /app/scripts/domain_attributes_bootstrap.py
+      - --workers
+      - ${DOMAIN_BOOTSTRAP_WORKERS:-8}
+      - --timeout
+      - ${DOMAIN_BOOTSTRAP_TIMEOUT:-6}
+      - --limit
+      - ${DOMAIN_BOOTSTRAP_LIMIT:-0}
+    environment:
+      MYSQL_URL: mysql+pymysql://apthunter:4CyUhr2zu6!@mysql:3306/apthunter_new
+    networks:
+      - atdv-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+
+  # 后端 FastAPI 服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: atdv-backend
+    restart: unless-stopped
+    environment:
+      # MinIO 配置
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: 123456789
+      MINIO_BUCKET: uploads
+      # MySQL 配置
+      MYSQL_URL: mysql+pymysql://apthunter:4CyUhr2zu6!@mysql:3306/apthunter_new
+      # Redis / Celery（使用 Compose 服务名 redis）
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      # 模型配置
+      IMPERSONATION_MODEL_NAME: impersonation_detector
+      # SMTP 配置（从宿主机 .env 注入；不要在此硬编码密码）
+      SMTP_HOST: ${SMTP_HOST:-smtp.example.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@example.com}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      # 预警飞书机器人（可选，未配置则不推送）
+      ALERT_EMAIL_ENABLED: ${ALERT_EMAIL_ENABLED:-true}
+      FEISHU_ENABLE_PUSH: ${FEISHU_ENABLE_PUSH:-false}
+      FEISHU_WEBHOOK_URL: ${FEISHU_WEBHOOK_URL:-}
+      FEISHU_BOT_SECRET: ${FEISHU_BOT_SECRET:-}
+      FEISHU_PUSH_ONLY_ON_ALERT: ${FEISHU_PUSH_ONLY_ON_ALERT:-true}
+      APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-}
+      FEISHU_HTTP_TIMEOUT_SEC: ${FEISHU_HTTP_TIMEOUT_SEC:-10}
+      FEISHU_HTTP_RETRIES: ${FEISHU_HTTP_RETRIES:-3}
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # 只挂载 saved_model：训练/检测写入的 .pkl 落在宿主机；勿挂载整个 models，否则会覆盖镜像内 utils_ML 等代码
+      - ./backend/app/models/saved_model:/app/app/models/saved_model
+      # 每日域名 zip：与宿主机 ./backend/app/daily_data 双向同步（含其下新建子目录）
+      - ./backend/app/daily_data:/app/app/daily_data
+      - backend_data:/app/data
+    networks:
+      - atdv-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+  # Celery Worker（与 backend 共用镜像与环境，消费异步检测任务）
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: atdv-celery-worker
+    restart: unless-stopped
+    working_dir: /app/app
+    command:
+      - celery
+      - -A
+      - app.celery_app:celery_app
+      - worker
+      - --loglevel=info
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: 123456789
+      MINIO_BUCKET: uploads
+      MYSQL_URL: mysql+pymysql://apthunter:4CyUhr2zu6!@mysql:3306/apthunter_new
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      IMPERSONATION_MODEL_NAME: impersonation_detector
+      SMTP_HOST: ${SMTP_HOST:-smtp.example.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@example.com}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+    volumes:
+      - ./backend/app/models/saved_model:/app/app/models/saved_model
+      - ./backend/app/daily_data:/app/app/daily_data
+      - backend_data:/app/data
+    networks:
+      - atdv-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "celery -A app.celery_app:celery_app inspect ping -t 5 2>/dev/null | grep -q pong || exit 1",
+        ]
+      interval: 30s
+      timeout: 15s
+      start_period: 90s
+      retries: 3
+
+  # 前端 Vue 应用服务
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: atdv-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      # 挂载自定义 nginx 主配置文件
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # 挂载自定义 nginx 站点配置（如果需要动态修改）
+      - ./frontend/default.conf:/etc/nginx/conf.d/default.conf:ro
+      # 访问日志落盘，便于宿主机 tail / 排障（error.log 同步可在此目录查看）
+      - ./logs/nginx:/var/log/nginx
+    networks:
+      - atdv-network
+    depends_on:
+      backend:
+        condition: service_healthy
+      celery-worker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+# 数据卷定义
+volumes:
+  mysql_data:
+    driver: local
+  minio_data:
+    driver: local
+  redis_data:
+    driver: local
+  backend_data:
+    driver: local
+
+# 网络定义
+networks:
+  atdv-network:
+    driver: bridge
+

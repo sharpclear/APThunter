@@ -1,0 +1,11 @@
+# 将以下内容追加到 crontab（crontab -e），或执行：crontab -l | cat - scripts/crontab-get-dailydata.example | crontab -
+#
+# 整行含义：每天 UTC 00:00 执行每日数据脚本（日志写入 logs/get_dailydata.cron.log）
+# 对应北京时间：每日 08:00（中国无夏令时，UTC+8）
+# 前提：1) 已 chmod +x scripts/cron-get-dailydata.sh
+#       2) docker compose 服务 backend 已运行
+#       3) 镜像已包含 scripts（见 backend/Dockerfile COPY scripts）
+# 修改后请在宿主机执行 crontab -e 更新实际任务，或按上行合并进现有 crontab
+
+CRON_TZ=UTC
+0 0 * * * /home/mlz/APTHunter/scripts/cron-get-dailydata.sh

@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from datetime import datetime, timedelta
 from typing import Optional
+from app.db.session import engine
 
 router = APIRouter(prefix="/api/dashboard/data-display", tags=["data-display"])
 
@@ -14,8 +15,6 @@ router = APIRouter(prefix="/api/dashboard/data-display", tags=["data-display"])
 @router.get("/summary")
 def get_summary():
     """获取仪表盘汇总数据"""
-    from main import engine
-    
     try:
         with engine.connect() as conn:
             # 获取基础统计
@@ -79,9 +78,10 @@ def get_trends(
     days: int = Query(30, ge=1, le=365, description="查询天数")
 ):
     """获取威胁趋势数据"""
-    from main import engine
-    
+    start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+
     try:
+        with engine.connect() as conn:
             results = conn.execute(
                 text("""
                     SELECT trend_date AS date, dns_tunnel_count, dga_domain_count,
@@ -92,11 +92,39 @@ def get_trends(
                 """),
                 {"start_date": start_date}
             ).mappings().all()
+
+            # 兼容没有 threat_trends 表或表为空的场景：按 apt_events 进行实时聚合兜底
+            if not results:
+                fallback_results = conn.execute(
+                    text("""
+                        SELECT e.event_date AS date,
+                               COUNT(*) AS total_count
+                        FROM apt_events e
+                        WHERE e.event_date >= :start_date
+                        GROUP BY e.event_date
+                        ORDER BY e.event_date ASC
+                    """),
+                    {"start_date": start_date}
+                ).mappings().all()
+
+                data = [
+                    {
+                        "date": str(r.get("date")),
+                        "dns_tunnel_count": 0,
+                        "dga_domain_count": 0,
+                        "phishing_count": 0,
+                        "c2_communication": 0,
+                        "malware_count": int(r.get("total_count") or 0),
+                    }
+                    for r in fallback_results
+                ]
+            else:
+                data = [dict(r) for r in results]
             
             return JSONResponse(content={
                 "code": 200,
                 "msg": "查询成功",
-                "data": [dict(r) for r in results]
+                "data": data
             })
             
     except Exception as e:
@@ -111,8 +139,6 @@ def get_attack_sources(
     limit: int = Query(10, ge=1, le=50, description="返回Top N")
 ):
     """获取攻击来源Top国家"""
-    from main import engine
-    
     try:
         with engine.connect() as conn:
             results = conn.execute(
@@ -145,8 +171,6 @@ def get_top_organizations(
     order_by: str = Query("event_count", description="排序字段: event_count/ioc_count")
 ):
     """获取Top组织（按事件数或IOC数）"""
-    from main import engine
-    
     try:
         if order_by not in ["event_count", "ioc_count"]:
             order_by = "event_count"
@@ -178,8 +202,6 @@ def get_top_organizations(
 @router.get("/region-distribution")
 def get_region_distribution():
     """获取事件地区分布"""
-    from main import engine
-    
     try:
         with engine.connect() as conn:
             results = conn.execute(

@@ -6,23 +6,12 @@ router = APIRouter()
 async def get_menu(authorization: str | None = Header(None)):
     menu = [
         {
-            "id": 2,
-            "parentId": None,
-            "title": "分析页",
-            "icon": "DashboardOutlined",
-            "component": "/dashboard/analysis",
-            "path": "/dashboard/analysis",
-            "name": "DashboardAnalysis",
-            "keepAlive": True,
-            "locale": "menu.dashboard.analysis",
-        },
-        {
             "id": 1,
             "parentId": None,
             "title": "仪表盘",
             "icon": "DashboardOutlined",
             "component": "RouteView",
-            "redirect": "/dashboard/analysis",
+            "redirect": "/dashboard/monitor",
             "path": "/dashboard",
             "name": "Dashboard",
             "locale": "menu.dashboard",
@@ -164,16 +153,6 @@ async def get_menu(authorization: str | None = Header(None)):
             "name": "DashboardMonitor",
             "keepAlive": True,
             "locale": "menu.dashboard.monitor",
-        },
-        {
-            "id": 43,
-            "parentId": 1,
-            "title": "工作台",
-            "component": "/dashboard/workplace",
-            "path": "/dashboard/workplace",
-            "name": "DashboardWorkplace",
-            "keepAlive": True,
-            "locale": "menu.dashboard.workplace",
         },
         {
             "id": 48,

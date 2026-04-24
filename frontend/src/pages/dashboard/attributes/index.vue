@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { computed, ref, onMounted } from 'vue'
 import { GlobalOutlined, SearchOutlined } from '@ant-design/icons-vue'
-import { message } from 'ant-design-vue'
-import type { DomainAttributes, DnsInfo, WhoisInfo, CertificateInfo, DnsRecord } from '~/api/dashboard/attributes'
-import { queryDomainAttributesApi } from '~/api/dashboard/attributes'
+import { message, Modal } from 'ant-design-vue'
+import type { DomainAttributes, DnsInfo, WhoisInfo, CertificateInfo, DnsRecord, DomainListItem, LookupResult } from '~/api/dashboard/attributes'
+import { getDomainListApi, lookupDomainAllApi, queryDomainAttributesApi } from '~/api/dashboard/attributes'
 
 defineOptions({ name: 'DashboardAttributes' })
 
@@ -10,11 +11,47 @@ defineOptions({ name: 'DashboardAttributes' })
 const domainInput = ref<string>('')
 const loading = ref(false)
 
+const queryErrors = ref<string[]>([])  // 查询错误信息
+
+// 域名列表
+const domainList = ref<DomainListItem[]>([])
+const domainListLoading = ref(false)
+const currentPage = ref(1)
+const pageSize = 30
+
 // 查询结果
 const domainData = ref<DomainAttributes | null>(null)
 const whoisInfo = ref<WhoisInfo | null>(null)
 const dnsInfo = ref<DnsInfo | null>(null)
 const certificateInfo = ref<CertificateInfo | null>(null)
+
+const sortedDomainList = computed<DomainListItem[]>(() => {
+  return [...domainList.value].sort((a, b) => {
+    const maliciousDiff = Number(Boolean(b.isMalicious)) - Number(Boolean(a.isMalicious))
+    if (maliciousDiff !== 0)
+      return maliciousDiff
+
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+    return timeB - timeA
+  })
+})
+
+const pagedDomainList = computed<DomainListItem[]>(() => {
+  const start = (currentPage.value - 1) * pageSize
+  const end = start + pageSize
+  return sortedDomainList.value.slice(start, end)
+})
+
+function toBool(value: unknown) {
+  if (value === true || value === 1 || value === '1')
+    return true
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    return normalized === 'true' || normalized === 'yes'
+  }
+  return false
+}
 
 // 验证域名格式
 function isValidDomain(domain: string): boolean {
@@ -37,9 +74,82 @@ async function handleQuery() {
   }
 
   loading.value = true
+  queryErrors.value = []
+  try {
+    const response = await lookupDomainAllApi({ 
+      domain, 
+      save: true,
+    })
+    
+    if (response.code === 200 && response.data) {
+      const result = response.data as LookupResult
+      
+      // 设置查询结果
+      domainData.value = {
+        domain: result.domain,
+        whois: result.whois,
+        dns: result.dns,
+        certificate: result.certificate,
+        queryTime: result.queryTime
+      }
+      whoisInfo.value = result.whois || null
+      dnsInfo.value = result.dns || null
+      certificateInfo.value = result.certificate || null
+      queryErrors.value = result.errors || []
+      
+      // 显示成功消息
+      if (result.errors && result.errors.length > 0) {
+        message.warning(`查询完成，但部分信息获取失败: ${result.errors.join(', ')}`)
+      } else {
+        message.success('查询成功')
+      }
+      
+      // 如果保存了，重新加载域名列表
+      if (result.saved) {
+        await loadDomainList()
+      }
+    }
+    else if (response.code === 404) {
+      domainData.value = null
+      whoisInfo.value = null
+      dnsInfo.value = null
+      certificateInfo.value = null
+      message.error('所有查询均失败，请检查域名是否有效')
+    }
+    else {
+      domainData.value = null
+      whoisInfo.value = null
+      dnsInfo.value = null
+      certificateInfo.value = null
+      message.error(response.msg || '查询失败')
+    }
+  }
+  catch (error: any) {
+    domainData.value = null
+    whoisInfo.value = null
+    dnsInfo.value = null
+    certificateInfo.value = null
+    message.error('查询失败: ' + (error.message || '网络错误'))
+  }
+  finally {
+    loading.value = false
+  }
+}
+
+function goBackToList() {
+  domainData.value = null
+  whoisInfo.value = null
+  dnsInfo.value = null
+  certificateInfo.value = null
+  queryErrors.value = []
+}
+
+async function handleDatabaseQuery(domain: string) {
+  loading.value = true
+  queryErrors.value = []
   try {
     const response = await queryDomainAttributesApi({ domain })
-    
+
     if (response.code === 200 && response.data) {
       domainData.value = response.data
       whoisInfo.value = response.data.whois || null
@@ -47,23 +157,27 @@ async function handleQuery() {
       certificateInfo.value = response.data.certificate || null
       message.success('查询成功')
     }
+    else if (response.code === 404) {
+      domainData.value = null
+      whoisInfo.value = null
+      dnsInfo.value = null
+      certificateInfo.value = null
+      message.warning(response.msg || '未找到该域名的相关信息')
+    }
     else {
+      domainData.value = null
+      whoisInfo.value = null
+      dnsInfo.value = null
+      certificateInfo.value = null
       message.error(response.msg || '查询失败')
     }
   }
   catch (error: any) {
-    // 检查是否是接口不存在（404）或网络错误
-    const status = error?.response?.status
-    const isNotFound = status === 404
-    const isNetworkError = !error?.response
-    
-    // 如果是接口不存在或网络错误，并且是在开发环境，则加载演示数据
-    if ((isNotFound || isNetworkError) && import.meta.env.DEV) {
-      // 不显示错误消息，直接加载演示数据（因为 errorHandler 已经显示了 notification）
-      handleMockData(domain, false)
-    }
-    // 如果是其他错误（如 500），只显示错误消息，不加载模拟数据
-    // errorHandler 已经在 request.ts 中显示了 notification，这里不需要重复显示
+    domainData.value = null
+    whoisInfo.value = null
+    dnsInfo.value = null
+    certificateInfo.value = null
+    message.error('查询失败: ' + (error.message || '网络错误'))
   }
   finally {
     loading.value = false
@@ -154,40 +268,180 @@ function getDaysRemaining(notAfter?: string): number {
     return 0
   }
 }
+
+// 加载域名列表
+async function loadDomainList() {
+  domainListLoading.value = true
+  try {
+    const response = await getDomainListApi()
+    if (response.code === 200 && response.data) {
+      domainList.value = response.data
+      currentPage.value = 1
+    }
+  }
+  catch (error) {
+    console.error('加载域名列表失败:', error)
+  }
+  finally {
+    domainListLoading.value = false
+  }
+}
+
+// 点击域名项进行查询
+function handleDomainClick(item: DomainListItem) {
+  domainInput.value = item.domain
+
+  const hasLocalData = toBool(item.hasWhois) || toBool(item.hasDns) || toBool(item.hasSsl)
+  if (hasLocalData) {
+    handleDatabaseQuery(item.domain)
+    return
+  }
+
+  Modal.confirm({
+    title: '未找到本地域名信息',
+    content: `域名 ${item.domain} 暂无本地 WHOIS/DNS/SSL 信息，是否继续发起实时查询并保存到数据库？`,
+    okText: '继续查询',
+    cancelText: '取消',
+    onOk: () => handleQuery(),
+  })
+}
+
+// 页面加载时获取域名列表
+onMounted(() => {
+  loadDomainList()
+})
 </script>
 
 <template>
   <page-container>
     <a-card :bordered="false" :style="{ marginBottom: '24px' }">
       <!-- 域名查询输入框 -->
-      <a-space :size="16" style="width: 100%;">
-        <a-input
-          v-model:value="domainInput"
-          placeholder="请输入域名，例如：example.com"
-          :style="{ flex: 1, minWidth: '300px' }"
-          size="large"
-          @press-enter="handleQuery"
-        >
-          <template #prefix>
-            <GlobalOutlined />
-          </template>
-        </a-input>
-        <a-button
-          type="primary"
-          size="large"
-          :loading="loading"
-          @click="handleQuery"
-        >
-          <template #icon>
-            <SearchOutlined />
-          </template>
-          查询
-        </a-button>
+      <a-space direction="vertical" :size="16" style="width: 100%;">
+        <a-space :size="16" style="width: 100%;">
+          <a-input
+            v-model:value="domainInput"
+            placeholder="请输入域名查询"
+            :style="{ flex: 1, minWidth: '300px' }"
+            size="large"
+            @press-enter="handleQuery"
+          >
+            <template #prefix>
+              <GlobalOutlined />
+            </template>
+          </a-input>
+          <a-button
+            type="primary"
+            size="large"
+            :loading="loading"
+            @click="handleQuery"
+          >
+            <template #icon>
+              <SearchOutlined />
+            </template>
+            查询
+          </a-button>
+        </a-space>
       </a-space>
+    </a-card>
+
+    <!-- 查询错误提示 -->
+    <a-alert
+      v-if="queryErrors.length > 0"
+      :message="`部分查询失败: ${queryErrors.join(', ')}`"
+      type="warning"
+      show-icon
+      closable
+      :style="{ marginBottom: '24px' }"
+    />
+
+    <!-- 域名列表 -->
+    <a-card
+      v-if="!domainData && domainList.length > 0"
+      title="域名列表"
+      :bordered="false"
+      :style="{ marginBottom: '24px' }"
+      :loading="domainListLoading"
+    >
+      <a-list
+        :data-source="pagedDomainList"
+        :grid="{ gutter: 16, xs: 1, sm: 2, md: 3, lg: 4, xl: 4, xxl: 6 }"
+      >
+        <template #renderItem="{ item }">
+          <a-list-item>
+            <a-card
+              hoverable
+              :style="{ cursor: 'pointer' }"
+              :class="item.isMalicious ? 'domain-card-malicious' : 'domain-card-benign'"
+              @click="handleDomainClick(item)"
+            >
+              <a-card-meta>
+                <template #title>
+                  <GlobalOutlined style="margin-right: 8px;" />
+                  {{ item.domain }}
+                </template>
+                <template #description>
+                  <div style="margin-bottom: 8px;">
+                    <a-tag :color="item.isMalicious ? 'red' : 'green'" :style="{ fontSize: '11px', padding: '0 6px' }">
+                      {{ item.isMalicious ? '恶意' : '良性' }}
+                    </a-tag>
+                  </div>
+                  <div style="margin-bottom: 8px; font-size: 12px; color: #666;">
+                    关联组织：{{ item.organizationName || '-' }}
+                  </div>
+                  <div style="margin-bottom: 8px;">
+                    <a-space :size="4">
+                      <a-tag
+                        :color="toBool(item.hasWhois) ? 'blue' : 'default'"
+                        :class="{ 'attr-tag-missing': !toBool(item.hasWhois) }"
+                        :style="{ fontSize: '11px', padding: '0 4px' }"
+                      >
+                        WHOIS
+                      </a-tag>
+                      <a-tag
+                        :color="toBool(item.hasDns) ? 'green' : 'default'"
+                        :class="{ 'attr-tag-missing': !toBool(item.hasDns) }"
+                        :style="{ fontSize: '11px', padding: '0 4px' }"
+                      >
+                        DNS
+                      </a-tag>
+                      <a-tag
+                        :color="toBool(item.hasSsl) ? 'orange' : 'default'"
+                        :class="{ 'attr-tag-missing': !toBool(item.hasSsl) }"
+                        :style="{ fontSize: '11px', padding: '0 4px' }"
+                      >
+                        SSL
+                      </a-tag>
+                    </a-space>
+                  </div>
+                  <span v-if="item.createdAt" style="font-size: 12px; color: #999;">
+                    添加于 {{ formatDate(item.createdAt) }}
+                  </span>
+                </template>
+              </a-card-meta>
+            </a-card>
+          </a-list-item>
+        </template>
+      </a-list>
+      <div style="display: flex; justify-content: flex-end; margin-top: 16px;">
+        <a-pagination
+          v-model:current="currentPage"
+          :total="sortedDomainList.length"
+          :page-size="pageSize"
+          :show-size-changer="false"
+          :show-quick-jumper="true"
+          :show-total="(total:number) => `共 ${total} 条`"
+        />
+      </div>
     </a-card>
 
     <!-- 查询结果展示 -->
     <template v-if="domainData">
+      <div class="detail-toolbar">
+        <a-button type="primary" size="large" @click="goBackToList">
+          返回
+        </a-button>
+      </div>
+
       <!-- WHOIS 信息 -->
       <a-card
         v-if="whoisInfo"
@@ -198,6 +452,9 @@ function getDaysRemaining(notAfter?: string): number {
         <a-descriptions :column="{ xxl: 3, xl: 2, lg: 2, md: 1, sm: 1, xs: 1 }" bordered>
           <a-descriptions-item label="域名">
             {{ whoisInfo.domain }}
+          </a-descriptions-item>
+          <a-descriptions-item label="关联组织">
+            {{ domainData?.organizationName || '-' }}
           </a-descriptions-item>
           <a-descriptions-item label="注册商">
             {{ whoisInfo.registrar || '-' }}
@@ -451,6 +708,27 @@ export default {
 <style scoped lang="less">
 h2 {
   margin: 0 0 16px 0;
+}
+
+.domain-card-malicious {
+  border: 1px solid #ffccc7;
+  background: #fff2f0;
+}
+
+.domain-card-benign {
+  border: 1px solid #d9f7be;
+  background: #f6ffed;
+}
+
+.detail-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+.attr-tag-missing {
+  opacity: 0.6;
+  border-style: dashed;
 }
 
 :deep(.ant-descriptions-item-label) {

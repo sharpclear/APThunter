@@ -11,14 +11,15 @@ export interface AptEvent {
   date: string // YYYY-MM-DD
   title: string
   description?: string
+  reportUrl?: string
   type?: 'major' | 'normal' // major: 重要事件（实心盾形），normal: 普通事件（圆形轮廓）
   organization?: string
 }
 
 interface Props {
   events: AptEvent[]
-  startDate?: string // 开始日期，默认为2024-09-01
-  endDate?: string // 结束日期，默认为2025-12-31
+  startDate?: string // 可选开始日期，不传则根据事件自动计算
+  endDate?: string // 可选结束日期，不传则根据事件自动计算
   showEventsList?: boolean // 是否显示事件列表
 }
 
@@ -28,8 +29,6 @@ interface Emits {
 
 const props = withDefaults(defineProps<Props>(), {
   events: () => [],
-  startDate: '2024-09-01',
-  endDate: '2025-12-31',
   showEventsList: false,
 })
 
@@ -40,14 +39,63 @@ function handleEventClick(event: AptEvent) {
   emit('event-click', event)
 }
 
-// 计算时间范围
-const start = dayjs(props.startDate)
-const end = dayjs(props.endDate)
-const totalDays = end.diff(start, 'day')
+// 计算时间范围（优先使用传入范围；未传时根据事件时间动态铺满）
+const timelineRange = computed(() => {
+  const eventDates = props.events
+    .map(event => dayjs(event.date))
+    .filter(d => d.isValid())
+    .sort((a, b) => a.valueOf() - b.valueOf())
+
+  // 1) 若外部明确传了起止时间，优先使用
+  if (props.startDate && props.endDate) {
+    const fixedStart = dayjs(props.startDate)
+    const fixedEnd = dayjs(props.endDate)
+    const safeStart = fixedStart.isValid() ? fixedStart : dayjs().startOf('year')
+    const safeEnd = fixedEnd.isValid() ? fixedEnd : dayjs().endOf('year')
+    const adjustedEnd = safeEnd.isAfter(safeStart) ? safeEnd : safeStart.add(1, 'month')
+    return {
+      start: safeStart,
+      end: adjustedEnd,
+      totalDays: Math.max(1, adjustedEnd.diff(safeStart, 'day')),
+    }
+  }
+
+  // 2) 根据事件时间自动扩展（左右各预留1个月）
+  if (eventDates.length > 0) {
+    const minDate = eventDates[0]
+    const maxDate = eventDates[eventDates.length - 1]
+
+    let start = minDate.startOf('month').subtract(1, 'month')
+    let end = maxDate.endOf('month').add(1, 'month')
+
+    // 避免事件集中在同一月时显示过于紧凑
+    if (end.diff(start, 'day') < 60) {
+      start = start.subtract(1, 'month')
+      end = end.add(1, 'month')
+    }
+
+    return {
+      start,
+      end,
+      totalDays: Math.max(1, end.diff(start, 'day')),
+    }
+  }
+
+  // 3) 无事件时兜底为当年范围
+  const fallbackStart = dayjs().startOf('year')
+  const fallbackEnd = dayjs().endOf('year')
+  return {
+    start: fallbackStart,
+    end: fallbackEnd,
+    totalDays: Math.max(1, fallbackEnd.diff(fallbackStart, 'day')),
+  }
+})
 
 // 生成时间刻度点（每个月）
 const timePoints = computed(() => {
   const points: Array<{ date: dayjs.Dayjs; label: string; year: number; month: number }> = []
+  const start = timelineRange.value.start
+  const end = timelineRange.value.end
   let current = start.startOf('month')
   
   while (current.isBefore(end) || current.isSame(end, 'month')) {
@@ -66,6 +114,9 @@ const timePoints = computed(() => {
 
 // 获取事件在时间轴上的位置（百分比）
 function getEventPosition(eventDate: string): number {
+  const start = timelineRange.value.start
+  const end = timelineRange.value.end
+  const totalDays = timelineRange.value.totalDays
   const event = dayjs(eventDate)
   if (event.isBefore(start)) return 0
   if (event.isAfter(end)) return 100
@@ -96,11 +147,20 @@ const yearPositions = computed(() => {
     }
   })
   
-  yearRange.value.forEach(year => {
+  const minGap = 6
+
+  yearRange.value.forEach((year, idx) => {
     const index = yearMap.get(year)!
-    const position = timePoints.value.length > 1 
+    let position = timePoints.value.length > 1
       ? (index / (timePoints.value.length - 1)) * 100 
       : 0
+
+    // 防止年份标签在起始区间过于接近时重叠（如 2017 与 2018）
+    if (idx > 0) {
+      const prev = positions[idx - 1].position
+      position = Math.max(position, Math.min(100, prev + minGap))
+    }
+
     positions.push({ year, position })
   })
   

@@ -13,6 +13,7 @@ import ssl
 import socket
 import json
 from datetime import datetime
+from app.db.session import engine
 
 router = APIRouter(prefix="/api/domain", tags=["domain-lookup"])
 
@@ -311,8 +312,6 @@ def lookup_all(request: DomainLookupRequest = Body(...)):
 
 def save_to_database(domain: str, results: Dict[str, Any]):
     """将查询结果保存到数据库"""
-    from main import engine
-    
     with engine.connect() as conn:
         # 检查域名是否存在
         domain_result = conn.execute(

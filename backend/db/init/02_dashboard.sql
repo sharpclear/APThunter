@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS apt_events (
   event_date DATE NOT NULL COMMENT '事件日期',
   title VARCHAR(255) NOT NULL COMMENT '事件标题',
   description TEXT NULL COMMENT '事件描述',
+  report_url VARCHAR(1024) NULL COMMENT '事件报告链接',
   event_type ENUM('major','normal') NOT NULL DEFAULT 'normal' COMMENT '事件类型',
   region VARCHAR(64) NULL COMMENT '发生地区',
   latitude DECIMAL(10,7) NULL COMMENT '纬度',
@@ -67,9 +68,12 @@ CREATE TABLE IF NOT EXISTS domains (
   is_malicious TINYINT(1) DEFAULT 0 COMMENT '是否恶意',
   first_seen DATE NULL COMMENT '首次发现',
   last_seen DATE NULL COMMENT '最后发现',
+  organization_id INT NULL COMMENT '关联组织ID',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (organization_id) REFERENCES apt_organizations(id) ON DELETE SET NULL,
   INDEX idx_domain (domain_name),
-  INDEX idx_malicious (is_malicious)
+  INDEX idx_malicious (is_malicious),
+  INDEX idx_organization (organization_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='域名基础信息';
 
 CREATE TABLE IF NOT EXISTS whois_info (

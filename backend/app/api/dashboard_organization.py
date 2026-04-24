@@ -8,6 +8,7 @@ from sqlalchemy import text
 from typing import Optional
 import json
 import logging
+from app.db.session import engine
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +23,6 @@ def list_organizations(
     keyword: Optional[str] = Query(None, description="关键词搜索")
 ):
     """获取APT组织列表"""
-    from main import engine
-    
     try:
         with engine.connect() as conn:
             # 构建查询条件
@@ -123,8 +122,6 @@ def list_organizations(
 @router.get("/{org_id}")
 def get_organization_detail(org_id: int):
     """获取组织详情"""
-    from main import engine
-    
     try:
         with engine.connect() as conn:
             result = conn.execute(
@@ -223,8 +220,6 @@ def get_organization_detail(org_id: int):
 @router.get("/regions")
 def get_regions():
     """获取所有地区列表及组织数量"""
-    from main import engine
-    
     try:
         with engine.connect() as conn:
             results = conn.execute(

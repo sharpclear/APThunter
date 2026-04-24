@@ -2,73 +2,86 @@
 
 // 统计数据接口
 export interface StatisticsData {
-  // APT域名总量
-  totalDomains: number
-  // 活跃组织数量
-  activeOrganizations: number
-  // 最新威胁发现数量
-  latestThreats: number
-  // 今日新增域名
-  todayNewDomains: number
-  // 威胁等级分布
-  threatLevelDistribution: {
-    high: number
-    medium: number
-    low: number
-  }
-  // 最近24小时威胁趋势
-  threatTrend24h: Array<{
-    time: string
-    count: number
-  }>
-  // 组织活跃度排名
-  organizationRanking: Array<{
-    name: string
-    domainCount: number
-    threatLevel: 'high' | 'medium' | 'low'
-  }>
-  // 域名增长趋势
-  domainGrowthTrend: Array<{
-    date: string
-    count: number
-  }>
+	// APT域名总量
+	totalDomains: number
+	// 活跃组织数量
+	activeOrganizations: number
+	// 最新威胁发现数量
+	latestThreats: number
+	// 今日新增域名
+	todayNewDomains: number
+	// 威胁等级分布
+	threatLevelDistribution: {
+		high: number
+		medium: number
+		low: number
+	}
+	// 最近24小时威胁趋势
+	threatTrend24h: Array<{
+		time: string
+		count: number
+	}>
+	// 组织活跃度排名
+	organizationRanking: Array<{
+		name: string
+		domainCount: number
+		threatLevel: 'high' | 'medium' | 'low'
+	}>
+	// 域名增长趋势
+	domainGrowthTrend: Array<{
+		date: string
+		count: number
+	}>
 }
 
 // 最新威胁发现详情
 export interface LatestThreat {
-  id: string
-  domain: string
-  organization: string
-  threatLevel: 'high' | 'medium' | 'low'
-  discoveryTime: string
-  description?: string
-  tags?: string[]
+	id: string
+	domain: string
+	organization: string
+	threatLevel: 'high' | 'medium' | 'low'
+	discoveryTime: string
+	description?: string
+	tags?: string[]
 }
 
 // 查询统计数据
 export async function getStatisticsApi() {
-  return usePost<StatisticsData>('/dashboard/statistics', {}, {
-    loading: true,
-  })
+	return useGet<StatisticsData>('/api/dashboard/data-display/summary', undefined, {
+		loading: true,
+	})
+}
+
+// 查询威胁趋势
+export async function getTrendsApi(params?: { days?: number }) {
+	return useGet('/api/dashboard/data-display/trends', params, {
+		loading: true,
+	})
+}
+
+// 查询攻击来源
+export async function getAttackSourcesApi(params?: { top?: number }) {
+	return useGet('/api/dashboard/data-display/attack-sources', params, {
+		loading: true,
+	})
 }
 
 // 查询最新威胁发现列表
 export interface QueryLatestThreatsParams {
-  page?: number
-  pageSize?: number
-  threatLevel?: 'high' | 'medium' | 'low'
+	page?: number
+	pageSize?: number
+	threatLevel?: 'high' | 'medium' | 'low'
 }
 
 export interface LatestThreatsResult {
-  list: LatestThreat[]
-  total: number
-  page: number
-  pageSize: number
+	list: LatestThreat[]
+	total: number
+	page: number
+	pageSize: number
 }
 
 export async function getLatestThreatsApi(params?: QueryLatestThreatsParams) {
-  return usePost<LatestThreatsResult, QueryLatestThreatsParams>('/dashboard/latest-threats', params || {}, {
-    loading: true,
-  })
+	return useGet<LatestThreatsResult>('/api/dashboard/data-display/top-organizations', params, {
+		loading: true,
+	})
 }
-

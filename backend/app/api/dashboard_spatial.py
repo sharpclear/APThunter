@@ -8,8 +8,24 @@ from sqlalchemy import text
 from typing import Optional
 from datetime import datetime, timedelta
 from decimal import Decimal
+from app.db.session import engine
 
 router = APIRouter(prefix="/api/dashboard/spatio-temporal", tags=["spatio-temporal"])
+
+
+def has_report_url_column(conn) -> bool:
+    result = conn.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'apt_events'
+              AND COLUMN_NAME = 'report_url'
+            """
+        )
+    ).scalar()
+    return bool(result)
 
 
 def convert_to_json_serializable(obj):
@@ -32,10 +48,9 @@ def get_events(
     page_size: int = Query(100, ge=1, le=1000, description="每页数量")
 ):
     """获取事件列表"""
-    from main import engine
-    
     try:
         with engine.connect() as conn:
+            report_url_select = "e.report_url AS reportUrl," if has_report_url_column(conn) else "NULL AS reportUrl,"
             where_clauses = []
             params = {}
             
@@ -79,6 +94,7 @@ def get_events(
             results = conn.execute(
                 text(f"""
                     SELECT e.id, e.event_date AS eventDate, e.title, e.description, 
+                           {report_url_select}
                            e.event_type AS eventType, e.region, e.latitude, e.longitude,
                            e.severity, o.name AS organizationName, e.organization_id AS organizationId
                     FROM apt_events e
@@ -120,8 +136,6 @@ def get_heatmap(
     end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD")
 ):
     """获取时空热力图数据（地区-日期聚合）"""
-    from main import engine
-    
     try:
         with engine.connect() as conn:
             where_clauses = []
@@ -183,17 +197,17 @@ def get_timeline(
     organization_id: Optional[int] = Query(None, description="组织ID")
 ):
     """获取事件时间线"""
-    from main import engine
-    
     try:
         with engine.connect() as conn:
+            report_url_select = "e.report_url AS reportUrl," if has_report_url_column(conn) else "NULL AS reportUrl,"
             where_clause = "WHERE e.organization_id = :org_id" if organization_id else "WHERE 1=1"
             params = {"org_id": organization_id} if organization_id else {}
             
             results = conn.execute(
                 text(f"""
                     SELECT e.id, e.event_date AS date, e.title, e.description,
-                           e.event_type AS type, o.name AS organization,
+                          {report_url_select}
+                          e.event_type AS type, o.name AS organization,
                            e.region, e.severity
                     FROM apt_events e
                     LEFT JOIN apt_organizations o ON e.organization_id = o.id
@@ -222,8 +236,6 @@ def get_timeline(
 @router.get("/map-data")
 def get_map_data():
     """获取地图标注数据（带经纬度的事件）"""
-    from main import engine
-    
     try:
         with engine.connect() as conn:
             # 获取最近30天的事件

@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from typing import Optional
 from pydantic import BaseModel
+from app.db.session import engine
 
 router = APIRouter(prefix="/api/domain", tags=["domain-attributes"])
 
@@ -18,25 +19,20 @@ class DomainQueryRequest(BaseModel):
 @router.get("/list")
 def get_domain_list():
     """获取数据库中有数据的域名列表（至少有WHOIS、DNS或SSL证书信息之一）"""
-    from main import engine
-    
     try:
         with engine.connect() as conn:
             results = conn.execute(
                 text("""
                     SELECT DISTINCT d.domain_name, d.created_at,
+                           d.is_malicious,
+                           d.organization_id,
+                           o.name as organization_name,
                            (SELECT COUNT(*) FROM whois_info WHERE domain_id = d.id) as has_whois,
                            (SELECT COUNT(*) FROM dns_records WHERE domain_id = d.id) as has_dns,
                            (SELECT COUNT(*) FROM ssl_certificates WHERE domain_id = d.id) as has_ssl
                     FROM domains d
-                    WHERE EXISTS (
-                        SELECT 1 FROM whois_info WHERE domain_id = d.id
-                        UNION
-                        SELECT 1 FROM dns_records WHERE domain_id = d.id
-                        UNION
-                        SELECT 1 FROM ssl_certificates WHERE domain_id = d.id
-                    )
-                    ORDER BY d.created_at DESC
+                    LEFT JOIN apt_organizations o ON d.organization_id = o.id
+                    ORDER BY d.is_malicious DESC, d.created_at DESC
                 """)
             ).fetchall()
             
@@ -45,9 +41,12 @@ def get_domain_list():
                 domains.append({
                     "domain": row[0],
                     "createdAt": str(row[1]) if row[1] else None,
-                    "hasWhois": row[2] > 0,
-                    "hasDns": row[3] > 0,
-                    "hasSsl": row[4] > 0
+                    "organizationId": row[3],
+                    "organizationName": row[4],
+                    "isMalicious": bool(row[2]),
+                    "hasWhois": row[5] > 0,
+                    "hasDns": row[6] > 0,
+                    "hasSsl": row[7] > 0
                 })
             
             return JSONResponse(content={
@@ -66,8 +65,6 @@ def get_domain_list():
 @router.post("/attributes")
 def query_domain_attributes(request: DomainQueryRequest = Body(...)):
     """查询域名的完整属性信息（WHOIS + DNS + 证书）"""
-    from main import engine
-    
     domain = request.domain.strip()
     if not domain:
         return JSONResponse(
@@ -76,10 +73,27 @@ def query_domain_attributes(request: DomainQueryRequest = Body(...)):
         )
     
     try:
+        import json
+
+        def parse_json_field(field_value):
+            if field_value is None:
+                return None
+            if isinstance(field_value, str):
+                try:
+                    return json.loads(field_value)
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    return field_value
+            return field_value
+
         with engine.connect() as conn:
             # 查找或创建域名记录
             domain_row = conn.execute(
-                text("SELECT id FROM domains WHERE domain_name = :domain"),
+                text("""
+                    SELECT d.id, d.organization_id, o.name
+                    FROM domains d
+                    LEFT JOIN apt_organizations o ON d.organization_id = o.id
+                    WHERE d.domain_name = :domain
+                """),
                 {"domain": domain}
             ).fetchone()
             
@@ -90,14 +104,20 @@ def query_domain_attributes(request: DomainQueryRequest = Body(...)):
                 )
                 conn.commit()
                 domain_row = conn.execute(
-                    text("SELECT id FROM domains WHERE domain_name = :domain"),
+                    text("""
+                        SELECT d.id, d.organization_id, o.name
+                        FROM domains d
+                        LEFT JOIN apt_organizations o ON d.organization_id = o.id
+                        WHERE d.domain_name = :domain
+                    """),
                     {"domain": domain}
                 ).fetchone()
             
             domain_id = domain_row[0]
+            organization_id = domain_row[1]
+            organization_name = domain_row[2]
             
             # 查询WHOIS信息
-            import json
             whois_data = None
             whois_row = conn.execute(
                 text("""
@@ -111,17 +131,6 @@ def query_domain_attributes(request: DomainQueryRequest = Body(...)):
             ).fetchone()
             
             if whois_row:
-                # 辅助函数：解析JSON字段
-                def parse_json_field(field_value):
-                    if field_value is None:
-                        return None
-                    if isinstance(field_value, str):
-                        try:
-                            return json.loads(field_value)
-                        except (json.JSONDecodeError, TypeError, ValueError):
-                            return field_value
-                    return field_value
-                
                 whois_data = {
                     "domain": domain,
                     "registrar": whois_row[0],
@@ -203,6 +212,8 @@ def query_domain_attributes(request: DomainQueryRequest = Body(...)):
                 "msg": "查询成功",
                 "data": {
                     "domain": domain,
+                    "organizationId": organization_id,
+                    "organizationName": organization_name,
                     "whois": whois_data,
                     "dns": {"domain": domain, "records": dns_records} if dns_records else None,
                     "certificate": cert_data,
@@ -220,8 +231,6 @@ def query_domain_attributes(request: DomainQueryRequest = Body(...)):
 @router.post("/whois")
 def query_whois(request: DomainQueryRequest = Body(...)):
     """查询域名WHOIS信息"""
-    from main import engine
-    
     domain = request.domain.strip()
     if not domain:
         return JSONResponse(
@@ -292,8 +301,6 @@ def query_whois(request: DomainQueryRequest = Body(...)):
 @router.post("/dns")
 def query_dns(request: DomainQueryRequest = Body(...)):
     """查询域名DNS记录"""
-    from main import engine
-    
     domain = request.domain.strip()
     if not domain:
         return JSONResponse(
@@ -343,8 +350,6 @@ def query_dns(request: DomainQueryRequest = Body(...)):
 @router.post("/certificate")
 def query_certificate(request: DomainQueryRequest = Body(...)):
     """查询域名SSL证书信息"""
-    from main import engine
-    
     domain = request.domain.strip()
     if not domain:
         return JSONResponse(

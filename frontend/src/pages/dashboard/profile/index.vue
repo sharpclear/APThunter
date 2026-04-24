@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { Pie } from '@antv/g2plot'
 import { SearchOutlined } from '@ant-design/icons-vue'
+import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
-import { onMounted, nextTick, watch } from 'vue'
+import { onMounted, nextTick, reactive, ref, watch } from 'vue'
 import type { OrganizationProfile } from '~/api/dashboard/profile'
+import { queryOrganizationsApi } from '~/api/dashboard/profile'
+import { queryEventsApi } from '~/api/dashboard/spatial'
+import AptTimeline, { type AptEvent } from '~/components/apt-timeline/index.vue'
 
 defineOptions({ name: 'DashboardProfile' })
 
@@ -14,6 +18,17 @@ const loading = ref(false)
 // 组织列表
 const organizationList = ref<OrganizationProfile[]>([])
 const total = ref(0)
+const detailVisible = ref(false)
+const detailLoading = ref(false)
+const selectedOrganization = ref<OrganizationProfile | null>(null)
+const selectedOrgEvents = ref<AptEvent[]>([])
+
+// 分页配置
+const pagination = reactive({
+  current: 1,
+  pageSize: 100,
+  total: 0,
+})
 
 // 重点组织数据（演示数据）
 const mockOrganizations: OrganizationProfile[] = [
@@ -262,30 +277,89 @@ const mockOrganizations: OrganizationProfile[] = [
   },
 ]
 
+// 解析JSON字段辅助函数
+function parseJsonField(field: any): any {
+  if (!field) return null
+  if (Array.isArray(field) || typeof field === 'object') return field
+  if (typeof field === 'string') {
+    try {
+      return JSON.parse(field)
+    } catch {
+      return field
+    }
+  }
+  return field
+}
+
 // 初始化数据
 onMounted(() => {
-  loadMockData()
+  loadOrganizations()
 })
 
-// 加载演示数据
-function loadMockData() {
+// 加载组织数据
+async function loadOrganizations() {
   loading.value = true
-  setTimeout(() => {
-    // 如果有搜索关键词，进行筛选；否则显示所有组织
-    if (searchKeyword.value && searchKeyword.value.trim()) {
-      const keyword = searchKeyword.value.trim().toLowerCase()
-      const filteredData = mockOrganizations.filter(org =>
-        org.name.toLowerCase().includes(keyword),
-      )
-      organizationList.value = filteredData
-      total.value = filteredData.length
-    } else {
-      // 没有搜索关键词时，显示所有组织
-      organizationList.value = [...mockOrganizations]
-      total.value = mockOrganizations.length
+  try {
+    const params: any = {
+      page: pagination.current,
+      pageSize: pagination.pageSize,
     }
+    
+    // 添加搜索关键词
+    if (searchKeyword.value && searchKeyword.value.trim()) {
+      params.keyword = searchKeyword.value.trim()
+    }
+    
+    const result = await queryOrganizationsApi(params)
+    if (result.data) {
+      // 后端已经返回正确格式的数据，直接使用
+      organizationList.value = result.data.list || []
+      total.value = result.data.total || 0
+      pagination.total = total.value
+    }
+  } catch (error) {
+    console.error('加载组织数据失败:', error)
+    message.error('加载组织数据失败，请稍后重试')
+  } finally {
     loading.value = false
-  }, 300)
+  }
+}
+
+function mapToTimelineEvents(events: any[], orgName: string): AptEvent[] {
+  return (events || []).map((event: any) => ({
+    id: `event-${event.id}`,
+    date: event.eventDate || event.event_date,
+    title: event.title || '未命名事件',
+    description: event.description || '-',
+    type: event.eventType || event.event_type || 'normal',
+    organization: event.organizationName || event.organization_name || orgName,
+  }))
+}
+
+async function openOrganizationDetail(org: OrganizationProfile) {
+  selectedOrganization.value = org
+  selectedOrgEvents.value = []
+  detailVisible.value = true
+  detailLoading.value = true
+
+  try {
+    const orgId = Number(org.id)
+    if (!Number.isNaN(orgId)) {
+      const result = await queryEventsApi({
+        organizationId: orgId,
+        page: 1,
+        pageSize: 200,
+      })
+      selectedOrgEvents.value = mapToTimelineEvents(result.data?.list || [], org.name)
+    }
+  }
+  catch (error) {
+    console.error('加载组织事件时间轴失败:', error)
+    message.error('加载组织事件时间轴失败，请稍后重试')
+  }
+  finally {
+    detailLoading.value = false
+  }
 }
 
 // 搜索防抖定时器
@@ -299,7 +373,8 @@ function handleSearch() {
   }
   // 设置新的定时器，300ms后执行搜索
   searchTimer = setTimeout(() => {
-    loadMockData()
+    pagination.current = 1  // 搜索时重置到第一页
+    loadOrganizations()
   }, 300)
 }
 
@@ -435,6 +510,7 @@ watch(
             :bordered="false"
             :hoverable="true"
             :style="{ height: '100%' }"
+            @click="openOrganizationDetail(org)"
           >
             <template #title>
               <div class="org-header">
@@ -587,6 +663,78 @@ watch(
         :style="{ marginTop: '50px' }"
       />
     </a-spin>
+
+    <a-drawer
+      v-model:open="detailVisible"
+      :width="900"
+      title="组织详情"
+      placement="right"
+      destroy-on-close
+    >
+      <a-spin :spinning="detailLoading">
+        <template v-if="selectedOrganization">
+          <a-card :bordered="false" style="margin-bottom: 16px;">
+            <template #title>
+              <div class="org-header">
+                <a-tag color="green" style="margin-right: 8px;">APT</a-tag>
+                <a-typography-title :level="4" style="margin: 0; display: inline;">
+                  {{ selectedOrganization.name }}
+                </a-typography-title>
+              </div>
+            </template>
+
+            <div class="org-content">
+              <div v-if="selectedOrganization.alias && selectedOrganization.alias.length > 0" class="org-section">
+                <a-typography-text type="secondary" strong>
+                  别名：
+                </a-typography-text>
+                <a-space wrap style="margin-top: 4px;">
+                  <a-tag v-for="(alias, index) in selectedOrganization.alias" :key="index" color="blue">
+                    {{ alias }}
+                  </a-tag>
+                </a-space>
+              </div>
+
+              <div class="org-section">
+                <a-typography-paragraph :ellipsis="{ rows: 4, expandable: false }" :style="{ marginBottom: 0 }">
+                  {{ selectedOrganization.description }}
+                </a-typography-paragraph>
+              </div>
+
+              <div class="org-section">
+                <a-space :size="24">
+                  <span>
+                    <a-typography-text type="secondary">关联IOC：</a-typography-text>
+                    <a-typography-text strong>{{ selectedOrganization.iocCount ?? 0 }} 个</a-typography-text>
+                  </span>
+                  <span>
+                    <a-typography-text type="secondary">关联事件：</a-typography-text>
+                    <a-typography-text strong>{{ selectedOrganization.eventCount ?? 0 }} 个</a-typography-text>
+                  </span>
+                </a-space>
+              </div>
+
+              <div class="org-section">
+                <a-space wrap>
+                  <a-tag v-if="selectedOrganization.region" color="cyan">区域：{{ selectedOrganization.region }}</a-tag>
+                  <a-tag v-if="selectedOrganization.origin" color="orange">来源：{{ selectedOrganization.origin }}</a-tag>
+                </a-space>
+              </div>
+
+              <div class="org-section" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0f0f0;">
+                <a-typography-text type="secondary" style="font-size: 12px;">
+                  更新时间：{{ formatDate(selectedOrganization.updateTime) }}
+                </a-typography-text>
+              </div>
+            </div>
+          </a-card>
+
+          <a-card :bordered="false" title="APT事件时间轴">
+            <AptTimeline :events="selectedOrgEvents" show-events-list @event-click="() => {}" />
+          </a-card>
+        </template>
+      </a-spin>
+    </a-drawer>
     
   </page-container>
 </template>

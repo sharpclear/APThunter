@@ -97,28 +97,28 @@ export interface QueryDomainParams {
 
 // 查询域名属性
 export async function queryDomainAttributesApi(params: QueryDomainParams) {
-	return usePost<DomainAttributes, QueryDomainParams>('/api/domain/attributes', params, {
+	return usePost<DomainAttributes, QueryDomainParams>('/domain/attributes', params, {
 		loading: true,
 	})
 }
 
 // 单独查询 WHOIS 信息
 export async function queryWhoisApi(params: QueryDomainParams) {
-	return usePost<WhoisInfo, QueryDomainParams>('/api/domain/whois', params, {
+	return usePost<WhoisInfo, QueryDomainParams>('/domain/whois', params, {
 		loading: true,
 	})
 }
 
 // 单独查询 DNS 信息
 export async function queryDnsApi(params: QueryDomainParams) {
-	return usePost<DnsInfo, QueryDomainParams>('/api/domain/dns', params, {
+	return usePost<DnsInfo, QueryDomainParams>('/domain/dns', params, {
 		loading: true,
 	})
 }
 
 // 单独查询证书信息
 export async function queryCertificateApi(params: QueryDomainParams) {
-	return usePost<CertificateInfo, QueryDomainParams>('/api/domain/certificate', params, {
+	return usePost<CertificateInfo, QueryDomainParams>('/domain/certificate', params, {
 		loading: true,
 	})
 }
@@ -137,7 +137,7 @@ export interface DomainListItem {
 
 // 获取所有域名列表
 export async function getDomainListApi() {
-	return useGet<DomainListItem[]>('/api/domain/list')
+	return useGet<DomainListItem[]>('/domain/list')
 }
 
 // ==================== 实时查询接口 ====================
@@ -161,28 +161,28 @@ export interface LookupResult {
 
 // 实时查询所有信息（WHOIS + DNS + SSL）
 export async function lookupDomainAllApi(params: LookupDomainParams) {
-	return usePost<LookupResult, LookupDomainParams>('/api/domain/lookup/all', params, {
+	return usePost<LookupResult, LookupDomainParams>('/domain/lookup/all', params, {
 		loading: true,
 	})
 }
 
 // 单独实时查询 WHOIS
 export async function lookupWhoisOnlyApi(params: LookupDomainParams) {
-	return usePost<WhoisInfo, LookupDomainParams>('/api/domain/lookup/whois', params, {
+	return usePost<WhoisInfo, LookupDomainParams>('/domain/lookup/whois', params, {
 		loading: true,
 	})
 }
 
 // 单独实时查询 DNS
 export async function lookupDnsOnlyApi(params: LookupDomainParams) {
-	return usePost<DnsInfo, LookupDomainParams>('/api/domain/lookup/dns', params, {
+	return usePost<DnsInfo, LookupDomainParams>('/domain/lookup/dns', params, {
 		loading: true,
 	})
 }
 
 // 单独实时查询 SSL 证书
 export async function lookupSslOnlyApi(params: LookupDomainParams) {
-	return usePost<CertificateInfo, LookupDomainParams>('/api/domain/lookup/ssl', params, {
+	return usePost<CertificateInfo, LookupDomainParams>('/domain/lookup/ssl', params, {
 		loading: true,
 	})
 }

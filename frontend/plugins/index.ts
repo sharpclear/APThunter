@@ -12,10 +12,12 @@ import { GLOB_CONFIG_FILE_NAME, OUTPUT_DIR } from './constants'
 import { viteBuildInfo } from './vite-build-info'
 
 export function createVitePlugins(env: Record<string, string>) {
+  // mock-h3 默认前缀为 /api，会先于 Vite proxy 拦截请求；未在 servers/routes 声明的路由会 404 且到不了真实后端
+  const enableH3Mock = env.VITE_ENABLE_H3_MOCK === 'true'
   const vitePluginList: (PluginOption | PluginOption[])[] = [
     vue(),
     vueJsx(),
-    mockH3({}),
+    ...(enableH3Mock ? [mockH3({})] : []),
     VitePluginPreloadAll(),
     AutoImport({
       imports: [

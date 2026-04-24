@@ -47,21 +47,21 @@ export interface LatestThreat {
 
 // 查询统计数据
 export async function getStatisticsApi() {
-	return useGet<StatisticsData>('/api/dashboard/data-display/summary', undefined, {
+	return useGet<StatisticsData>('/dashboard/data-display/summary', undefined, {
 		loading: true,
 	})
 }
 
 // 查询威胁趋势
 export async function getTrendsApi(params?: { days?: number }) {
-	return useGet('/api/dashboard/data-display/trends', params, {
+	return useGet('/dashboard/data-display/trends', params, {
 		loading: true,
 	})
 }
 
 // 查询攻击来源
 export async function getAttackSourcesApi(params?: { top?: number }) {
-	return useGet('/api/dashboard/data-display/attack-sources', params, {
+	return useGet('/dashboard/data-display/attack-sources', params, {
 		loading: true,
 	})
 }
@@ -81,7 +81,7 @@ export interface LatestThreatsResult {
 }
 
 export async function getLatestThreatsApi(params?: QueryLatestThreatsParams) {
-	return useGet<LatestThreatsResult>('/api/dashboard/data-display/top-organizations', params, {
+	return useGet<LatestThreatsResult>('/dashboard/data-display/top-organizations', params, {
 		loading: true,
 	})
 }

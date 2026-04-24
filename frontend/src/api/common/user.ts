@@ -7,6 +7,6 @@ export interface UserInfo {
 }
 
 export function getUserInfoApi() {
-  // 须走 /api，否则 Nginx 会把 /user/info 当成前端路由返回 index.html，导致无限重试
-  return useGet<UserInfo>('/api/user/info')
+  // 路径相对 VITE_APP_BASE_API（/api）；勿写 /api/user/info，否则与 baseURL 拼成 /api/api/...
+  return useGet<UserInfo>('/user/info')
 }

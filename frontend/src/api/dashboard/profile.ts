@@ -59,14 +59,14 @@ export async function queryOrganizationsApi(params?: QueryOrganizationsParams) {
 		delete (query as any).pageSize
 	}
 
-	return useGet<OrganizationListResponse>('/api/dashboard/org-profile/list', query, {
+	return useGet<OrganizationListResponse>('/dashboard/org-profile/list', query, {
 		loading: true,
 	})
 }
 
 // 查询组织详情
 export async function queryOrganizationDetailApi(id: string | number) {
-	return useGet<OrganizationProfile>(`/api/dashboard/org-profile/${id}`, undefined, {
+	return useGet<OrganizationProfile>(`/dashboard/org-profile/${id}`, undefined, {
 		loading: true,
 	})
 }

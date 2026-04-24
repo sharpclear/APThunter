@@ -84,7 +84,7 @@ export async function queryEventsApi(params?: QueryEventsParams) {
 		delete (query as any).pageSize
 	}
 
-	return useGet<EventListResponse>('/api/dashboard/spatio-temporal/events', query, {
+	return useGet<EventListResponse>('/dashboard/spatio-temporal/events', query, {
 		loading: true,
 	})
 }
@@ -95,7 +95,7 @@ export async function queryHeatmapApi(params?: {
 	endDate?: string
 	region?: string
 }) {
-	return useGet<HeatmapPoint[]>('/api/dashboard/spatio-temporal/heatmap', params, {
+	return useGet<HeatmapPoint[]>('/dashboard/spatio-temporal/heatmap', params, {
 		loading: true,
 	})
 }
@@ -106,7 +106,7 @@ export async function queryTimelineApi(params?: {
 	endDate?: string
 	interval?: 'day' | 'week' | 'month'
 }) {
-	return useGet<TimelinePoint[]>('/api/dashboard/spatio-temporal/timeline', params, {
+	return useGet<TimelinePoint[]>('/dashboard/spatio-temporal/timeline', params, {
 		loading: true,
 	})
 }
@@ -116,7 +116,7 @@ export async function queryMapDataApi(params?: {
 	startDate?: string
 	endDate?: string
 }) {
-	return useGet<MapDataPoint[]>('/api/dashboard/spatio-temporal/map-data', params, {
+	return useGet<MapDataPoint[]>('/dashboard/spatio-temporal/map-data', params, {
 		loading: true,
 	})
 }

@@ -20,13 +20,13 @@ export interface LoginResultModel {
 }
 
 export function loginApi(params: LoginParams | LoginMobileParams) {
-  // 必须使用 /api/login，避免 baseURL 为 / 时请求落到前端路由 /login 导致 Nginx 405
-  return usePost<LoginResultModel, LoginParams | LoginMobileParams>('/api/login', params, {
+  // 相对 VITE_APP_BASE_API（/api）→ /api/login；base 为 / 时单独配置 env
+  return usePost<LoginResultModel, LoginParams | LoginMobileParams>('/login', params, {
     token: false,
     loading: true,
   })
 }
 
 export function logoutApi() {
-  return useGet('/api/logout')
+  return useGet('/logout')
 }

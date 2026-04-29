@@ -84,7 +84,7 @@ const previewColumns = [
   { title: '标签', dataIndex: 'label', key: 'label' },
 ]
 
-const MAX_SIZE_MB = 5
+const MAX_SIZE_MB = 20
 const ACCEPT_TYPES = ['text/csv', 'text/plain']
 const ACCEPT_EXTS = ['.csv', '.txt']
 
@@ -95,7 +95,7 @@ async function beforeUpload(file: File) {
     message.error('仅支持 CSV/TXT 格式的文件')
     return false
   }
-  const sizeOk = file.size / 1024 / 1024 < MAX_SIZE_MB
+  const sizeOk = file.size / 1024 / 1024 <= MAX_SIZE_MB
   if (!sizeOk) {
     message.error(`文件大小不能超过 ${MAX_SIZE_MB}MB`)
     return false

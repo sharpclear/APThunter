@@ -121,6 +121,24 @@ docker-compose up -d --build
 docker-compose build [service_name]
 ```
 
+### 前端镜像与开发版本对齐构建
+
+默认前端镜像使用 `production` 模式构建（`vite build --mode production`）。  
+如果希望在构建镜像前与本地开发模式（`development`）对齐，可在构建时指定：
+
+```bash
+# 仅前端按 development 模式构建（仍由 Nginx 托管 dist）
+FRONTEND_BUILD_MODE=development docker compose build --no-cache frontend
+
+# 或整体重建时对齐前端构建模式
+FRONTEND_BUILD_MODE=development docker compose up -d --build
+```
+
+说明：
+- 这不会在 Docker 中运行 Vite 开发服务器，运行时仍是 Nginx。
+- 该参数仅影响前端 `vite build` 读取的 `.env.[mode]`（例如 `.env.development` / `.env.production`）。
+- 建议使用 `--no-cache`，避免复用旧层导致“看起来版本不一致”。
+
 ## 配置说明
 
 ### 修改数据库配置

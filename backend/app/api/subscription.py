@@ -86,13 +86,21 @@ def beijing_datetime_to_naive(dt: datetime) -> datetime:
 # 添加models目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'models'))
 # 从 entities / main / db / core 导入必要的依赖
-from app.entities import Task, Model, StoredFile, User
+from app.entities import AlertFile, Task, Model, StoredFile, User
 from app.infra.minio_client import minio_client
 from app.db.session import SessionLocal, engine
 from app.db.base import Base
 from app.core.config import MINIO_BUCKET, IMPERSONATION_MODEL_NAME
 from sqlalchemy import Column, BigInteger, String, DateTime, ForeignKey, Enum as SqlEnum, Integer, JSON, text, Boolean
 from app.services.notification.alert_notifier import build_alert_data_dict, dispatch_alert_notifications
+from app.services.actor_matcher import (
+    AlertResultStorageError,
+    build_alert_result_json,
+    create_alert_file_mapping,
+    load_actor_profiles,
+    match_domain_to_actors,
+    save_alert_result_json_to_minio,
+)
 # 导入检测相关函数
 from app.api.detection import (
     _collect_daily_domains,
@@ -148,15 +156,6 @@ class Alert(Base):
     updated_at = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"), onupdate=lambda: beijing_now().replace(tzinfo=None))
 
 
-class AlertDetail(Base):
-    """预警详情表，存储 high_risk_domains 等大字段，与 alerts 一对一关联"""
-    __tablename__ = "alert_details"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    alert_id = Column(String(64), ForeignKey("alerts.alert_id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
-    high_risk_domains = Column(JSON, nullable=True)
-    created_at = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
-    updated_at = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"), onupdate=lambda: beijing_now().replace(tzinfo=None))
-
 router = APIRouter()
 
 # APScheduler 调度器（全局单例）
@@ -198,6 +197,29 @@ def _normalize_extra(extra_value):
             logger.warning("Failed to parse extra JSON")
             return {}
     return dict(extra_value) if isinstance(extra_value, dict) else {}
+
+
+def _extract_high_risk_snapshot_from_result_json(result_payload) -> tuple[list[str], list[dict]]:
+    """
+    从 MinIO 的完整预警 JSON 中提取轻量快照。
+    """
+    high_risk_domains = []
+    snapshot = []
+    for item in (result_payload or {}).get("high_risk_domains") or []:
+        if not isinstance(item, dict):
+            continue
+        domain_name = str(item.get("domain") or "").strip()
+        if not domain_name:
+            continue
+        high_risk_domains.append(domain_name)
+        snapshot.append(
+            {
+                "domain": domain_name,
+                "risk_score": item.get("risk_score"),
+                "risk_level": item.get("risk_level"),
+            }
+        )
+    return high_risk_domains, snapshot
 
 
 def _calculate_next_run_at(frequency: str, from_date: Optional[datetime] = None) -> datetime:
@@ -539,7 +561,7 @@ def execute_subscription(subscription_id: str):
                     "dateRange": date_range,
                     "subscription_id": subscription_id,
                 },
-                status="completed",
+                status="processing",
                 created_by=subscription.user_id,
             )
             db.add(task)
@@ -575,7 +597,7 @@ def execute_subscription(subscription_id: str):
                     "dateRange": date_range,
                     "subscription_id": subscription_id,
                 },
-                status="completed",
+                status="processing",
                 created_by=subscription.user_id,
             )
             db.add(task)
@@ -690,12 +712,131 @@ def execute_subscription(subscription_id: str):
             )
             db.add(alert)
             db.flush()
-            # 创建预警详情（high_risk_domains 存入 alert_details 表）
-            alert_detail = AlertDetail(
-                alert_id=alert_id,
+            db.flush()
+
+            # 新流程：组织关联匹配 -> 组装 JSON -> 上传 MinIO+写 files -> 写 alert_files
+            match_results_by_domain = {}
+            actor_profiles = []
+            try:
+                actor_profiles = load_actor_profiles(db)
+            except Exception:
+                logger.exception("加载组织画像失败，预警结果 JSON 将不包含组织匹配候选 alert_id=%s", alert_id)
+            if not actor_profiles:
+                logger.warning("组织画像为空，跳过组织匹配评分，仅生成基础预警结果 JSON alert_id=%s", alert_id)
+
+            for domain in high_risk_domains:
+                domain_name = str(domain or "").strip()
+                if not domain_name:
+                    continue
+                try:
+                    if actor_profiles:
+                        match_results_by_domain[domain_name.lower()] = match_domain_to_actors(
+                            domain_name,
+                            actor_profiles,
+                        )
+                    else:
+                        match_results_by_domain[domain_name.lower()] = {"domain_name": domain_name}
+                except Exception:
+                    logger.exception("组织匹配失败，已按空匹配继续 domain=%s alert_id=%s", domain_name, alert_id)
+                    match_results_by_domain[domain_name.lower()] = {"domain_name": domain_name}
+
+            alert_result_json = build_alert_result_json(
+                alert_row=alert,
+                subscription_row=subscription,
+                task_row=task,
                 high_risk_domains=high_risk_domains,
+                match_results=match_results_by_domain,
+                results_malicious_subscription=results_malicious_subscription,
+                detected_count=total_count,
+                high_risk_count=high_risk_count,
+                alert_time=alert.created_at or beijing_now(),
             )
-            db.add(alert_detail)
+
+            archive_bucket = None
+            archive_object_key = None
+            try:
+                stored_file = save_alert_result_json_to_minio(
+                    db,
+                    alert_id=alert_id,
+                    subscription_id=subscription_id,
+                    task_id=task_id,
+                    user_id=subscription.user_id,
+                    model_id=model.id,
+                    task_type=task.task_type,
+                    alert_time=alert.created_at or beijing_now(),
+                    json_data=alert_result_json,
+                )
+                archive_bucket = stored_file.bucket
+                archive_object_key = stored_file.object_key
+                create_alert_file_mapping(
+                    db,
+                    alert_id=alert_id,
+                    subscription_id=subscription_id,
+                    task_id=task_id,
+                    user_id=subscription.user_id,
+                    model_id=model.id,
+                    task_type=task.task_type,
+                    frequency=subscription.frequency,
+                    file_id=stored_file.id,
+                    domain_count=high_risk_count,
+                    alert_date=(alert.created_at or beijing_now()).date(),
+                    file_role="full_result",
+                    file_format="json",
+                )
+            except Exception as archive_error:
+                if isinstance(archive_error, AlertResultStorageError):
+                    archive_bucket = archive_bucket or archive_error.bucket
+                    archive_object_key = archive_object_key or archive_error.object_key
+                db.rollback()
+
+                # files 成功但 alert_files 失败时，补偿删除 MinIO 文件，避免孤儿对象
+                if archive_bucket and archive_object_key:
+                    try:
+                        minio_client.remove_object(archive_bucket, archive_object_key)
+                    except Exception:
+                        logger.exception(
+                            "预警归档回滚时删除 MinIO 对象失败 alert_id=%s subscription_id=%s task_id=%s bucket=%s object_key=%s",
+                            alert_id,
+                            subscription_id,
+                            task_id,
+                            archive_bucket,
+                            archive_object_key,
+                        )
+
+                # 归档失败后明确标记 task 状态，避免出现“completed 但归档失败”的语义不一致
+                try:
+                    failed_task = db.query(Task).filter(Task.task_id == task_id).first()
+                    if failed_task:
+                        failed_extra = dict(failed_task.extra or {})
+                        failed_extra["archive_failed"] = True
+                        failed_extra["archive_error"] = str(archive_error)
+                        if archive_bucket:
+                            failed_extra["archive_bucket"] = archive_bucket
+                        if archive_object_key:
+                            failed_extra["archive_object_key"] = archive_object_key
+                        failed_extra["archive_failed_at"] = beijing_now().isoformat()
+                        failed_task.extra = failed_extra
+                        failed_task.status = "failed"
+                        db.commit()
+                except Exception:
+                    db.rollback()
+                    logger.exception(
+                        "归档失败后更新 task 状态失败 subscription_id=%s task_id=%s",
+                        subscription_id,
+                        task_id,
+                    )
+
+                logger.exception(
+                    "预警结果归档失败（JSON->MinIO->files->alert_files） alert_id=%s subscription_id=%s task_id=%s bucket=%s object_key=%s",
+                    alert_id,
+                    subscription_id,
+                    task_id,
+                    archive_bucket,
+                    archive_object_key,
+                )
+                raise
+
+            task.status = "completed"
             db.commit()
             db.refresh(alert)
             
@@ -726,6 +867,7 @@ def execute_subscription(subscription_id: str):
                 threshold=subscription.threshold,
                 created_at=alert.created_at.isoformat() if alert.created_at else beijing_now().isoformat(),
                 high_risk_domains=high_risk_domains,
+                match_results_by_domain=match_results_by_domain,
             )
             try:
                 dispatch_alert_notifications(
@@ -741,6 +883,8 @@ def execute_subscription(subscription_id: str):
             logger.info(
                 f"订阅 {subscription_id} 本次检测未满足预警条件（仿冒按原规则；恶意订阅需 predict 恶意且恶意概率>阈值/100），跳过预警"
             )
+
+            task.status = "completed"
         
         # 更新订阅的下次执行时间
         subscription.next_run_at = beijing_datetime_to_naive(_calculate_next_run_at(subscription.frequency))
@@ -755,6 +899,10 @@ def execute_subscription(subscription_id: str):
         
     except Exception as e:
         logger.exception(f"执行订阅任务失败: {subscription_id}, 错误: {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
         # 即使发生异常，也更新下次执行时间，避免订阅卡住
         try:
             subscription = db.query(Subscription).filter(
@@ -1163,38 +1311,165 @@ async def list_alerts(
             .limit(pageSize)
             .all()
         )
-        
-        # 批量查询 alert_details 中的 high_risk_domains（避免 N+1）
+
         alert_ids = [a.alert_id for a in alerts]
-        details_map = {}
+        alert_file_map = {}
         if alert_ids:
-            details_list = db.query(AlertDetail).filter(AlertDetail.alert_id.in_(alert_ids)).all()
-            details_map = {d.alert_id: d for d in details_list}
-        
+            alert_file_rows = (
+                db.query(AlertFile, StoredFile)
+                .join(StoredFile, StoredFile.id == AlertFile.file_id)
+                .filter(
+                    AlertFile.alert_id.in_(alert_ids),
+                    AlertFile.file_role == "full_result",
+                    AlertFile.file_format == "json",
+                )
+                .order_by(AlertFile.created_at.desc())
+                .all()
+            )
+            for alert_file, stored_file in alert_file_rows:
+                if alert_file.alert_id in alert_file_map:
+                    continue
+                alert_file_map[alert_file.alert_id] = (alert_file, stored_file)
+
         items = []
         for alert in alerts:
             high_risk_domains = []
-            detail = details_map.get(alert.alert_id)
-            if detail and detail.high_risk_domains:
-                if isinstance(detail.high_risk_domains, list):
-                    high_risk_domains = detail.high_risk_domains
-                elif isinstance(detail.high_risk_domains, str):
-                    try:
-                        high_risk_domains = json.loads(detail.high_risk_domains)
-                    except Exception:
-                        high_risk_domains = []
-            
+            snapshot = []
+            mapping_row = alert_file_map.get(alert.alert_id)
+            if mapping_row:
+                _, stored_file = mapping_row
+                try:
+                    file_bytes = download_file_from_minio(stored_file.object_key, stored_file.bucket)
+                    result_payload = json.loads(file_bytes.decode("utf-8"))
+                    high_risk_domains, snapshot = _extract_high_risk_snapshot_from_result_json(result_payload)
+                except Exception:
+                    logger.warning(
+                        "预警列表读取 MinIO 快照失败 alert_id=%s file_id=%s",
+                        alert.alert_id,
+                        stored_file.id,
+                    )
+
             items.append({
                 "id": alert.alert_id,
                 "time": alert.created_at.isoformat() if alert.created_at else "",
                 "modelName": alert.model_name,
                 "type": "phishing" if alert.task_type == "impersonation" else "malicious",
                 "detectedCount": alert.detected_count,
+                # 兼容旧前端：继续返回字符串列表。
                 "highRiskDomains": high_risk_domains,
+                # 新前端可直接使用轻量快照（含可选风险分）。
+                "highRiskDomainSnapshot": snapshot,
                 "status": "已处理" if alert.status == "processed" else "未处理",
             })
         
         return {"items": items, "total": total}
+    finally:
+        db.close()
+
+
+@router.get("/api/alerts/{alert_id}")
+async def get_alert_detail(alert_id: str, request: Request):
+    """获取预警完整详情（摘要 + 结果文件元信息 + MinIO JSON 内容）"""
+    user_id = _require_user_id(request)
+    db = SessionLocal()
+    try:
+        alert = (
+            db.query(Alert)
+            .filter(
+                Alert.alert_id == alert_id,
+                Alert.user_id == user_id,
+            )
+            .first()
+        )
+        if not alert:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="预警不存在",
+            )
+
+        alert_file = (
+            db.query(AlertFile)
+            .filter(
+                AlertFile.alert_id == alert_id,
+                AlertFile.file_role == "full_result",
+                AlertFile.file_format == "json",
+            )
+            .order_by(AlertFile.created_at.desc())
+            .first()
+        )
+        if not alert_file:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="未找到该预警对应的完整结果文件索引（alert_files）",
+            )
+
+        stored_file = db.query(StoredFile).filter(StoredFile.id == alert_file.file_id).first()
+        if not stored_file:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="结果文件元信息不存在（files 记录缺失）",
+            )
+
+        try:
+            file_bytes = download_file_from_minio(stored_file.object_key, stored_file.bucket)
+        except Exception:
+            logger.exception(
+                "读取预警结果文件失败 alert_id=%s file_id=%s bucket=%s object_key=%s",
+                alert_id,
+                stored_file.id,
+                stored_file.bucket,
+                stored_file.object_key,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="结果文件不存在或无法读取（MinIO）",
+            )
+
+        try:
+            result_json = json.loads(file_bytes.decode("utf-8"))
+        except Exception:
+            logger.exception(
+                "解析预警结果 JSON 失败 alert_id=%s file_id=%s",
+                alert_id,
+                stored_file.id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="结果文件格式错误，无法解析为 JSON",
+            )
+
+        return {
+            "alert_summary": {
+                "alertId": alert.alert_id,
+                "subscriptionId": alert.subscription_id,
+                "taskId": alert.task_id,
+                "userId": alert.user_id,
+                "modelId": alert.model_id,
+                "modelName": alert.model_name,
+                "taskType": alert.task_type,
+                "detectedCount": alert.detected_count,
+                "highRiskCount": alert.high_risk_count,
+                "threshold": alert.threshold,
+                "status": alert.status,
+                "createdAt": alert.created_at.isoformat() if alert.created_at else None,
+                "updatedAt": alert.updated_at.isoformat() if alert.updated_at else None,
+            },
+            "result_file": {
+                "alertFileId": alert_file.id,
+                "fileId": stored_file.id,
+                "bucket": stored_file.bucket,
+                "objectKey": stored_file.object_key,
+                "filename": stored_file.filename,
+                "contentType": stored_file.content_type,
+                "size": stored_file.size,
+                "fileRole": alert_file.file_role,
+                "fileFormat": alert_file.file_format,
+                "domainCount": alert_file.domain_count,
+                "alertDate": alert_file.alert_date.isoformat() if alert_file.alert_date else None,
+                "uploadedAt": stored_file.uploaded_at.isoformat() if stored_file.uploaded_at else None,
+            },
+            "result": result_json,
+        }
     finally:
         db.close()
 

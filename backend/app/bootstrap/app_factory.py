@@ -66,6 +66,22 @@ def create_app() -> FastAPI:
 
     fastapi_app.include_router(menu_router)
 
+    from app.api.dashboard_stats import router as dashboard_stats_router
+
+    fastapi_app.include_router(dashboard_stats_router)
+
+    from app.api.dashboard_organization import router as dashboard_organization_router
+
+    fastapi_app.include_router(dashboard_organization_router)
+
+    from app.api.dashboard_spatial import router as dashboard_spatial_router
+
+    fastapi_app.include_router(dashboard_spatial_router)
+
+    from app.api.dashboard_domain import router as dashboard_domain_router
+
+    fastapi_app.include_router(dashboard_domain_router)
+
     from app.api.detection import router as detection_router
 
     fastapi_app.include_router(detection_router)
@@ -85,6 +101,10 @@ def create_app() -> FastAPI:
     from app.api.subscription import router as subscription_router, init_scheduler
 
     fastapi_app.include_router(subscription_router)
+
+    from app.api.domain_matches import router as domain_matches_router
+
+    fastapi_app.include_router(domain_matches_router)
 
     @fastapi_app.on_event("startup")
     async def startup_event():

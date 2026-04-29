@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(64) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     email VARCHAR(128) NULL,
+    bio VARCHAR(500) NULL,
     INDEX idx_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
@@ -168,3 +169,30 @@ CREATE TABLE IF NOT EXISTS alerts (
     CONSTRAINT fk_alerts_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT fk_alerts_model_id FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='预警表';
+
+-- 创建 alert_files 表
+CREATE TABLE IF NOT EXISTS alert_files (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    alert_id VARCHAR(64) NOT NULL COMMENT '预警业务ID',
+    subscription_id VARCHAR(64) NOT NULL COMMENT '订阅业务ID',
+    task_id VARCHAR(64) NOT NULL COMMENT '任务业务ID',
+    user_id BIGINT UNSIGNED NOT NULL COMMENT '用户ID',
+    model_id BIGINT UNSIGNED NOT NULL COMMENT '模型ID',
+    task_type ENUM('malicious', 'impersonation') NOT NULL COMMENT '任务类型',
+    frequency ENUM('daily', 'weekly', 'monthly') NOT NULL COMMENT '订阅周期',
+    file_id BIGINT UNSIGNED NOT NULL COMMENT '文件ID',
+    file_role ENUM('full_result', 'report') NOT NULL DEFAULT 'full_result' COMMENT '文件角色',
+    file_format ENUM('json') NOT NULL DEFAULT 'json' COMMENT '文件格式',
+    domain_count INT NOT NULL DEFAULT 0 COMMENT '高风险域名数量',
+    alert_date DATE NOT NULL COMMENT '预警日期',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_alert_id (alert_id),
+    INDEX idx_subscription_id (subscription_id),
+    INDEX idx_task_id (task_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_model_id (model_id),
+    INDEX idx_file_id (file_id),
+    INDEX idx_alert_date (alert_date),
+    CONSTRAINT fk_alert_files_alert_id FOREIGN KEY (alert_id) REFERENCES alerts(alert_id) ON DELETE CASCADE,
+    CONSTRAINT fk_alert_files_file_id FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='预警文件索引表';

@@ -330,88 +330,318 @@ function resetForm() {
 </script>
 
 <template>
-  <a-card title="恶意性检测任务创建" bordered style="max-width:800px;margin:0 auto;">
-    <a-form layout="vertical">
-      <a-form-item label="检测模型">
-        <a-select
-          v-model:value="selectedModel"
-          placeholder="请选择检测模型"
-          :options="modelList.map(m => ({ label: m.name, value: m.id }))"
-          :loading="modelListLoading"
-          allow-clear
-        />
-      </a-form-item>
-      <a-form-item label="数据来源">
-        <a-radio-group v-model:value="dataSource">
-          <a-radio-button value="upload">
-            上传文件
-          </a-radio-button>
-          <a-radio-button value="newDomain">
-            选择新注册域名
-          </a-radio-button>
-        </a-radio-group>
-      </a-form-item>
-      <a-form-item
-        v-if="dataSource === 'upload'"
-        label="待检测数据文件（仅支持csv/txt/xlsx 小于5MB）"
-      >
-        <a-upload-dragger
-          :before-upload="beforeUpload"
-          :show-upload-list="false"
-          :accept="fileRules.accept"
-          :disabled="uploadLoading"
-          :custom-request="() => {}"
-          style="width:100%"
-          @change="handleUpload"
-        >
-          <p class="ant-upload-drag-icon">
-            <i class="iconfont icon-upload-cloud" style="font-size:32px;color:#999;" />
-          </p>
-          <p v-if="uploadFile">
-            {{ uploadFile.name }}
-          </p>
-          <p v-else>
-            点击或拖拽文件上传
-          </p>
-        </a-upload-dragger>
-      </a-form-item>
-      <a-form-item v-if="dataSource === 'newDomain'" label="新注册域名 数据日期范围">
-        <a-range-picker
-          v-model:value="dateRange"
-          :disabled-date="disabledNewDomainDate"
-          format="YYYY-MM-DD"
-          value-format="YYYY-MM-DD"
-          style="width:100%"
-          @calendar-change="onCalendarChange"
-          @open-change="onOpenChange"
-        />
-      </a-form-item>
-      <a-form-item>
-        <a-checkbox v-model:checked="withAttribution">
-          输出归因（组织标签分析）
-        </a-checkbox>
-      </a-form-item>
-      <a-form-item>
-        <a-button
-          type="primary"
-          :loading="submitLoading"
-          style="width:120px"
-          @click="handleSubmit"
-        >
-          提交任务
-        </a-button>
-        <a-button style="margin-left:16px" @click="resetForm">
-          重置
-        </a-button>
-      </a-form-item>
-    </a-form>
-  </a-card>
+  <div class="task-layout">
+    <a-row :gutter="[24, 24]">
+      <a-col :xs="24" :xl="16">
+        <a-card class="form-card" :bordered="false">
+          <div class="card-header">
+            <div class="card-title">
+              创建恶意性检测任务
+            </div>
+            <div class="card-subtitle">
+              上传待检测域名文件，或选择新注册域名时间窗进行批量检测。
+            </div>
+            <div class="header-tags">
+              <span class="mini-tag">风险识别</span>
+              <span class="mini-tag">批量检测</span>
+              <span class="mini-tag">组织分析</span>
+            </div>
+          </div>
+
+          <a-form layout="vertical" class="task-form">
+            <div class="form-section">
+              <div class="section-title">
+                步骤 1：选择检测模型
+              </div>
+              <a-form-item label="检测模型">
+                <a-select
+                  v-model:value="selectedModel"
+                  placeholder="请选择用于本次检测的模型"
+                  :options="modelList.map(m => ({ label: m.name, value: m.id }))"
+                  :loading="modelListLoading"
+                  allow-clear
+                />
+              </a-form-item>
+            </div>
+
+            <div class="form-section">
+              <div class="section-title">
+                步骤 2：选择数据来源
+              </div>
+              <a-form-item label="数据来源">
+                <a-radio-group v-model:value="dataSource" button-style="solid">
+                  <a-radio-button value="upload">
+                    上传文件
+                  </a-radio-button>
+                  <a-radio-button value="newDomain">
+                    选择新注册域名
+                  </a-radio-button>
+                </a-radio-group>
+              </a-form-item>
+              <a-form-item
+                v-if="dataSource === 'upload'"
+                label="待检测数据文件"
+              >
+                <a-upload-dragger
+                  :before-upload="beforeUpload"
+                  :show-upload-list="false"
+                  :accept="fileRules.accept"
+                  :disabled="uploadLoading"
+                  :custom-request="() => {}"
+                  class="upload-card"
+                  @change="handleUpload"
+                >
+                  <p class="ant-upload-drag-icon">
+                    <i class="iconfont icon-upload-cloud upload-icon" />
+                  </p>
+                  <p class="upload-title">
+                    {{ uploadFile ? uploadFile.name : '点击或拖拽上传待检测域名文件' }}
+                  </p>
+                  <p class="upload-subtitle">
+                    支持 CSV / TXT / XLSX，单文件不超过 5MB
+                  </p>
+                </a-upload-dragger>
+              </a-form-item>
+              <a-form-item v-if="dataSource === 'newDomain'" label="新注册域名数据日期范围">
+                <a-range-picker
+                  v-model:value="dateRange"
+                  :disabled-date="disabledNewDomainDate"
+                  format="YYYY-MM-DD"
+                  value-format="YYYY-MM-DD"
+                  style="width:100%"
+                  @calendar-change="onCalendarChange"
+                  @open-change="onOpenChange"
+                />
+              </a-form-item>
+            </div>
+
+            <div class="form-section">
+              <div class="attribution-box">
+                <a-checkbox v-model:checked="withAttribution">
+                  输出组织关联分析
+                </a-checkbox>
+                <div class="attribution-tip">
+                  勾选后，系统将结合历史 IOC 特征生成疑似关联组织与证据摘要。
+                </div>
+              </div>
+            </div>
+
+            <div class="action-footer">
+              <a-button
+                type="primary"
+                :loading="submitLoading"
+                class="submit-btn"
+                @click="handleSubmit"
+              >
+                提交任务
+              </a-button>
+              <a-button @click="resetForm">
+                重置
+              </a-button>
+            </div>
+          </a-form>
+        </a-card>
+      </a-col>
+
+      <a-col :xs="24" :xl="8">
+        <div class="side-panel">
+          <a-card title="填写说明" class="guide-card" :bordered="false">
+            <ul class="guide-list">
+              <li><span class="dot">1</span><span>选择模型后再选择数据来源。</span></li>
+              <li><span class="dot">2</span><span>文件支持 CSV、TXT、XLSX，大小不超过 5MB。</span></li>
+              <li><span class="dot">3</span><span>新注册域名模式下，日期跨度最多 30 天。</span></li>
+            </ul>
+          </a-card>
+          <a-card title="推荐流程" class="guide-card" :bordered="false">
+            <ul class="guide-list">
+              <li><span class="dot">1</span><span>选择与任务类型匹配的模型。</span></li>
+              <li><span class="dot">2</span><span>优先使用结构化域名文件。</span></li>
+              <li><span class="dot">3</span><span>提交后在“我的任务”中查看进度。</span></li>
+            </ul>
+          </a-card>
+          <a-card title="输出结果" class="guide-card" :bordered="false">
+            <ul class="guide-list">
+              <li><span class="dot">1</span><span>风险等级与高风险域名列表。</span></li>
+              <li><span class="dot">2</span><span>可选组织关联分析。</span></li>
+              <li><span class="dot">3</span><span>结果可用于预警订阅与后续核查。</span></li>
+            </ul>
+          </a-card>
+        </div>
+      </a-col>
+    </a-row>
+  </div>
 </template>
 
 <style scoped>
 .iconfont.icon-upload-cloud::before {
   content: '\e68c';
   font-family: 'iconfont';
+}
+
+.task-layout {
+  max-width: 1160px;
+  margin: 0 auto;
+}
+
+.form-card {
+  border-radius: 16px;
+  border: 1px solid rgba(220, 226, 235, 0.9);
+  box-shadow: 0 8px 24px rgba(15, 35, 80, 0.06);
+  min-height: 700px;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-header {
+  margin-bottom: 12px;
+}
+
+.card-title {
+  font-size: 20px;
+  line-height: 1.4;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.card-subtitle {
+  margin-top: 6px;
+  color: #667085;
+  line-height: 1.65;
+}
+
+.header-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.mini-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid #dbeafe;
+  color: #2563eb;
+  background: #eff6ff;
+  font-size: 12px;
+}
+
+.task-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.form-section {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 14px 14px 4px;
+  margin-bottom: 14px;
+  background: #fff;
+}
+
+.section-title {
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 10px;
+}
+
+.upload-card {
+  border-radius: 12px;
+}
+
+:deep(.upload-card.ant-upload-wrapper .ant-upload-drag) {
+  min-height: 152px;
+  border-color: #dbe7ff;
+  background: #f9fbff;
+}
+
+:deep(.upload-card.ant-upload-wrapper .ant-upload-drag:hover) {
+  border-color: #1677ff;
+}
+
+.upload-icon {
+  font-size: 30px;
+  color: #7696d1;
+}
+
+.upload-title {
+  color: #1f2937;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.upload-subtitle {
+  color: #667085;
+  margin-bottom: 0;
+}
+
+.attribution-box {
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  padding: 10px 12px;
+}
+
+.attribution-tip {
+  margin-top: 6px;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.action-footer {
+  margin-top: auto;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 16px;
+  display: flex;
+  gap: 12px;
+}
+
+.submit-btn {
+  min-width: 150px;
+}
+
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.guide-card {
+  border-radius: 12px;
+  border: 1px solid rgba(220, 226, 235, 0.9);
+  box-shadow: 0 8px 24px rgba(15, 35, 80, 0.06);
+}
+
+.guide-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  color: #667085;
+  line-height: 1.8;
+}
+
+.guide-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #e8f1ff;
+  color: #1677ff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  flex-shrink: 0;
+  margin-top: 4px;
 }
 </style>
 

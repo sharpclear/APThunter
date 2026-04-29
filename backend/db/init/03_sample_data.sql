@@ -76,7 +76,7 @@ DROP TABLE IF EXISTS _stg_apt_organizations;
 -- ============================================
 -- APT 事件数据（CSV 导入并映射字段）
 -- ============================================
-DROP TABLE IF EXISTS _stg_apt_events;
+/*DROP TABLE IF EXISTS _stg_apt_events;
 CREATE TABLE _stg_apt_events (
 	id VARCHAR(32),
 	event_date TEXT,
@@ -90,7 +90,7 @@ CREATE TABLE _stg_apt_events (
 
 LOAD DATA INFILE '/docker-entrypoint-initdb.d/apt_events.csv'
 INTO TABLE _stg_apt_events
-CHARACTER SET gbk
+CHARACTER SET utf8mb4
 FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"' ESCAPED BY '"'
 LINES TERMINATED BY '\n'
 IGNORE 1 LINES;
@@ -100,7 +100,6 @@ INSERT INTO apt_events (
 	event_date,
 	title,
 	description,
-	report_url,
 	event_type,
 	region,
 	latitude,
@@ -113,7 +112,6 @@ SELECT
 	STR_TO_DATE(NULLIF(TRIM(e.event_date), ''), '%Y/%c/%e'),
 	LEFT(TRIM(e.title), 255),
 	NULLIF(e.description, ''),
-	NULLIF(TRIM(e.link), ''),
 	CASE
 		WHEN COALESCE(TRIM(e.threat_type), '') IN ('供应链攻击', '漏洞利用', '勒索软件', 'APT攻击') THEN 'major'
 		ELSE 'normal'
@@ -146,7 +144,7 @@ SELECT
 	SUM(CASE WHEN e.event_type = 'major' THEN 1 ELSE 0 END) AS major_count
 FROM apt_events e
 LEFT JOIN apt_organizations o ON e.organization_id = o.id
-GROUP BY e.event_date, COALESCE(NULLIF(o.region, ''), '未知');
+GROUP BY e.event_date, COALESCE(NULLIF(o.region, ''), '未知');*/
 
 -- ============================================
 -- 域名数据（CSV 导入）
@@ -231,13 +229,13 @@ SELECT
 		WHERE event_date = CURDATE()
 	) AS new_threats_today;
 
-INSERT INTO threat_trends (trend_date, dns_tunnel_count, dga_domain_count, phishing_count, c2_communication, malware_count)
+INSERT INTO threat_trends (trend_date, dns_tunnel_count, dga_domain_count, phishing_count, c2_communication_count, malware_count)
 SELECT
 	e.event_date AS trend_date,
 	0 AS dns_tunnel_count,
 	0 AS dga_domain_count,
 	SUM(CASE WHEN e.title LIKE '%钓鱼%' OR e.description LIKE '%钓鱼%' THEN 1 ELSE 0 END) AS phishing_count,
-	SUM(CASE WHEN e.title LIKE '%C2%' OR e.description LIKE '%C2%' THEN 1 ELSE 0 END) AS c2_communication,
+	SUM(CASE WHEN e.title LIKE '%C2%' OR e.description LIKE '%C2%' THEN 1 ELSE 0 END) AS c2_communication_count,
 	COUNT(*) AS malware_count
 FROM apt_events e
 GROUP BY e.event_date

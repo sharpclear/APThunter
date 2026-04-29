@@ -219,19 +219,12 @@ def send_alert_notification(
     high_risk_domains: List[str],
     detail_page_url: str,
     risk_summary: str,
+    suspected_association_text: Optional[str] = None,
 ) -> bool:
     """
     仅用于「已确认创建预警记录」后的展示型推送，不在此函数内做任何预警判定。
     """
-    domain_label = "恶意域名" if task_type == "malicious" else "仿冒/钓鱼域名"
     type_label = "恶意性检测" if task_type == "malicious" else "仿冒域名检测"
-
-    preview_lines: List[str] = []
-    for d in high_risk_domains[:40]:
-        preview_lines.append(f"• {str(d)[:300]}")
-    domains_blob = "\n".join(preview_lines)
-    if len(high_risk_domains) > 40:
-        domains_blob += f"\n… 共 {len(high_risk_domains)} 条（完整列表见平台预警详情）"
 
     title = f"【域名检测预警】{model_name}"
 
@@ -239,10 +232,17 @@ def send_alert_notification(
         [{"tag": "text", "text": f"预警ID：{alert_id}  |  任务ID：{task_id}  |  订阅ID：{subscription_id}\n"}],
         [{"tag": "text", "text": f"检测类型：{type_label}\n"}],
     ]
-    if domains_blob.strip():
-        lines.append([{"tag": "text", "text": f"{domain_label}预览：\n{domains_blob}\n"}])
+    if suspected_association_text and suspected_association_text.strip():
+        lines.append(
+            [
+                {
+                    "tag": "text",
+                    "text": f"域名关联组织：\n{suspected_association_text}\n",
+                }
+            ]
+        )
 
-    if detail_page_url:
+    '''if detail_page_url:
         lines.append(
             [
                 {"tag": "text", "text": "结果详情："},
@@ -253,15 +253,7 @@ def send_alert_notification(
     else:
         lines.append(
             [{"tag": "text", "text": "结果详情：未配置 APP_PUBLIC_BASE_URL，无法生成外链。\n"}]
-        )
+        )'''
 
-    lines.append(
-        [
-            {
-                "tag": "text",
-                "text": "备注：该消息由平台预警机制自动推送（飞书）。\n",
-            }
-        ]
-    )
 
     return send_post(title, lines)

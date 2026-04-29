@@ -6,7 +6,9 @@
 services:
   # MySQL 数据库服务
   mysql:
-    image: mysql:8.0
+    build:
+      context: ./backend/db
+      dockerfile: Dockerfile.mysql
     container_name: atdv-mysql
     restart: unless-stopped
     environment:
@@ -18,11 +20,9 @@ services:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      # 挂载数据库初始化脚本（按文件名顺序执行）
-      - ./backend/db/init:/docker-entrypoint-initdb.d:ro
     networks:
       - atdv-network
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --secure-file-priv=/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword123"]
       interval: 10s
@@ -197,6 +197,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_BUILD_MODE: ${FRONTEND_BUILD_MODE:-production}
     container_name: atdv-frontend
     restart: unless-stopped
     ports:

@@ -8,6 +8,9 @@ WORKDIR /app
 # 安装 pnpm
 RUN corepack enable && corepack prepare pnpm@10.17.1 --activate
 
+# 构建模式（默认 production，可在 compose 中通过 FRONTEND_BUILD_MODE 覆盖）
+ARG VITE_BUILD_MODE=production
+
 # 复制包管理文件
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
@@ -18,7 +21,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 
 # 构建应用
-RUN pnpm build
+RUN pnpm build --mode ${VITE_BUILD_MODE}
 
 # 第二阶段：运行阶段
 FROM nginx:alpine

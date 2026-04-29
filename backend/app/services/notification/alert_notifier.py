@@ -3,13 +3,16 @@
 """
 from __future__ import annotations
 
+import json
 import logging
-from typing import Optional
+from typing import Any, Dict, Mapping, Optional
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import ALERT_EMAIL_ENABLED, APP_PUBLIC_BASE_URL, FEISHU_ENABLE_PUSH, FEISHU_WEBHOOK_URL
 from app.entities import User
+from app.infra.minio_client import minio_client
 from app.services.notification.email_service import (
     beijing_datetime_to_naive,
     beijing_now,
@@ -29,6 +32,108 @@ def _get_user_email(db: Session, user_id: int) -> Optional[str]:
     except Exception as e:
         logger.error("获取用户邮箱失败: %s", e)
         return None
+
+
+def _safe_text(value: Any, default: str = "") -> str:
+    text_value = str(value or "").strip()
+    return text_value if text_value else default
+
+
+def _build_suspected_association_text_from_results(match_results_by_domain: Mapping[str, Any]) -> str:
+    if not match_results_by_domain:
+        return "暂无明显疑似关联组织。"
+
+    association_lines = []
+    known_org_count = 0
+    for domain_key, result in match_results_by_domain.items():
+        domain_name = _safe_text(
+            (result or {}).get("domain_name") if isinstance(result, Mapping) else "",
+            _safe_text(domain_key, "未知域名"),
+        )
+        if not isinstance(result, Mapping):
+            continue
+
+        org_name = _safe_text(result.get("matched_organization_name"))
+        if not org_name:
+            top_candidates = result.get("top_candidates_json") or result.get("top_candidates") or []
+            if isinstance(top_candidates, list) and top_candidates:
+                first = top_candidates[0] if isinstance(top_candidates[0], Mapping) else {}
+                org_name = _safe_text(first.get("name"))
+        if not org_name:
+            org_name = "未知"
+        else:
+            known_org_count += 1
+
+        association_lines.append(f"{domain_name} -> {org_name}")
+
+    if not association_lines:
+        return "暂无明显疑似关联组织。"
+    total_count = len(association_lines)
+    sections = [
+        "【域名与组织关联列表】",
+        f"本批次高风险域名数量：{total_count}",
+        f"已形成组织关联的域名数量：{known_org_count}",
+        "",
+        "\n".join(association_lines),
+    ]
+    return "\n".join(sections).strip()
+
+
+def _load_suspected_association_text_from_minio(db: Session, alert_id: str) -> str:
+    row = db.execute(
+        text(
+            """
+            SELECT f.bucket, f.object_key
+            FROM alert_files af
+            JOIN files f ON f.id = af.file_id
+            WHERE af.alert_id = :alert_id
+              AND af.file_role = 'full_result'
+              AND af.file_format = 'json'
+            ORDER BY af.created_at DESC
+            LIMIT 1
+            """
+        ),
+        {"alert_id": alert_id},
+    ).mappings().first()
+    if not row:
+        return "暂无明显疑似关联组织。"
+
+    bucket = row.get("bucket")
+    object_key = row.get("object_key")
+    if not bucket or not object_key:
+        return "暂无明显疑似关联组织。"
+
+    try:
+        response = minio_client.get_object(bucket, object_key)
+        content_bytes = response.read()
+        response.close()
+        response.release_conn()
+        payload = json.loads(content_bytes.decode("utf-8"))
+    except Exception:
+        logger.exception(
+            "读取 MinIO 预警结果失败，无法构造疑似关联组织文案 alert_id=%s bucket=%s object_key=%s",
+            alert_id,
+            bucket,
+            object_key,
+        )
+        return "暂无明显疑似关联组织。"
+
+    match_results_by_domain: Dict[str, Any] = {}
+    for item in payload.get("high_risk_domains") or []:
+        if not isinstance(item, Mapping):
+            continue
+        domain_name = _safe_text(item.get("domain"))
+        if not domain_name:
+            continue
+        matched_organizations = item.get("matched_organizations") or []
+        top_candidates = item.get("top_candidates") or []
+        primary = matched_organizations[0] if isinstance(matched_organizations, list) and matched_organizations else {}
+        match_results_by_domain[domain_name.lower()] = {
+            "domain_name": domain_name,
+            "matched_organization_name": _safe_text(primary.get("organization_name")) if isinstance(primary, Mapping) else "",
+            "top_candidates_json": top_candidates,
+        }
+    return _build_suspected_association_text_from_results(match_results_by_domain)
 
 
 def dispatch_alert_notifications(
@@ -88,6 +193,15 @@ def dispatch_alert_notifications(
     if detected_count > 0:
         ratio_txt = f"高风险占比约 {(high_risk_count / detected_count) * 100:.2f}%"
     risk_summary = f"{ratio_txt}；订阅检测阈值 {threshold}。" if ratio_txt else f"订阅检测阈值 {threshold}。"
+    suspected_association_text = "暂无明显疑似关联组织。"
+    try:
+        in_memory_matches = alert_data.get("match_results_by_domain")
+        if isinstance(in_memory_matches, Mapping) and in_memory_matches:
+            suspected_association_text = _build_suspected_association_text_from_results(in_memory_matches)
+        else:
+            suspected_association_text = _load_suspected_association_text_from_minio(db, str(alert_id))
+    except Exception:
+        logger.exception("构建疑似关联组织推送文案失败，将使用默认文案")
 
     ok = False
     try:
@@ -104,6 +218,7 @@ def dispatch_alert_notifications(
             high_risk_domains=list(domains) if isinstance(domains, list) else [],
             detail_page_url=detail,
             risk_summary=risk_summary,
+            suspected_association_text=suspected_association_text,
         )
     except Exception:
         logger.exception("飞书预警推送异常（已吞掉，不影响主流程）")
@@ -131,6 +246,7 @@ def build_alert_data_dict(
     threshold: int,
     created_at: str,
     high_risk_domains: list,
+    match_results_by_domain: Optional[dict] = None,
 ) -> dict:
     return {
         "alert_id": alert_id,
@@ -141,4 +257,5 @@ def build_alert_data_dict(
         "threshold": threshold,
         "created_at": created_at,
         "high_risk_domains": high_risk_domains,
+        "match_results_by_domain": match_results_by_domain or {},
     }

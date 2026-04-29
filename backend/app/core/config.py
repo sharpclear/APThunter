@@ -1,10 +1,46 @@
 import os
 
+def _load_local_dotenv_if_present():
+    """
+    本地直接启动后端服务时，尽早从 .env 读取配置。
+    必须在本模块读取任何 os.getenv 之前执行，避免导入顺序导致配置默认值被提前固化。
+    """
+    try:
+        from dotenv import load_dotenv  # python-dotenv
+    except Exception:
+        return
+    try:
+        config_dir = os.path.dirname(os.path.abspath(__file__))  # backend/app/core
+        app_dir = os.path.abspath(os.path.join(config_dir, ".."))  # backend/app
+        backend_root = os.path.abspath(os.path.join(config_dir, "..", ".."))  # backend
+        project_root = os.path.abspath(os.path.join(config_dir, "..", "..", ".."))  # atdv-pro
+        cwd = os.getcwd()
+        explicit = os.getenv("DOTENV_PATH")
+        candidates = []
+        if explicit:
+            candidates.append(explicit)
+        candidates.extend(
+            [
+                os.path.join(cwd, ".env"),
+                os.path.join(project_root, ".env"),
+                os.path.join(backend_root, ".env"),
+                os.path.join(app_dir, ".env"),
+            ]
+        )
+        for path in candidates:
+            if os.path.exists(path):
+                load_dotenv(path, override=False)
+                break
+    except Exception:
+        return
+_load_local_dotenv_if_present()
+
 # 配置通过环境变量设置
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "localhost:9000")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "123456789")
 MINIO_BUCKET = os.getenv("MINIO_BUCKET", "uploads")
+ALERT_RESULT_BUCKET = os.getenv("ALERT_RESULT_BUCKET", "apthunter-alert-results")
 
 MYSQL_URL = os.getenv(
     "MYSQL_URL",

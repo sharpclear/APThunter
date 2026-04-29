@@ -1,0 +1,4 @@
+FROM mysql:8.0
+
+# 将初始化脚本打包进镜像，避免 bind mount 触发宿主机权限变更
+COPY init/ /docker-entrypoint-initdb.d/

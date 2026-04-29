@@ -455,10 +455,10 @@ async def upload_training_data(
                 content={"code": 400, "message": "仅支持CSV/TXT格式的文件", "data": None}
             )
         
-        # 验证文件大小（5MB）
+        # 验证文件大小（20MB）
         file_content = await file.read()
         file_size = len(file_content)
-        max_size = 5 * 1024 * 1024  # 5MB
+        max_size = 20 * 1024 * 1024  # 20MB
         if file_size > max_size:
             return JSONResponse(
                 status_code=400,

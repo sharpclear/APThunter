@@ -39,11 +39,21 @@ def _safe_text(value: Any, default: str = "") -> str:
     return text_value if text_value else default
 
 
+def _org_sort_key(org_name: str) -> tuple[int, str]:
+    """
+    组织排序键：已识别组织优先，未知组织排最后；同组按名称字典序。
+    """
+    normalized = _safe_text(org_name, "未知")
+    is_unknown = 1 if normalized == "未知" else 0
+    return (is_unknown, normalized.lower())
+
+
 def _build_suspected_association_text_from_results(match_results_by_domain: Mapping[str, Any]) -> str:
     if not match_results_by_domain:
         return "暂无明显疑似关联组织。"
 
-    association_lines = []
+    grouped_domains: Dict[str, list[str]] = {}
+    seen_domains = set()
     known_org_count = 0
     for domain_key, result in match_results_by_domain.items():
         domain_name = _safe_text(
@@ -64,18 +74,31 @@ def _build_suspected_association_text_from_results(match_results_by_domain: Mapp
         else:
             known_org_count += 1
 
-        association_lines.append(f"{domain_name} -> {org_name}")
+        domain_key_lower = domain_name.lower()
+        if domain_key_lower in seen_domains:
+            continue
+        seen_domains.add(domain_key_lower)
 
-    if not association_lines:
+        grouped_domains.setdefault(org_name, []).append(domain_name)
+
+    total_count = sum(len(domains) for domains in grouped_domains.values())
+    if total_count <= 0:
         return "暂无明显疑似关联组织。"
-    total_count = len(association_lines)
+
     sections = [
-        "【域名与组织关联列表】",
         f"本批次高风险域名数量：{total_count}",
         f"已形成组织关联的域名数量：{known_org_count}",
         "",
-        "\n".join(association_lines),
     ]
+
+    sorted_orgs = sorted(grouped_domains.keys(), key=_org_sort_key)
+    for org_name in sorted_orgs:
+        domains = sorted(grouped_domains[org_name], key=lambda x: x.lower())
+        sections.append(f"【{org_name}】({len(domains)}个)")
+        for idx, domain in enumerate(domains, start=1):
+            sections.append(f"{idx}. {domain}")
+        sections.append("")
+
     return "\n".join(sections).strip()
 
 

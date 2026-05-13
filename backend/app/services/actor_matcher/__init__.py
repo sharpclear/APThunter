@@ -22,8 +22,15 @@ from app.services.actor_matcher.match_query import (
     update_match_status,
 )
 from app.services.actor_matcher.match_pipeline import persist_actor_matches_for_alert
-from app.services.actor_matcher.matcher import match_domain_to_actors
+from app.services.actor_matcher.matcher_v2_infra import match_domain_to_actors_v2_infra
 from app.services.actor_matcher.profile_loader import load_actor_profiles
+from app.services.actor_matcher.domain_infra_snapshot_loader import (
+    load_domain_infra_snapshot,
+)
+from app.services.actor_matcher.infra_profile_cache_loader import (
+    load_actor_infra_profiles_from_cache,
+)
+from app.services.actor_matcher.infra_profile_builder import rebuild_actor_infra_profiles
 from app.services.actor_matcher.alert_result_builder import build_alert_result_json
 from app.services.actor_matcher.alert_result_storage import (
     AlertResultStorageError,
@@ -57,9 +64,12 @@ __all__ = [
     "get_match_detail",
     "search_matches",
     "update_match_status",
-    "match_domain_to_actors",
+    "match_domain_to_actors_v2_infra",
     "persist_actor_matches_for_alert",
     "load_actor_profiles",
+    "load_domain_infra_snapshot",
+    "load_actor_infra_profiles_from_cache",
+    "rebuild_actor_infra_profiles",
     "build_alert_result_json",
     "AlertResultStorageError",
     "save_alert_result_json_to_minio",

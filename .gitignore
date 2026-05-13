@@ -67,6 +67,8 @@ lerna-debug.log*
 
 # Docker
 .dockerignore
+!backend/.dockerignore
+!frontend/.dockerignore
 docker-compose.override.yml
 
 # Database

@@ -1,0 +1,59 @@
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv
+*.egg-info
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Data and models (if large, consider mounting as volumes)
+# fastText 预训练向量约 9GB，当前线上检测/订阅链路不依赖，避免进入构建上下文。
+app/models/fasttext/
+
+# Compose 会把宿主机 daily_data 挂载到 /app/app/daily_data，历史日数据不需要打进镜像。
+app/daily_data/
+
+# CANINE 本地模型需要保留，但 safetensors 与 pytorch_model.bin 二选一即可；保留 safetensors。
+app/models/pretrained_model/canine-s/pytorch_model.bin
+
+# 训练产生的动态模型通过 Compose 挂载 saved_model 目录持久化，镜像只保留官方基线模型文件。
+app/models/saved_model/model_TRAIN_*.pkl
+app/models/saved_model/scaler_TRAIN_*.pkl
+app/models/saved_model_ML/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

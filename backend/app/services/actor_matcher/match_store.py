@@ -86,7 +86,7 @@ def create_alert_domain_match(
         model_id=payload.get("model_id"),
         model_version=payload.get("model_version"),
         actor_profile_version=payload.get("actor_profile_version"),
-        match_method=payload.get("match_method") or "rule_v1",
+        match_method=payload.get("match_method") or "rule_v2_infra",
         status=payload.get("status") or "pending",
     )
     db.add(row)

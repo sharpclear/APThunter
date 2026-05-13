@@ -17,12 +17,12 @@ services:
       MYSQL_USER: apthunter
       MYSQL_PASSWORD: 4CyUhr2zu6!
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     networks:
       - atdv-network
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --secure-file-priv=/docker-entrypoint-initdb.d
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --secure-file-priv=/docker-entrypoint-initdb.d --default-authentication-plugin=mysql_native_password
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword123"]
       interval: 10s
@@ -75,8 +75,8 @@ services:
       # Linux：构建阶段使用宿主机网络，避免 bridge 下 DNS 无法解析镜像站（如 mirrors.aliyun.com）
       network: host
       args:
-        # 构建机解析不了阿里云时设 USE_CN_MIRROR=0 走官方 deb.debian.org
-        USE_CN_MIRROR: ${USE_CN_MIRROR:-1}
+        # 默认走官方 deb.debian.org；如需使用阿里云镜像可设置 USE_CN_MIRROR=1
+        USE_CN_MIRROR: ${USE_CN_MIRROR:-0}
     container_name: atdv-backend
     restart: unless-stopped
     environment:
@@ -140,7 +140,7 @@ services:
       dockerfile: Dockerfile
       network: host
       args:
-        USE_CN_MIRROR: ${USE_CN_MIRROR:-1}
+        USE_CN_MIRROR: ${USE_CN_MIRROR:-0}
     container_name: atdv-celery-worker
     restart: unless-stopped
     working_dir: /app/app
@@ -239,4 +239,3 @@ volumes:
 networks:
   atdv-network:
     driver: bridge
-

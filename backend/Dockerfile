@@ -1,10 +1,10 @@
 # 多阶段构建 Dockerfile for FastAPI Backend
 # 固定 bookworm：避免 python:3.10-slim 默认跟 testing（如 trixie）与下方 fallback 源不一致
-# USE_CN_MIRROR=0 时使用镜像内默认 deb.debian.org（构建机无法解析阿里云时可在 compose 里传参）
+# USE_CN_MIRROR=1 时使用阿里云 Debian 源；默认使用镜像内置 deb.debian.org，避免镜像站偶发 502 导致构建失败。
 # 第一阶段：构建阶段（可选，用于安装依赖）
 FROM python:3.10-slim-bookworm AS builder
 
-ARG USE_CN_MIRROR=1
+ARG USE_CN_MIRROR=0
 
 # 设置工作目录
 WORKDIR /app
@@ -20,15 +20,23 @@ RUN set -eux; \
     fi
 
 # 安装系统依赖（分步安装，减少单次内存占用）
-# 先更新包列表
-RUN apt-get update
+# 先更新包列表；镜像源异常时回退到 deb.debian.org
+RUN apt-get update || ( \
+      sed -i 's/mirrors.aliyun.com/deb.debian.org/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
+      sed -i 's/mirrors.aliyun.com/deb.debian.org/g' /etc/apt/sources.list 2>/dev/null || true; \
+      apt-get update \
+    )
 
 # 单独安装 gcc（减少内存峰值）
 RUN apt-get install -y --no-install-recommends gcc && \
     rm -rf /var/lib/apt/lists/*
 
 # 再次更新并安装 g++
-RUN apt-get update && \
+RUN (apt-get update || ( \
+      sed -i 's/mirrors.aliyun.com/deb.debian.org/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
+      sed -i 's/mirrors.aliyun.com/deb.debian.org/g' /etc/apt/sources.list 2>/dev/null || true; \
+      apt-get update \
+    )) && \
     apt-get install -y --no-install-recommends g++ && \
     rm -rf /var/lib/apt/lists/*
 
@@ -43,8 +51,11 @@ RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple && 
 # 先安装 CPU 版本的 PyTorch（使用 PyTorch 官方源，但依赖从国内镜像下载）
 RUN pip install --default-timeout=1000 \
     --user \
-    torch>=2.7.1 \
-    --extra-index-url https://download.pytorch.org/whl/cpu
+    --index-url https://download.pytorch.org/whl/cpu \
+    --extra-index-url https://pypi.tuna.tsinghua.edu.cn/simple/ \
+    --trusted-host download.pytorch.org \
+    --trusted-host pypi.tuna.tsinghua.edu.cn \
+    'torch==2.7.1+cpu'
 
 # 安装其他依赖
 RUN pip install --default-timeout=1000 \
@@ -55,7 +66,7 @@ RUN pip install --default-timeout=1000 \
 # 第二阶段：运行阶段
 FROM python:3.10-slim-bookworm
 
-ARG USE_CN_MIRROR=1
+ARG USE_CN_MIRROR=0
 
 # 配置 Debian 使用国内镜像源（与 builder 一致）
 RUN set -eux; \
@@ -71,7 +82,11 @@ RUN set -eux; \
 WORKDIR /app
 
 # 安装运行时系统依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN (apt-get update || ( \
+      sed -i 's/mirrors.aliyun.com/deb.debian.org/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
+      sed -i 's/mirrors.aliyun.com/deb.debian.org/g' /etc/apt/sources.list 2>/dev/null || true; \
+      apt-get update \
+    )) && apt-get install -y --no-install-recommends \
     libgomp1 \
     curl \
     && rm -rf /var/lib/apt/lists/*

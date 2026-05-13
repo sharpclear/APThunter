@@ -214,12 +214,13 @@ def send_alert_notification(
     task_type: str,
     detected_count: int,
     high_risk_count: int,
-    threshold: int,
+    threshold: Optional[int],
     created_at: str,
     high_risk_domains: List[str],
     detail_page_url: str,
     risk_summary: str,
     suspected_association_text: Optional[str] = None,
+    phishing_matches: Optional[List[Dict[str, Any]]] = None,
 ) -> bool:
     """
     仅用于「已确认创建预警记录」后的展示型推送，不在此函数内做任何预警判定。
@@ -232,6 +233,10 @@ def send_alert_notification(
         [{"tag": "text", "text": f"预警ID：{alert_id}  |  任务ID：{task_id}  |  订阅ID：{subscription_id}\n"}],
         [{"tag": "text", "text": f"检测类型：{type_label}\n"}],
     ]
+    if task_type == "impersonation":
+        lines.extend(_build_impersonation_alert_lines(phishing_matches or []))
+        return send_post(title, lines)
+
     if suspected_association_text and suspected_association_text.strip():
         lines.append(
             [
@@ -257,3 +262,45 @@ def send_alert_notification(
 
 
     return send_post(title, lines)
+
+
+def _safe_text(value: Any, default: str = "") -> str:
+    text = str(value or "").strip()
+    return text if text else default
+
+
+def _build_impersonation_alert_lines(
+    phishing_matches: List[Dict[str, Any]],
+    limit: int = 30,
+) -> List[List[Dict[str, Any]]]:
+    if not phishing_matches:
+        return [[{"tag": "text", "text": "仿冒检测结果：未能提取仿冒明细，请查看预警详情文件。\n"}]]
+
+    lines: List[List[Dict[str, Any]]] = [
+        [{"tag": "text", "text": f"仿冒域名数量：{len(phishing_matches)}\n"}],
+        [{"tag": "text", "text": "仿冒明细：\n"}],
+    ]
+
+    for idx, item in enumerate(phishing_matches[:limit], start=1):
+        official_unit_name = _safe_text(item.get("official_unit_name"), "未知单位")
+        official_domain = _safe_text(item.get("official_domain"), "未知官方域名")
+        phishing_domain = _safe_text(item.get("phishing_domain"), "未知仿冒域名")
+        similarity = _safe_text(item.get("similarity"), "未知")
+        lines.append(
+            [
+                {
+                    "tag": "text",
+                    "text": (
+                        f"{idx}. 官方域名：{official_domain}\n"
+                        f"   官方域名单位名称：{official_unit_name}\n"
+                        f"   检测出的仿冒域名：{phishing_domain}\n"
+                        f"   相似度：{similarity}\n"
+                    ),
+                }
+            ]
+        )
+
+    omitted = len(phishing_matches) - limit
+    if omitted > 0:
+        lines.append([{"tag": "text", "text": f"其余 {omitted} 条请查看预警详情文件。\n"}])
+    return lines

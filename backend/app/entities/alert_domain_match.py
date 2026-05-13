@@ -26,7 +26,7 @@ class AlertDomainMatch(Base):
     model_id = Column(BigInteger, nullable=True, index=True)
     model_version = Column(String(64), nullable=True)
     actor_profile_version = Column(String(64), nullable=True)
-    match_method = Column(String(64), nullable=False, server_default="rule_v1")
+    match_method = Column(String(64), nullable=False, server_default="rule_v2_infra")
     status = Column(String(32), nullable=False, index=True, server_default="pending")
     created_at = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"), index=True)
     updated_at = Column(

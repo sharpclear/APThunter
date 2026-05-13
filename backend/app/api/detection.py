@@ -83,6 +83,37 @@ def download_file_from_minio(file_key: str, bucket: str = MINIO_BUCKET) -> bytes
         logger.error(f"从MinIO下载文件失败: {e}")
         raise
 
+
+def _get_impersonation_model_record(db):
+    """
+    仿冒检测是内置算法任务，历史环境中模型名可能不是 IMPERSONATION_MODEL_NAME。
+    优先尊重配置名；配置名不存在时回退到启用的仿冒模型。
+    """
+    configured_name = (IMPERSONATION_MODEL_NAME or "").strip()
+    if configured_name:
+        model_record = (
+            db.query(Model)
+            .filter(
+                Model.name == configured_name,
+                Model.model_category == "impersonation",
+                Model.status == "active",
+            )
+            .first()
+        )
+        if model_record:
+            return model_record
+
+    return (
+        db.query(Model)
+        .filter(
+            Model.model_category == "impersonation",
+            Model.status == "active",
+        )
+        .order_by(Model.model_type.asc(), Model.id.asc())
+        .first()
+    )
+
+
 router = APIRouter()
 
 
@@ -870,14 +901,13 @@ async def create_impersonation_task(
         # 保存任务到数据库
         db = SessionLocal()
         try:
-            logger.info(f"查找模型: {IMPERSONATION_MODEL_NAME}")
-            # 查找模型
-            model_record = db.query(Model).filter(Model.name == IMPERSONATION_MODEL_NAME).first()
+            logger.info(f"查找仿冒检测模型，配置名: {IMPERSONATION_MODEL_NAME}")
+            model_record = _get_impersonation_model_record(db)
             if not model_record:
-                logger.error(f"模型 '{IMPERSONATION_MODEL_NAME}' 不存在于数据库中")
+                logger.error("数据库中不存在可用的 active impersonation 模型")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Impersonation model '{IMPERSONATION_MODEL_NAME}' not configured"
+                    detail="No active impersonation model configured"
                 )
             logger.info(f"找到模型记录: id={model_record.id}, name={model_record.name}")
             

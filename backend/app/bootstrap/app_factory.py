@@ -4,8 +4,26 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 logger = logging.getLogger("uvicorn.error")
+
+
+def _apply_runtime_schema_compatibility(engine) -> None:
+    """
+    容器重建不会重放 MySQL 初始化 SQL；旧数据卷需要少量幂等 DDL 兼容当前代码。
+    """
+    statements = [
+        "ALTER TABLE subscriptions MODIFY COLUMN threshold INT NULL DEFAULT NULL",
+        "ALTER TABLE alerts MODIFY COLUMN threshold INT NULL DEFAULT NULL",
+    ]
+    with engine.begin() as conn:
+        for statement in statements:
+            try:
+                conn.execute(text(statement))
+            except Exception:
+                logger.exception("运行时数据库兼容迁移失败: %s", statement)
+                raise
 
 
 def create_app() -> FastAPI:
@@ -57,6 +75,7 @@ def create_app() -> FastAPI:
     from app.entities import Model, StoredFile, Task, User, UserModel  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    _apply_runtime_schema_compatibility(engine)
 
     from app.api.login import router as login_router
 

@@ -39,6 +39,15 @@ def _safe_text(value: Any, default: str = "") -> str:
     return text_value if text_value else default
 
 
+def _safe_optional_int(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except Exception:
+        return None
+
+
 def _org_sort_key(org_name: str) -> tuple[int, str]:
     """
     组织排序键：已识别组织优先，未知组织排最后；同组按名称字典序。
@@ -63,12 +72,15 @@ def _build_suspected_association_text_from_results(match_results_by_domain: Mapp
         if not isinstance(result, Mapping):
             continue
 
+        match_status = _safe_text(result.get("match_status"))
         org_name = _safe_text(result.get("matched_organization_name"))
-        if not org_name:
+        if not org_name and not match_status:
             top_candidates = result.get("top_candidates_json") or result.get("top_candidates") or []
             if isinstance(top_candidates, list) and top_candidates:
                 first = top_candidates[0] if isinstance(top_candidates[0], Mapping) else {}
                 org_name = _safe_text(first.get("name"))
+        if match_status and match_status != "suspected_match":
+            org_name = ""
         if not org_name:
             org_name = "未知"
         else:
@@ -153,6 +165,7 @@ def _load_suspected_association_text_from_minio(db: Session, alert_id: str) -> s
         primary = matched_organizations[0] if isinstance(matched_organizations, list) and matched_organizations else {}
         match_results_by_domain[domain_name.lower()] = {
             "domain_name": domain_name,
+            "match_status": _safe_text(item.get("match_status")),
             "matched_organization_name": _safe_text(primary.get("organization_name")) if isinstance(primary, Mapping) else "",
             "top_candidates_json": top_candidates,
         }
@@ -204,9 +217,10 @@ def dispatch_alert_notifications(
     task_type = alert_data.get("task_type", "malicious")
     detected_count = int(alert_data.get("detected_count", 0))
     high_risk_count = int(alert_data.get("high_risk_count", 0))
-    threshold = int(alert_data.get("threshold", 0))
+    threshold = _safe_optional_int(alert_data.get("threshold"))
     created_at = alert_data.get("created_at", "")
     domains = alert_data.get("high_risk_domains") or []
+    phishing_matches = alert_data.get("phishing_matches") or []
 
     detail = ""
     if APP_PUBLIC_BASE_URL:
@@ -215,7 +229,8 @@ def dispatch_alert_notifications(
     ratio_txt = ""
     if detected_count > 0:
         ratio_txt = f"高风险占比约 {(high_risk_count / detected_count) * 100:.2f}%"
-    risk_summary = f"{ratio_txt}；订阅检测阈值 {threshold}。" if ratio_txt else f"订阅检测阈值 {threshold}。"
+    threshold_txt = f"自定义阈值 {threshold}" if threshold is not None else "默认阈值策略"
+    risk_summary = f"{ratio_txt}；{threshold_txt}。" if ratio_txt else f"{threshold_txt}。"
     suspected_association_text = "暂无明显疑似关联组织。"
     try:
         in_memory_matches = alert_data.get("match_results_by_domain")
@@ -242,6 +257,7 @@ def dispatch_alert_notifications(
             detail_page_url=detail,
             risk_summary=risk_summary,
             suspected_association_text=suspected_association_text,
+            phishing_matches=phishing_matches if isinstance(phishing_matches, list) else [],
         )
     except Exception:
         logger.exception("飞书预警推送异常（已吞掉，不影响主流程）")
@@ -266,10 +282,11 @@ def build_alert_data_dict(
     task_type: str,
     detected_count: int,
     high_risk_count: int,
-    threshold: int,
+    threshold: Optional[int],
     created_at: str,
     high_risk_domains: list,
     match_results_by_domain: Optional[dict] = None,
+    phishing_matches: Optional[list] = None,
 ) -> dict:
     return {
         "alert_id": alert_id,
@@ -281,4 +298,5 @@ def build_alert_data_dict(
         "created_at": created_at,
         "high_risk_domains": high_risk_domains,
         "match_results_by_domain": match_results_by_domain or {},
+        "phishing_matches": phishing_matches or [],
     }

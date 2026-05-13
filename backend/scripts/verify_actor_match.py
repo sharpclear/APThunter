@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-最小验证脚本：组织画像读取 + 域名组织关联匹配（只读，不写库）
+最小验证脚本：缓存组织基础设施画像读取 + 域名组织关联匹配（只读，不写库）
 
 验证内容：
-1) 从 apt_organizations 读取组织画像
-2) 对测试域名执行 match_domain_to_actors
+1) 从 actor_infra_profiles 读取组织基础设施画像
+2) 对测试域名执行 match_domain_to_actors_v2_infra
 3) 输出 matched_organization_name、actor_score、evidence_json、top_candidates_json
 """
 
@@ -27,7 +27,10 @@ def _prepare_import_path() -> None:
 _prepare_import_path()
 
 from app.db.session import SessionLocal  # noqa: E402
-from app.services.actor_matcher import load_actor_profiles, match_domain_to_actors  # noqa: E402
+from app.services.actor_matcher import (  # noqa: E402
+    load_actor_infra_profiles_from_cache,
+    match_domain_to_actors_v2_infra,
+)
 
 
 def _build_output(domain: str, match_result: Dict[str, Any], profile_count: int) -> Dict[str, Any]:
@@ -59,15 +62,16 @@ def main() -> None:
 
     db = SessionLocal()
     try:
-        profiles = load_actor_profiles(db)
-        print(f"[verify-actor-match] loaded_profiles={len(profiles)}")
+        profiles = load_actor_infra_profiles_from_cache(db)
+        profile_count = len(profiles.get("actors", {}))
+        print(f"[verify-actor-match] loaded_infra_profiles={profile_count}")
 
-        result = match_domain_to_actors(args.domain, profiles)
+        result = match_domain_to_actors_v2_infra(args.domain, [], db=db)
         top_candidates = result.get("top_candidates_json")
         if isinstance(top_candidates, list):
             result["top_candidates_json"] = top_candidates[: max(1, args.top)]
 
-        payload = _build_output(args.domain, result, len(profiles))
+        payload = _build_output(args.domain, result, profile_count)
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     finally:
         db.close()

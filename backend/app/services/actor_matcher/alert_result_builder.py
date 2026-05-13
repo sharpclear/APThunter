@@ -121,6 +121,28 @@ def _build_evidence_lines(match_result: Mapping[str, Any]) -> List[str]:
 
 
 def _build_matched_organizations(match_result: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    match_status = str(match_result.get("match_status") or "").strip()
+    if match_status and match_status != "suspected_match":
+        return []
+
+    organization_id = match_result.get("matched_organization_id")
+    organization_name = match_result.get("matched_organization_name")
+    if match_status == "suspected_match" and (organization_id is not None or organization_name):
+        actor_score = match_result.get("actor_score")
+        try:
+            actor_score_value = float(actor_score) if actor_score is not None else None
+        except (TypeError, ValueError):
+            actor_score_value = None
+        return [
+            {
+                "organization_id": _to_plain_value(organization_id),
+                "organization_name": _to_plain_value(organization_name),
+                "confidence": _to_plain_value(match_result.get("actor_confidence")),
+                "match_score": actor_score_value,
+                "evidence": _build_evidence_lines(match_result),
+            }
+        ]
+
     top_candidates = match_result.get("top_candidates_json") or match_result.get("top_candidates") or []
     matched_orgs: List[Dict[str, Any]] = []
 
@@ -148,8 +170,6 @@ def _build_matched_organizations(match_result: Mapping[str, Any]) -> List[Dict[s
     if matched_orgs:
         return matched_orgs
 
-    organization_id = match_result.get("matched_organization_id")
-    organization_name = match_result.get("matched_organization_name")
     if organization_id is None and not organization_name:
         return []
 
@@ -177,6 +197,7 @@ def build_alert_result_json(
     high_risk_domains: Sequence[str],
     match_results: Optional[Any] = None,
     results_malicious_subscription: Optional[Sequence[Mapping[str, Any]]] = None,
+    phishing_matches: Optional[Sequence[Mapping[str, Any]]] = None,
     detected_count: Optional[int] = None,
     high_risk_count: Optional[int] = None,
     alert_time: Optional[Any] = None,
@@ -189,6 +210,16 @@ def build_alert_result_json(
     """
     match_by_domain = _index_match_results(match_results)
     risk_score_map = _build_domain_score_map(results_malicious_subscription)
+    phishing_match_by_domain: Dict[str, Mapping[str, Any]] = {}
+    if phishing_matches and isinstance(phishing_matches, Sequence):
+        for item in phishing_matches:
+            if not isinstance(item, Mapping):
+                continue
+            domain_key = str(
+                item.get("phishing_domain") or item.get("钓鱼域名") or ""
+            ).strip().lower()
+            if domain_key:
+                phishing_match_by_domain[domain_key] = item
 
     normalized_domains: List[str] = []
     seen = set()
@@ -226,6 +257,11 @@ def build_alert_result_json(
         domain_items.append(
             {
                 "domain": domain_name,
+                "match_method": _to_plain_value(match_result.get("match_method")),
+                "match_status": _to_plain_value(match_result.get("match_status")),
+                "impersonation_match": _to_plain_value(
+                    phishing_match_by_domain.get(domain_key, {})
+                ),
                 "risk_score": risk_score,
                 "risk_level": _score_to_level(risk_score),
                 "scores": {

@@ -97,8 +97,7 @@ from app.services.actor_matcher import (
     AlertResultStorageError,
     build_alert_result_json,
     create_alert_file_mapping,
-    load_actor_profiles,
-    match_domain_to_actors,
+    match_domain_to_actors_v2_infra,
     save_alert_result_json_to_minio,
 )
 # 导入检测相关函数
@@ -128,7 +127,7 @@ class Subscription(Base):
     user_id = Column(BigInteger, ForeignKey("users.id"), nullable=False, index=True)
     model_id = Column(BigInteger, ForeignKey("models.id"), nullable=False, index=True)
     frequency = Column(SqlEnum("daily", "weekly", "monthly", name="frequency_enum"), nullable=False, server_default="weekly")
-    threshold = Column(Integer, nullable=False, server_default=text("60"))
+    threshold = Column(Integer, nullable=True)
     official_file_id = Column(BigInteger, ForeignKey("files.id"), nullable=True, index=True)
     is_active = Column(Boolean, nullable=False, server_default=text("1"), index=True)
     next_run_at = Column(DateTime, nullable=False, index=True)
@@ -148,7 +147,7 @@ class Alert(Base):
     task_type = Column(SqlEnum("malicious", "impersonation", name="task_type_enum"), nullable=False)
     detected_count = Column(Integer, nullable=False, server_default=text("0"))
     high_risk_count = Column(Integer, nullable=False, server_default=text("0"))
-    threshold = Column(Integer, nullable=False)
+    threshold = Column(Integer, nullable=True)
     status = Column(SqlEnum("pending", "processed", name="alert_status_enum"), nullable=False, server_default="pending", index=True)
     feishu_notified = Column(Boolean, nullable=False, server_default=text("0"), default=False)
     feishu_notified_at = Column(DateTime, nullable=True)
@@ -417,6 +416,62 @@ def _collect_daily_domains_for_subscription(date_range: List[str]) -> Tuple[List
     return domains, missing_dates
 
 
+def _clean_optional_text(value) -> str:
+    if value is None:
+        return ""
+    try:
+        import pandas as pd
+
+        if pd.isna(value):
+            return ""
+    except Exception:
+        pass
+    text_value = str(value).strip()
+    return "" if text_value.lower() == "nan" else text_value
+
+
+def _extract_impersonation_alert_items(rows) -> List[dict]:
+    """
+    从仿冒检测结果 DataFrame 提取飞书/CSV 预警明细。
+    兼容列：钓鱼域名、目标域名、公司名称、相似度、匹配类型。
+    """
+    items: List[dict] = []
+    seen = set()
+    try:
+        iterable = rows.to_dict("records")
+    except Exception:
+        return items
+
+    for row in iterable:
+        if not isinstance(row, dict):
+            continue
+        phishing_domain = _clean_optional_text(row.get("钓鱼域名"))
+        if not phishing_domain:
+            continue
+        official_domain = _clean_optional_text(row.get("目标域名"))
+        official_unit_name = _clean_optional_text(row.get("公司名称"))
+        similarity = _clean_optional_text(row.get("相似度"))
+        match_type = _clean_optional_text(row.get("匹配类型"))
+        dedupe_key = (
+            phishing_domain.lower(),
+            official_domain.lower(),
+            official_unit_name.lower(),
+        )
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        items.append(
+            {
+                "official_domain": official_domain,
+                "official_unit_name": official_unit_name,
+                "phishing_domain": phishing_domain,
+                "similarity": similarity,
+                "match_type": match_type,
+            }
+        )
+    return items
+
+
 def execute_subscription(subscription_id: str):
     """执行订阅任务"""
     db = SessionLocal()
@@ -626,6 +681,7 @@ def execute_subscription(subscription_id: str):
         # 检查是否需要创建预警
         high_risk_count = 0
         high_risk_domains = []
+        phishing_alert_items = []
         
         # 从Excel结果中提取高风险域名列表
         try:
@@ -642,21 +698,29 @@ def execute_subscription(subscription_id: str):
                     # 筛选出有钓鱼域名的行
                     phishing_rows = results_df[results_df['钓鱼域名'].notna()]
                     high_risk_domains = phishing_rows['钓鱼域名'].dropna().unique().tolist()
+                    phishing_alert_items = _extract_impersonation_alert_items(phishing_rows)
                 except Exception as e:
                     logger.warning(f"从Excel提取钓鱼域名列表失败: {e}")
                     try:
                         # 尝试从钓鱼域名列表工作表读取
+                        excel_file.seek(0)
                         phishing_df = pd.read_excel(excel_file, sheet_name='钓鱼域名列表')
                         if '钓鱼域名' in phishing_df.columns:
                             high_risk_domains = phishing_df['钓鱼域名'].dropna().unique().tolist()
+                            phishing_alert_items = _extract_impersonation_alert_items(phishing_df)
                         else:
                             high_risk_domains = []
                     except:
                         pass
             else:
-                # 恶意订阅预警：备选 = model.predict 为恶意；触发对象 = 恶意概率 > 订阅阈值/100（严格大于）
-                th_raw = subscription.threshold if subscription.threshold is not None else 0
-                cutoff = float(th_raw) / 100.0
+                # 恶意订阅预警：
+                # - 默认策略：model.predict 判为恶意的结果全部预警
+                # - 自定义阈值：预测标签为恶意且恶意概率 > 阈值/100
+                cutoff = (
+                    float(subscription.threshold) / 100.0
+                    if subscription.threshold is not None
+                    else None
+                )
                 high_risk_domains = []
                 high_risk_count = 0
                 if results_malicious_subscription:
@@ -664,9 +728,10 @@ def execute_subscription(subscription_id: str):
                     for r in results_malicious_subscription:
                         if int(r.get("预测标签", 0)) != 1:
                             continue
-                        prob = float(r.get("恶意概率", 0.0))
-                        if prob <= cutoff:
-                            continue
+                        if cutoff is not None:
+                            prob = float(r.get("恶意概率", 0.0))
+                            if prob <= cutoff:
+                                continue
                         d = r.get("域名") or r.get("domain")
                         if not d:
                             continue
@@ -716,26 +781,16 @@ def execute_subscription(subscription_id: str):
 
             # 新流程：组织关联匹配 -> 组装 JSON -> 上传 MinIO+写 files -> 写 alert_files
             match_results_by_domain = {}
-            actor_profiles = []
-            try:
-                actor_profiles = load_actor_profiles(db)
-            except Exception:
-                logger.exception("加载组织画像失败，预警结果 JSON 将不包含组织匹配候选 alert_id=%s", alert_id)
-            if not actor_profiles:
-                logger.warning("组织画像为空，跳过组织匹配评分，仅生成基础预警结果 JSON alert_id=%s", alert_id)
-
             for domain in high_risk_domains:
                 domain_name = str(domain or "").strip()
                 if not domain_name:
                     continue
                 try:
-                    if actor_profiles:
-                        match_results_by_domain[domain_name.lower()] = match_domain_to_actors(
-                            domain_name,
-                            actor_profiles,
-                        )
-                    else:
-                        match_results_by_domain[domain_name.lower()] = {"domain_name": domain_name}
+                    match_results_by_domain[domain_name.lower()] = match_domain_to_actors_v2_infra(
+                        domain_name,
+                        [],
+                        db=db,
+                    )
                 except Exception:
                     logger.exception("组织匹配失败，已按空匹配继续 domain=%s alert_id=%s", domain_name, alert_id)
                     match_results_by_domain[domain_name.lower()] = {"domain_name": domain_name}
@@ -747,6 +802,7 @@ def execute_subscription(subscription_id: str):
                 high_risk_domains=high_risk_domains,
                 match_results=match_results_by_domain,
                 results_malicious_subscription=results_malicious_subscription,
+                phishing_matches=phishing_alert_items,
                 detected_count=total_count,
                 high_risk_count=high_risk_count,
                 alert_time=alert.created_at or beijing_now(),
@@ -849,9 +905,24 @@ def execute_subscription(subscription_id: str):
                 csv_buffer = io.StringIO()
                 domain_type = '恶意域名' if task.task_type == 'malicious' else '仿冒域名'
                 writer = csv.writer(csv_buffer)
-                writer.writerow(['序号', domain_type])  # CSV表头
-                for i, domain in enumerate(high_risk_domains, 1):
-                    writer.writerow([i, domain])
+                if task.task_type == 'impersonation':
+                    writer.writerow(['序号', '官方域名单位名称', '官方域名', '仿冒域名', '相似度'])
+                    if phishing_alert_items:
+                        for i, item in enumerate(phishing_alert_items, 1):
+                            writer.writerow([
+                                i,
+                                item.get("official_unit_name", ""),
+                                item.get("official_domain", ""),
+                                item.get("phishing_domain", ""),
+                                item.get("similarity", ""),
+                            ])
+                    else:
+                        for i, domain in enumerate(high_risk_domains, 1):
+                            writer.writerow([i, "", "", domain, ""])
+                else:
+                    writer.writerow(['序号', domain_type])  # CSV表头
+                    for i, domain in enumerate(high_risk_domains, 1):
+                        writer.writerow([i, domain])
                 csv_content = csv_buffer.getvalue().encode('utf-8-sig')  # 使用utf-8-sig以支持Excel正确显示中文
                 csv_buffer.close()
             except Exception as e:
@@ -868,6 +939,7 @@ def execute_subscription(subscription_id: str):
                 created_at=alert.created_at.isoformat() if alert.created_at else beijing_now().isoformat(),
                 high_risk_domains=high_risk_domains,
                 match_results_by_domain=match_results_by_domain,
+                phishing_matches=phishing_alert_items,
             )
             try:
                 dispatch_alert_notifications(
@@ -881,7 +953,7 @@ def execute_subscription(subscription_id: str):
                 logger.exception("预警通知分发异常（已吞掉，不影响订阅主流程）")
         else:
             logger.info(
-                f"订阅 {subscription_id} 本次检测未满足预警条件（仿冒按原规则；恶意订阅需 predict 恶意且恶意概率>阈值/100），跳过预警"
+                f"订阅 {subscription_id} 本次检测未满足预警条件（仿冒按相似度规则；恶意订阅默认预警所有模型判恶意结果，启用自定义阈值时需恶意概率>阈值/100），跳过预警"
             )
 
             task.status = "completed"
@@ -998,7 +1070,8 @@ async def create_subscription(
     request: Request,
     modelId: int = Form(...),
     frequency: str = Form(...),
-    threshold: int = Form(60),
+    threshold: Optional[int] = Form(None),
+    useCustomThreshold: Optional[bool] = Form(False),
     officialFile: Optional[UploadFile] = File(None),
 ):
     """创建订阅"""
@@ -1040,8 +1113,16 @@ async def create_subscription(
                 detail="频率必须是 daily, weekly 或 monthly"
             )
         
-        # 验证阈值
-        if not (0 <= threshold <= 100):
+        # 验证阈值。threshold=None 表示使用模型默认策略：
+        # - 恶意检测：模型判为恶意的结果全部预警
+        # - 仿冒检测：使用普通仿冒检测的自适应相似度阈值
+        if useCustomThreshold and threshold is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="启用自定义阈值时必须提供阈值"
+            )
+        resolved_threshold = threshold if useCustomThreshold else None
+        if resolved_threshold is not None and not (0 <= resolved_threshold <= 100):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="阈值必须在0-100之间"
@@ -1103,7 +1184,7 @@ async def create_subscription(
             user_id=user_id,
             model_id=modelId,
             frequency=frequency,
-            threshold=threshold,
+            threshold=resolved_threshold,
             official_file_id=official_file_id,
             is_active=True,
             next_run_at=next_run_at,
@@ -1196,6 +1277,7 @@ async def update_subscription(
     request: Request,
     frequency: Optional[str] = Form(None),
     threshold: Optional[int] = Form(None),
+    useCustomThreshold: Optional[bool] = Form(None),
 ):
     """更新订阅"""
     user_id = _require_user_id(request)
@@ -1222,7 +1304,22 @@ async def update_subscription(
             # 重新计算下次执行时间
             subscription.next_run_at = beijing_datetime_to_naive(_calculate_next_run_at(frequency))
         
-        if threshold is not None:
+        if useCustomThreshold is not None:
+            if useCustomThreshold:
+                if threshold is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="启用自定义阈值时必须提供阈值"
+                    )
+                if not (0 <= threshold <= 100):
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="阈值必须在0-100之间"
+                    )
+                subscription.threshold = threshold
+            else:
+                subscription.threshold = None
+        elif threshold is not None:
             if not (0 <= threshold <= 100):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,

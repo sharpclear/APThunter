@@ -28,6 +28,7 @@ import whois
 from sqlalchemy import create_engine, text
 
 MYSQL_URL = os.getenv("MYSQL_URL", "mysql+pymysql://apthunter:4CyUhr2zu6!@mysql:3306/apthunter_new")
+DNS_RECORD_TYPES = ("A", "AAAA", "MX", "NS", "TXT", "CNAME", "SOA")
 
 
 def safe_str(value: Any) -> str | None:
@@ -120,13 +121,28 @@ def lookup_whois(domain: str) -> dict[str, Any] | None:
     return result
 
 
-def lookup_dns(domain: str, lifetime: float) -> list[dict[str, Any]]:
+def parse_dns_types(value: Any) -> set[str]:
+    if value is None:
+        return set()
+    if isinstance(value, str):
+        items = [x.strip().upper() for x in value.split(",")]
+        return {x for x in items if x}
+    if isinstance(value, (list, tuple, set)):
+        return {str(x).strip().upper() for x in value if str(x).strip()}
+    return set()
+
+
+def get_missing_dns_types(existing_types: set[str]) -> list[str]:
+    return [record_type for record_type in DNS_RECORD_TYPES if record_type not in existing_types]
+
+
+def lookup_dns(domain: str, lifetime: float, record_types: list[str] | None = None) -> list[dict[str, Any]]:
     resolver = dns.resolver.Resolver()
     resolver.lifetime = lifetime
     resolver.timeout = min(3.0, lifetime)
 
     records: list[dict[str, Any]] = []
-    for record_type in ["A", "AAAA", "MX", "NS", "TXT", "CNAME", "SOA"]:
+    for record_type in (record_types or list(DNS_RECORD_TYPES)):
         try:
             answers = resolver.resolve(domain, record_type)
             ttl = answers.rrset.ttl if answers.rrset else None
@@ -275,9 +291,11 @@ def insert_results(engine, domain_id: int, whois_data, dns_records, cert_data, n
 
 
 def process_one(engine, row, timeout: float):
-    domain_id, domain_name, has_whois, has_dns, has_ssl = row
+    domain_id, domain_name, has_whois, has_dns, has_ssl, dns_types = row
     need_whois = int(has_whois or 0) == 0
-    need_dns = int(has_dns or 0) == 0
+    existing_dns_types = parse_dns_types(dns_types)
+    missing_dns_types = get_missing_dns_types(existing_dns_types)
+    need_dns = len(missing_dns_types) > 0
     need_ssl = int(has_ssl or 0) == 0
 
     whois_data = None
@@ -293,7 +311,7 @@ def process_one(engine, row, timeout: float):
 
     if need_dns:
         try:
-            dns_data = lookup_dns(domain_name, lifetime=timeout)
+            dns_data = lookup_dns(domain_name, lifetime=timeout, record_types=missing_dns_types)
         except Exception as e:
             errors.append(f"DNS:{e}")
 
@@ -334,14 +352,19 @@ def main():
                     d.domain_name,
                     (SELECT COUNT(*) FROM whois_info w WHERE w.domain_id = d.id) AS has_whois,
                     (SELECT COUNT(*) FROM dns_records r WHERE r.domain_id = d.id) AS has_dns,
-                    (SELECT COUNT(*) FROM ssl_certificates s WHERE s.domain_id = d.id) AS has_ssl
+                    (SELECT COUNT(*) FROM ssl_certificates s WHERE s.domain_id = d.id) AS has_ssl,
+                    (SELECT GROUP_CONCAT(DISTINCT r.record_type) FROM dns_records r WHERE r.domain_id = d.id) AS dns_types
                 FROM domains d
                 ORDER BY d.id
                 """
             )
         ).fetchall()
 
-    targets = [r for r in rows if int(r[2] or 0) == 0 or int(r[3] or 0) == 0 or int(r[4] or 0) == 0]
+    targets = [
+        r
+        for r in rows
+        if int(r[2] or 0) == 0 or int(r[4] or 0) == 0 or len(get_missing_dns_types(parse_dns_types(r[5]))) > 0
+    ]
     if args.limit > 0:
         targets = targets[: args.limit]
 

@@ -23,7 +23,7 @@ interface SubscriptionItem {
   createdAt: string
   nextRunAt: string
   range: 'week'
-  threshold: number
+  threshold: number | null
   officialFileName?: string
 }
 
@@ -65,11 +65,22 @@ const selectedModelId = ref<number | null>(null)
 const selectedModel = computed(() => mockModels.value.find(m => m.id === selectedModelId.value) || null)
 
 const formRef = ref()
-const formState = reactive<{ frequency: 'daily' | 'weekly' | 'monthly' | '', range: 'week', threshold: number, officialFile?: File | null }>(
-  { frequency: '', range: 'week', threshold: 60, officialFile: null },
+const formState = reactive<{
+  frequency: 'daily' | 'weekly' | 'monthly' | ''
+  range: 'week'
+  useCustomThreshold: boolean
+  threshold: number
+  officialFile?: File | null
+}>(
+  { frequency: '', range: 'week', useCustomThreshold: false, threshold: 60, officialFile: null },
 )
 
 const isPhishingModel = computed(() => selectedModel.value?.type === 'phishing')
+const defaultThresholdPolicyText = computed(() => {
+  if (isPhishingModel.value)
+    return '默认使用普通仿冒检测任务的自适应相似度阈值。'
+  return '默认将模型判定为恶意的结果全部作为预警对象。'
+})
 
 const subscriptions = ref<SubscriptionItem[]>([])
 const subTotal = ref(0)
@@ -80,28 +91,13 @@ const alertTotal = ref(0)
 const alertLoading = ref(false)
 const alertPage = ref(1)
 const alertPageSize = ref(5)
+const pagedAlerts = computed(() => alertRecords.value)
 
 const frequencyOptions = [
   { label: '每天', value: 'daily' },
   { label: '每周', value: 'weekly' },
   { label: '每月', value: 'monthly' },
 ]
-
-function fmtDate(d: Date) {
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
-}
-
-function nextRun(from: Date, freq: 'daily' | 'weekly' | 'monthly') {
-  const d = new Date(from)
-  if (freq === 'daily')
-    d.setDate(d.getDate() + 1)
-  if (freq === 'weekly')
-    d.setDate(d.getDate() + 7)
-  if (freq === 'monthly')
-    d.setMonth(d.getMonth() + 1)
-  return d
-}
 
 // 获取可订阅模型列表
 async function fetchModels() {
@@ -226,6 +222,7 @@ onMounted(loadData)
 function resetForm() {
   formState.frequency = ''
   formState.range = 'week'
+  formState.useCustomThreshold = false
   formState.threshold = 60
   formState.officialFile = null
 }
@@ -237,13 +234,18 @@ function handleSelectModel(m: ModelItem) {
 
 function beforeUpload(file: File) {
   const ok = file.size <= 5 * 1024 * 1024 && ['csv', 'txt', 'xlsx'].includes(file.name.split('.').pop()!.toLowerCase())
-  if (!ok)
+  if (!ok) {
     message.error('仅支持 csv/txt/xlsx 且不超过5MB')
-  return ok
+    return false
+  }
+  formState.officialFile = file
+  return false
 }
 
-function onUploadChange({ file }: { file: File }) {
-  formState.officialFile = file
+function onUploadChange({ file }: { file: any }) {
+  const rawFile = file?.originFileObj
+  if (rawFile instanceof File)
+    formState.officialFile = rawFile
 }
 
 async function handleSubscribe() {
@@ -261,7 +263,9 @@ async function handleSubscribe() {
     const formData = new FormData()
     formData.append('modelId', String(selectedModel.value.id))
     formData.append('frequency', formState.frequency)
-    formData.append('threshold', String(formState.threshold))
+    formData.append('useCustomThreshold', String(formState.useCustomThreshold))
+    if (formState.useCustomThreshold)
+      formData.append('threshold', String(formState.threshold))
     
     if (isPhishingModel.value && formState.officialFile) {
       formData.append('officialFile', formState.officialFile)
@@ -295,10 +299,6 @@ async function handleSubscribe() {
   finally {
     subLoading.value = false
   }
-}
-
-function findSubscription(id: string) {
-  return subscriptions.value.find(s => s.id === id)
 }
 
 async function cancelSubscription(record: SubscriptionItem) {
@@ -337,14 +337,27 @@ async function cancelSubscription(record: SubscriptionItem) {
 }
 
 const editVisible = ref(false)
-const editState = reactive<{ id: string | null, frequency: 'daily' | 'weekly' | 'monthly' | '', threshold: number }>(
-  { id: null, frequency: '', threshold: 60 },
+const editState = reactive<{
+  id: string | null
+  type: 'malicious' | 'phishing' | ''
+  frequency: 'daily' | 'weekly' | 'monthly' | ''
+  useCustomThreshold: boolean
+  threshold: number
+}>(
+  { id: null, type: '', frequency: '', useCustomThreshold: false, threshold: 60 },
 )
+const editDefaultThresholdPolicyText = computed(() => {
+  if (editState.type === 'phishing')
+    return '默认使用普通仿冒检测任务的自适应相似度阈值。'
+  return '默认将模型判定为恶意的结果全部作为预警对象。'
+})
 
 function openEdit(record: SubscriptionItem) {
   editState.id = record.id
+  editState.type = record.type
   editState.frequency = record.frequency
-  editState.threshold = record.threshold
+  editState.useCustomThreshold = record.threshold !== null && record.threshold !== undefined
+  editState.threshold = record.threshold ?? 60
   editVisible.value = true
 }
 
@@ -356,7 +369,9 @@ async function submitEdit() {
   try {
     const formData = new FormData()
     formData.append('frequency', editState.frequency)
-    formData.append('threshold', String(editState.threshold))
+    formData.append('useCustomThreshold', String(editState.useCustomThreshold))
+    if (editState.useCustomThreshold)
+      formData.append('threshold', String(editState.threshold))
     
     const resp = await fetch(`${API_BASE}/subscriptions/${editState.id}`, {
       method: 'PUT',
@@ -486,12 +501,22 @@ async function updateAlertStatus(alertId: string, status: 'pending' | 'processed
                 </a-col>
               </a-row>
               <a-row :gutter="16">
-                <a-col :span="12">
+                <a-col :span="24">
+                  <a-form-item label="阈值策略">
+                    <a-checkbox v-model:checked="formState.useCustomThreshold">
+                      自定义预警阈值
+                    </a-checkbox>
+                    <div v-if="!formState.useCustomThreshold" style="margin-top: 8px; color: #666;">
+                      {{ defaultThresholdPolicyText }}
+                    </div>
+                  </a-form-item>
+                </a-col>
+                <a-col v-if="formState.useCustomThreshold" :span="12">
                   <a-form-item label="预警阈值（0-100）">
                     <a-slider v-model:value="formState.threshold" :min="0" :max="100" />
                   </a-form-item>
                 </a-col>
-                <a-col :span="12">
+                <a-col v-if="formState.useCustomThreshold" :span="12">
                   <div style="margin-top: 8px;">
                     当前阈值：<b>{{ formState.threshold }}</b>
                   </div>
@@ -558,7 +583,7 @@ async function updateAlertStatus(alertId: string, status: 'pending' | 'processed
             </a-table-column>
             <a-table-column key="threshold" title="阈值" width="100">
               <template #default="{ record }">
-                {{ record.threshold }}
+                {{ record.threshold ?? '默认策略' }}
               </template>
             </a-table-column>
             <a-table-column key="createdAt" title="创建时间" data-index="createdAt" width="180" />
@@ -635,7 +660,7 @@ async function updateAlertStatus(alertId: string, status: 'pending' | 'processed
               show-size-changer
               show-quick-jumper
               @change="(p:number, s:number) => { alertPage = p; alertPageSize = s }"
-              @show-size-change="(p:number, s:number) => { alertPage = 1; alertPageSize = s }"
+              @show-size-change="(_p:number, s:number) => { alertPage = 1; alertPageSize = s }"
             />
           </div>
         </a-tab-pane>
@@ -650,10 +675,20 @@ async function updateAlertStatus(alertId: string, status: 'pending' | 'processed
               </a-select-option>
             </a-select>
           </a-form-item>
-          <a-form-item label="预警阈值（0-100）">
+          <a-form-item label="阈值策略">
+            <a-checkbox v-model:checked="editState.useCustomThreshold">
+              自定义预警阈值
+            </a-checkbox>
+            <div v-if="!editState.useCustomThreshold" style="margin-top: 8px; color: #666;">
+              {{ editDefaultThresholdPolicyText }}
+            </div>
+          </a-form-item>
+          <a-form-item v-if="editState.useCustomThreshold" label="预警阈值（0-100）">
             <a-slider v-model:value="editState.threshold" :min="0" :max="100" />
           </a-form-item>
-          <div>当前阈值：<b>{{ editState.threshold }}</b></div>
+          <div v-if="editState.useCustomThreshold">
+            当前阈值：<b>{{ editState.threshold }}</b>
+          </div>
         </a-form>
       </a-modal>
     </a-card>

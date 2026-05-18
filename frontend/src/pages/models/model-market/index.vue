@@ -560,7 +560,7 @@ function mapTypeLabel(t: '恶意性检测' | '仿冒域名检测' | null) {
           <a-input :value="publishingModel?.name" disabled />
         </a-form-item>
         <a-form-item label="描述">
-          <a-textarea v-model:value="publishForm.description" :rows="3" maxlength="200" show-count placeholder="为你的模型提供简要描述" />
+          <a-textarea v-model:value="publishForm.description" :rows="3" :maxlength="200" show-count placeholder="为你的模型提供简要描述" />
         </a-form-item>
       </a-form>
     </a-modal>

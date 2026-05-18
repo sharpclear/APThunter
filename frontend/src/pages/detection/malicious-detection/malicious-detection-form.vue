@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useUserId } from '~/composables/user-id'
 import { useAuthorization } from '~/composables/authorization'
 import { getApiBase } from '~/utils/api-public'
@@ -19,7 +19,7 @@ const selectedModel = ref<string | number | null>('')
 const modelListLoading = ref(false)
 
 // 数据来源选择
-const dataSource = ref<'upload' | 'newDomain'>('upload')
+const dataSource = ref<'upload' | 'newDomain' | 'manualInput'>('upload')
 
 // 文件上传控制
 const uploadFile = ref<any>(null)
@@ -82,6 +82,13 @@ function onOpenChange(open: boolean) {
 const withAttribution = ref(false)
 
 const submitLoading = ref(false)
+const manualDomains = ref('')
+const manualDomainItems = computed(() => {
+  return manualDomains.value
+    .split(/[\s,，;；]+/)
+    .map(item => item.trim())
+    .filter(Boolean)
+})
 
 const API_BASE = getApiBase()
 
@@ -92,6 +99,39 @@ function buildHeaders(extra: Record<string, string> = {}) {
   if (token.value)
     headers['Authorization'] = `Bearer ${token.value}`
   return headers
+}
+
+function formatDateList(dates: string[]) {
+  if (!dates.length)
+    return ''
+  const visible = dates.slice(0, 5).join('、')
+  return dates.length > 5 ? `${visible} 等 ${dates.length} 天` : visible
+}
+
+async function ensureNewDomainDataAvailable(range: [string, string]) {
+  const params = new URLSearchParams({
+    startDate: range[0],
+    endDate: range[1],
+  })
+  const resp = await fetch(`${API_BASE}/new-domain-data/availability?${params.toString()}`, {
+    method: 'GET',
+    headers: buildHeaders(),
+  })
+  const json = await resp.json().catch(() => null)
+  if (!resp.ok) {
+    const detail = json?.detail
+    const detailMessage = typeof detail === 'object' ? detail?.message : detail
+    throw new Error(detailMessage || json?.message || '检查新注册域名数据失败')
+  }
+  if (!json.available) {
+    message.warning(json.message || '所选日期范围内暂无可用的新注册域名数据，请重新选择日期')
+    return false
+  }
+  const unavailableDates = [...(json.missingDates || []), ...(json.invalidDates || [])]
+  if (unavailableDates.length > 0) {
+    message.warning(`部分日期暂无可用数据：${formatDateList(unavailableDates)}，将仅检测可用日期。`)
+  }
+  return true
 }
 
 // 动态获取模型列表
@@ -222,6 +262,9 @@ async function handleSubmit() {
   if (dataSource.value === 'newDomain' && !dateRange.value) {
     return message.warning('请选择日期范围')
   }
+  if (dataSource.value === 'manualInput' && manualDomainItems.value.length === 0) {
+    return message.warning('请输入待检测域名或 URL')
+  }
   if (dataSource.value === 'newDomain' && dateRange.value) {
     const [start, end] = dateRange.value
     const days = dayjs(end).startOf('day').diff(dayjs(start).startOf('day'), 'day')
@@ -231,6 +274,12 @@ async function handleSubmit() {
   }
   submitLoading.value = true
   try {
+    if (dataSource.value === 'newDomain' && dateRange.value) {
+      const available = await ensureNewDomainDataAvailable(dateRange.value)
+      if (!available)
+        return
+    }
+
     const fd = new FormData()
     fd.append('model', String(selectedModel.value))
     fd.append('dataSource', dataSource.value)
@@ -277,6 +326,10 @@ async function handleSubmit() {
     if (dataSource.value === 'newDomain' && dateRange.value) {
       fd.append('dateRange', JSON.stringify(dateRange.value))
     }
+
+    if (dataSource.value === 'manualInput') {
+      fd.append('manualDomains', manualDomains.value)
+    }
     
     // 调试：打印FormData内容
     console.log('提交FormData:', {
@@ -284,13 +337,11 @@ async function handleSubmit() {
       dataSource: dataSource.value,
       withAttribution: withAttribution.value,
       hasFile: dataSource.value === 'upload' && uploadFile.value !== null,
-      hasDateRange: dataSource.value === 'newDomain' && dateRange.value !== null
+      hasDateRange: dataSource.value === 'newDomain' && dateRange.value !== null,
+      manualInputCount: dataSource.value === 'manualInput' ? manualDomainItems.value.length : 0,
     })
     
-    const headers: HeadersInit = {}
-    if (userId.value) {
-      headers['X-User-Id'] = userId.value
-    }
+    const headers: HeadersInit = buildHeaders()
     const resp = await fetch(`${API_BASE}/tasks`, { 
       method: 'POST', 
       body: fd,
@@ -325,6 +376,7 @@ function resetForm() {
   dataSource.value = 'upload'
   uploadFile.value = null
   dateRange.value = null
+  manualDomains.value = ''
   withAttribution.value = false
 }
 </script>
@@ -339,7 +391,7 @@ function resetForm() {
               创建恶意性检测任务
             </div>
             <div class="card-subtitle">
-              上传待检测域名文件，或选择新注册域名时间窗进行批量检测。
+              上传待检测域名文件、选择新注册域名时间窗，或手动输入域名进行批量检测。
             </div>
             <div class="header-tags">
               <span class="mini-tag">风险识别</span>
@@ -375,6 +427,9 @@ function resetForm() {
                   </a-radio-button>
                   <a-radio-button value="newDomain">
                     选择新注册域名
+                  </a-radio-button>
+                  <a-radio-button value="manualInput">
+                    手动输入域名
                   </a-radio-button>
                 </a-radio-group>
               </a-form-item>
@@ -413,6 +468,19 @@ function resetForm() {
                   @open-change="onOpenChange"
                 />
               </a-form-item>
+              <a-form-item v-if="dataSource === 'manualInput'" label="待检测域名或 URL">
+                <a-textarea
+                  v-model:value="manualDomains"
+                  class="manual-input"
+                  :rows="8"
+                  :maxlength="20000"
+                  placeholder="每行输入一个域名或 URL，例如：&#10;example.com&#10;https://login.example.org/path"
+                  show-count
+                />
+                <div class="manual-input-meta">
+                  当前输入 {{ manualDomainItems.length }} 项，提交后后端会自动提取域名、去重并过滤无效内容。
+                </div>
+              </a-form-item>
             </div>
 
             <div class="form-section">
@@ -449,7 +517,8 @@ function resetForm() {
             <ul class="guide-list">
               <li><span class="dot">1</span><span>选择模型后再选择数据来源。</span></li>
               <li><span class="dot">2</span><span>文件支持 CSV、TXT、XLSX，大小不超过 5MB。</span></li>
-              <li><span class="dot">3</span><span>新注册域名模式下，日期跨度最多 30 天。</span></li>
+              <li><span class="dot">3</span><span>手动输入支持域名或 URL，提交后统一清洗为域名。</span></li>
+              <li><span class="dot">4</span><span>新注册域名模式下，日期跨度最多 30 天。</span></li>
             </ul>
           </a-card>
           <a-card title="推荐流程" class="guide-card" :bordered="false">
@@ -577,6 +646,17 @@ function resetForm() {
   margin-bottom: 0;
 }
 
+.manual-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.manual-input-meta {
+  margin-top: 8px;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .attribution-box {
   border-radius: 10px;
   background: #f8fafc;
@@ -644,5 +724,3 @@ function resetForm() {
   margin-top: 4px;
 }
 </style>
-
-

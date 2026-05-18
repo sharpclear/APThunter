@@ -1,0 +1,27 @@
+services:
+  mysql:
+    container_name: atdvverify-mysql
+    ports: !override
+      - "127.0.0.1:3308:3306"
+
+  minio:
+    container_name: atdvverify-minio
+    ports: !override
+      - "127.0.0.1:9002:9000"
+      - "127.0.0.1:9003:9001"
+
+  redis:
+    container_name: atdvverify-redis
+
+  backend:
+    container_name: atdvverify-backend
+    ports: !override
+      - "127.0.0.1:18080:8000"
+
+  celery-worker:
+    container_name: atdvverify-celery-worker
+
+  frontend:
+    container_name: atdvverify-frontend
+    ports: !override
+      - "127.0.0.1:8088:80"

@@ -12,7 +12,13 @@ const statusMap = {
   3: '错误',
 }
 const message = useMessage()
-const columns = shallowRef([
+interface SimpleTableColumn {
+  title: string
+  dataIndex: string
+  width?: number
+}
+
+const columns = shallowRef<SimpleTableColumn[]>([
   {
     title: '#',
     dataIndex: 'id',
@@ -197,7 +203,7 @@ function filterAction(value: string[]) {
 }
 
 // 备份columns
-const filterColumns = ref(filterAction(getCheckList.value))
+const filterColumns = ref<SimpleTableColumn[]>(filterAction(getCheckList.value))
 
 /**
  * 全选/反选事件

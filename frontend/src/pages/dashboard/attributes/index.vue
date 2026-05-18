@@ -241,6 +241,7 @@ function handleMockData(domain: string, showMessage = true) {
     message.info('已加载演示数据（后端接口未实现，请配置后端接口）', 5)
   }
 }
+void handleMockData
 
 // 格式化日期
 function formatDate(dateStr?: string): string {

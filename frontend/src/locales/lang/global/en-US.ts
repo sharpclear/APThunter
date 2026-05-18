@@ -86,7 +86,10 @@ export default {
   'menu.exception.500': '500',
   'menu.detection': 'detection',
   'menu.detection.malicious-detection': 'Basic detection', // Keep for backward compatibility
-  'menu.detection.create-task': 'Create Task',
+  'menu.detection.create-task': 'Create Detection Task',
+  'menu.detection.malicious-domain-detection': 'Malicious Domain Detection',
+  'menu.detection.impersonation-domain-detection': 'Impersonation Domain Detection',
+  'menu.detection.malicious-ip-detection': 'Malicious IP Detection',
   'menu.detection.step-detection': 'Step detection',
   'menu.detection.step-detection.info': 'Step detection(write transfer indetectionation)',
   'menu.detection.step-detection.confirm': 'Step detection(confirm transfer indetectionation)',

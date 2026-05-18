@@ -10,11 +10,17 @@ interface MaliciousResultItem {
   域名: string
   预测标签: number
   预测结果: string
+  关联组织?: string
+  组织置信度?: string
+  组织评分?: number
+  关联状态?: string
+  关联说明?: string
 }
 
 interface PhishingResultItem {
   钓鱼域名: string
-  目标域名: string
+  官方域名: string
+  目标域名?: string
   公司名称: string
   相似度: string
   匹配类型: string
@@ -48,6 +54,8 @@ interface ResultData {
   total_count: number
   malicious_count?: number
   phishing_count?: number
+  attribution_enabled?: boolean
+  attribution_results?: any[]
 }
 
 const route = useRoute()
@@ -59,6 +67,58 @@ const API_BASE = getApiBase()
 const loading = ref(false)
 const resultData = ref<ResultData | null>(null)
 const taskId = computed(() => route.params.taskId as string)
+
+const confidenceLabels: Record<string, string> = {
+  high: '高',
+  medium: '中',
+  low: '低',
+  candidate: '候选',
+  none: '无',
+}
+
+const confidenceDescriptions = [
+  {
+    label: '高',
+    color: 'green',
+    description: '多项关联证据一致，组织关联结果可信度较高，可作为优先处置依据。',
+  },
+  {
+    label: '中',
+    color: 'blue',
+    description: '存在较明确的关联线索，但证据完整度一般，建议结合业务背景进一步复核。',
+  },
+  {
+    label: '低',
+    color: 'orange',
+    description: '仅命中少量或较弱的关联特征，表示可能存在关联，不宜直接作为最终结论。',
+  },
+  {
+    label: '候选',
+    color: 'purple',
+    description: '域名进入了关联候选范围，但尚未达到明确匹配条件，需要人工确认。',
+  },
+  {
+    label: '无/未关联',
+    color: 'default',
+    description: '当前未检索到足够证据指向具体组织，或关联算法未给出有效候选。',
+  },
+]
+
+const associationStatusColors: Record<string, string> = {
+  疑似关联: 'blue',
+  候选关联: 'purple',
+  多候选不确定: 'orange',
+  未关联: 'default',
+  关联失败: 'red',
+}
+
+function displayConfidence(value?: string) {
+  return value ? confidenceLabels[value] || value : '未知'
+}
+
+function associationStatusColor(value?: string) {
+  return associationStatusColors[value || ''] || 'default'
+}
 
 // 计算列配置
 const resultColumns = computed(() => {
@@ -73,8 +133,8 @@ const resultColumns = computed(() => {
         ellipsis: true,
       },
       {
-        title: '目标域名',
-        dataIndex: '目标域名',
+        title: '官方域名',
+        dataIndex: '官方域名',
         key: 'target_domain',
         width: '25%',
         ellipsis: true,
@@ -124,6 +184,13 @@ const resultColumns = computed(() => {
         key: 'result',
         width: '15%',
         align: 'center' as const,
+      },
+      {
+        title: '关联组织',
+        dataIndex: '关联组织',
+        key: 'attribution',
+        width: '20%',
+        ellipsis: true,
       },
     ]
   }
@@ -285,8 +352,25 @@ onMounted(() => {
             </a-col>
           </a-row>
 
+          <a-card v-if="resultData.task_type === 'malicious'" title="组织关联置信度说明" style="margin-bottom: 24px;">
+            <a-list :data-source="confidenceDescriptions" size="small">
+              <template #renderItem="{ item }">
+                <a-list-item>
+                  <a-list-item-meta>
+                    <template #title>
+                      <a-tag :color="item.color">{{ item.label }}</a-tag>
+                    </template>
+                    <template #description>
+                      {{ item.description }}
+                    </template>
+                  </a-list-item-meta>
+                </a-list-item>
+              </template>
+            </a-list>
+          </a-card>
+
           <!-- 结果表格 -->
-          <a-card :title="resultData.task_type === 'impersonation' ? '检测结果详情' : '检测结果详情'" style="margin-bottom: 24px;">
+          <a-card v-else title="检测结果详情" style="margin-bottom: 24px;">
             <a-table
               :data-source="resultData.results"
               :columns="resultColumns"
@@ -340,13 +424,27 @@ onMounted(() => {
                     </template>
                     <template v-if="resultData.task_type === 'impersonation'" #description>
                       <div>
-                        <span>目标域名: {{ item.目标域名 }}</span><br>
+                        <span>官方域名: {{ item.官方域名 || item.目标域名 }}</span><br>
                         <span>公司: {{ item.公司名称 }}</span> |
                         <span>相似度: {{ item.相似度 }}</span>
                       </div>
                     </template>
                     <template v-else #description>
                       <a-tag color="red">恶意域名</a-tag>
+                      <template v-if="item.关联组织">
+                        <a-tag color="blue">{{ item.关联组织 }}</a-tag>
+                        <a-tag v-if="item.关联状态" :color="associationStatusColor(item.关联状态)">
+                          {{ item.关联状态 }}
+                        </a-tag>
+                        <span>置信度: {{ displayConfidence(item.组织置信度) }}</span>
+                        <span v-if="item.组织评分 !== undefined"> | 评分: {{ item.组织评分 }}</span>
+                        <div v-if="item.关联说明" style="margin-top: 4px; color: #667085;">
+                          {{ item.关联说明 }}
+                        </div>
+                      </template>
+                      <template v-else-if="resultData.attribution_enabled">
+                        <a-tag>未关联到组织</a-tag>
+                      </template>
                     </template>
                   </a-list-item-meta>
                 </a-list-item>
@@ -396,5 +494,3 @@ export default {
   padding: 20px;
 }
 </style>
-
-

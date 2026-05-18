@@ -433,7 +433,7 @@ def _clean_optional_text(value) -> str:
 def _extract_impersonation_alert_items(rows) -> List[dict]:
     """
     从仿冒检测结果 DataFrame 提取飞书/CSV 预警明细。
-    兼容列：钓鱼域名、目标域名、公司名称、相似度、匹配类型。
+    兼容列：钓鱼域名、官方域名/目标域名、公司名称、相似度、匹配类型。
     """
     items: List[dict] = []
     seen = set()
@@ -448,7 +448,7 @@ def _extract_impersonation_alert_items(rows) -> List[dict]:
         phishing_domain = _clean_optional_text(row.get("钓鱼域名"))
         if not phishing_domain:
             continue
-        official_domain = _clean_optional_text(row.get("目标域名"))
+        official_domain = _clean_optional_text(row.get("官方域名") or row.get("目标域名"))
         official_unit_name = _clean_optional_text(row.get("公司名称"))
         similarity = _clean_optional_text(row.get("相似度"))
         match_type = _clean_optional_text(row.get("匹配类型"))

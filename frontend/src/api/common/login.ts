@@ -26,7 +26,3 @@ export function loginApi(params: LoginParams | LoginMobileParams) {
     loading: true,
   })
 }
-
-export function logoutApi() {
-  return useGet('/logout')
-}

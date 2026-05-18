@@ -19,7 +19,7 @@ const activeTab = ref('malicious')
             智能检测任务中心
           </div>
           <div class="hero-desc">
-            支持恶意性检测与仿冒域名检测。请选择检测模型和数据来源，提交后可在「我的任务」中查看进度与结果。
+            支持恶意域名检测与仿冒域名检测。请选择检测模型和数据来源，提交后可在「我的任务」中查看进度与结果。
           </div>
         </div>
         <div class="hero-right">
@@ -52,7 +52,7 @@ const activeTab = ref('malicious')
     </a-card>
 
     <a-tabs v-model:activeKey="activeTab" class="task-tabs">
-      <a-tab-pane key="malicious" tab="恶意性检测">
+      <a-tab-pane key="malicious" tab="恶意域名检测">
         <MaliciousDetectionForm />
       </a-tab-pane>
       <a-tab-pane key="impersonation" tab="仿冒域名检测">

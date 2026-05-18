@@ -86,6 +86,8 @@ docker-compose.override.yml
 # Model files (if large, consider using Git LFS)
 # Uncomment if model files are too large
 backend/app/models/pretrained_model/
+# 训练过程中生成的临时模型产物不入库；保留其他正式 .pkl 模型文件可提交
+backend/app/models/saved_model/*TRAIN*.pkl
 # backend/app/models/saved_model_ML/
 
 # Coverage reports
@@ -94,6 +96,7 @@ coverage/
 *.lcov
 
 # Build artifacts
+*.tar
 *.tar.gz
 *.zip
 *.rar

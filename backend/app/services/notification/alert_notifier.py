@@ -61,9 +61,9 @@ def _build_suspected_association_text_from_results(match_results_by_domain: Mapp
     if not match_results_by_domain:
         return "暂无明显疑似关联组织。"
 
-    grouped_domains: Dict[str, list[str]] = {}
+    grouped_domains: Dict[str, list[tuple[str, Optional[float]]]] = {}
     seen_domains = set()
-    known_org_count = 0
+    top1_candidate_count = 0
     for domain_key, result in match_results_by_domain.items():
         domain_name = _safe_text(
             (result or {}).get("domain_name") if isinstance(result, Mapping) else "",
@@ -72,26 +72,37 @@ def _build_suspected_association_text_from_results(match_results_by_domain: Mapp
         if not isinstance(result, Mapping):
             continue
 
-        match_status = _safe_text(result.get("match_status"))
-        org_name = _safe_text(result.get("matched_organization_name"))
-        if not org_name and not match_status:
-            top_candidates = result.get("top_candidates_json") or result.get("top_candidates") or []
-            if isinstance(top_candidates, list) and top_candidates:
-                first = top_candidates[0] if isinstance(top_candidates[0], Mapping) else {}
-                org_name = _safe_text(first.get("name"))
-        if match_status and match_status != "suspected_match":
-            org_name = ""
+        top_candidates = result.get("top_candidates_json") or result.get("top_candidates") or []
+        first_candidate = (
+            top_candidates[0]
+            if isinstance(top_candidates, list) and top_candidates and isinstance(top_candidates[0], Mapping)
+            else {}
+        )
+        org_name = _safe_text(first_candidate.get("name"))
+        score_value = first_candidate.get("score")
+        try:
+            top1_score = float(score_value) if score_value is not None else None
+        except (TypeError, ValueError):
+            top1_score = None
+
         if not org_name:
-            org_name = "未知"
-        else:
-            known_org_count += 1
+            org_name = _safe_text(result.get("matched_organization_name"), "未知")
+        if top1_score is None:
+            actor_score = result.get("actor_score")
+            try:
+                top1_score = float(actor_score) if actor_score is not None else None
+            except (TypeError, ValueError):
+                top1_score = None
 
         domain_key_lower = domain_name.lower()
         if domain_key_lower in seen_domains:
             continue
         seen_domains.add(domain_key_lower)
 
-        grouped_domains.setdefault(org_name, []).append(domain_name)
+        if org_name != "未知":
+            top1_candidate_count += 1
+
+        grouped_domains.setdefault(org_name, []).append((domain_name, top1_score))
 
     total_count = sum(len(domains) for domains in grouped_domains.values())
     if total_count <= 0:
@@ -99,16 +110,17 @@ def _build_suspected_association_text_from_results(match_results_by_domain: Mapp
 
     sections = [
         f"本批次高风险域名数量：{total_count}",
-        f"已形成组织关联的域名数量：{known_org_count}",
+        f"已给出 Top1 候选组织的域名数量：{top1_candidate_count}",
         "",
     ]
 
     sorted_orgs = sorted(grouped_domains.keys(), key=_org_sort_key)
     for org_name in sorted_orgs:
-        domains = sorted(grouped_domains[org_name], key=lambda x: x.lower())
+        domains = sorted(grouped_domains[org_name], key=lambda item: item[0].lower())
         sections.append(f"【{org_name}】({len(domains)}个)")
-        for idx, domain in enumerate(domains, start=1):
-            sections.append(f"{idx}. {domain}")
+        for idx, (domain, score) in enumerate(domains, start=1):
+            score_text = f"（评分 {score:.2f}）" if score is not None else ""
+            sections.append(f"{idx}. {domain}{score_text}")
         sections.append("")
 
     return "\n".join(sections).strip()

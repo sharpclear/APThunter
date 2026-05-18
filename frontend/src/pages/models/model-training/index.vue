@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { FormProps } from 'ant-design-vue'
 import { message, Modal } from 'ant-design-vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useAuthorization } from '~/composables/authorization'
@@ -34,7 +35,7 @@ const trainingForm = reactive({
   batchSize: 64, */
 })
 
-const rules = reactive({
+const rules = reactive<NonNullable<FormProps['rules']>>({
   modelName: [
     { required: true, message: '请输入模型名称', trigger: 'blur' },
     { min: 2, max: 50, message: '长度应为 2-50 个字符', trigger: 'blur' },
@@ -206,11 +207,10 @@ function parsePreview(file: File) {
 // 训练状态
 const trainingStatus = ref<'idle' | 'running' | 'paused' | 'completed' | 'stopped'>('idle')
 const progress = ref(0)
-const intervalId = ref<number | null>(null)
 const startTimestamp = ref<number | null>(null)
-const lastTick = ref<number | null>(null)
 const currentTaskId = ref<string | null>(null)
 const statusPollingId = ref<number | null>(null)
+const displayProgress = computed(() => Number(progress.value.toFixed(1)))
 
 const canStart = computed(() => {
   return (
@@ -246,6 +246,13 @@ function formatDuration(seconds: number): string {
   const sec = s % 60
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${pad(h)}:${pad(m)}:${pad(sec)}`
+}
+
+function normalizeProgress(value: unknown): number {
+  const nextProgress = Number(value ?? 0)
+  if (!Number.isFinite(nextProgress))
+    return 0
+  return Math.max(0, Math.min(100, nextProgress))
 }
 
 async function handleStart() {
@@ -326,6 +333,10 @@ async function fetchTrainingStatus() {
       method: 'GET',
       headers: buildHeaders(),
     })
+
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`)
+    }
     
     const result = await resp.json()
     
@@ -344,7 +355,7 @@ async function fetchTrainingStatus() {
       }
       
       trainingStatus.value = statusMap[data.status] || 'idle'
-      progress.value = data.progress || 0
+      progress.value = normalizeProgress(data.progress)
       estimatedRemainingSeconds.value = data.estimatedRemaining
       
       // 如果训练完成，获取结果
@@ -522,7 +533,7 @@ onMounted(() => {
               <a-input v-model:value="trainingForm.modelName" placeholder="请输入模型名称" allow-clear />
             </a-form-item>
             <a-form-item label="模型描述" name="modelDesc">
-              <a-textarea v-model:value="trainingForm.modelDesc" :rows="3" maxlength="200" show-count placeholder="该模型的用途与说明" />
+              <a-textarea v-model:value="trainingForm.modelDesc" :rows="3" :maxlength="200" show-count placeholder="该模型的用途与说明" />
             </a-form-item>
             <a-form-item label="模型类型">
               <a-input v-model:value="trainingForm.modelType" disabled />
@@ -600,7 +611,7 @@ onMounted(() => {
             </a-tag>
           </div>
           <div class="progress-wrap">
-            <a-progress :percent="Number(progress.toFixed(1))" :status="isRunning ? 'active' : progress >= 100 ? 'success' : 'normal'" />
+            <a-progress :percent="displayProgress" :status="isRunning ? 'active' : progress >= 100 ? 'success' : 'normal'" />
             <div class="eta">
               预计剩余时间：{{ estimatedRemaining }}
             </div>

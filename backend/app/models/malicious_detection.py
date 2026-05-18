@@ -123,18 +123,18 @@ def predict_malicious_domains(domains: List[str], model_path: Optional[str] = No
     features = utils_ML.feature_extract(domains)
     features = np.array(features)
     features_scaled = scaler.transform(features)
-    if probability_threshold is not None:
-        if hasattr(model, 'predict_proba'):
-            probabilities = model.predict_proba(features_scaled)
+    malicious_probs = None
+    if hasattr(model, 'predict_proba'):
+        probabilities = model.predict_proba(features_scaled)
+        if probabilities.shape[1] > 1:
             malicious_probs = probabilities[:, 1]
-            predictions = (malicious_probs >= probability_threshold).astype(int)
-            prob_values = malicious_probs
         else:
-            predictions = model.predict(features_scaled)
-            prob_values = None
+            malicious_probs = probabilities[:, 0]
+
+    if probability_threshold is not None and malicious_probs is not None:
+        predictions = (malicious_probs >= probability_threshold).astype(int)
     else:
         predictions = model.predict(features_scaled)
-        prob_values = None
     
     results = []
     for i, (domain, label) in enumerate(zip(domains, predictions)):
@@ -143,8 +143,8 @@ def predict_malicious_domains(domains: List[str], model_path: Optional[str] = No
             '预测标签': int(label),
             '预测结果': '恶意' if label == 1 else '正常'
         }
-        if prob_values is not None:
-            result['恶意概率'] = float(prob_values[i])
+        if malicious_probs is not None:
+            result['二分类置信度'] = float(malicious_probs[i])
         results.append(result)
     
     return results
@@ -201,6 +201,24 @@ def read_domains_from_file(file_content: bytes, filename: str) -> List[str]:
         raise ValueError(f"读取文件失败: {str(e)}")
 
 
+def _build_export_df(rows: List[Dict]) -> pd.DataFrame:
+    export_rows = []
+    for row in rows:
+        export_row = dict(row)
+        export_row.pop('预测标签', None)
+        export_row.setdefault('关联组织', '')
+        export_row.setdefault('组织置信度', '')
+        export_row.setdefault('组织评分', '')
+        export_rows.append(export_row)
+
+    columns = ['域名', '预测结果']
+    if any('二分类置信度' in row for row in export_rows):
+        columns.append('二分类置信度')
+    columns.extend(['关联组织', '组织置信度', '组织评分'])
+
+    return pd.DataFrame(export_rows, columns=columns)
+
+
 def _generate_excel_and_stats(results: List[Dict], malicious_only: bool = False) -> Tuple[bytes, Dict]:
     """
     生成Excel文件和统计信息
@@ -215,9 +233,9 @@ def _generate_excel_and_stats(results: List[Dict], malicious_only: bool = False)
     # 主结果表：malicious_only 时仅保留恶意域名
     if malicious_only:
         display_results = [r for r in results if r['预测标签'] == 1]
-        df = pd.DataFrame(display_results) if display_results else pd.DataFrame(columns=['域名', '预测标签', '预测结果'])
+        df = _build_export_df(display_results)
     else:
-        df = pd.DataFrame(results)
+        df = _build_export_df(results)
 
     excel_buffer = io.BytesIO()
     with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
@@ -236,7 +254,7 @@ def _generate_excel_and_stats(results: List[Dict], malicious_only: bool = False)
         stats_df.to_excel(writer, sheet_name='统计信息', index=False)
 
         if malicious_count > 0:
-            malicious_df = pd.DataFrame([r for r in results if r['预测标签'] == 1])
+            malicious_df = _build_export_df([r for r in results if r['预测标签'] == 1])
             malicious_df.to_excel(writer, sheet_name='恶意域名列表', index=False)
 
     excel_bytes = excel_buffer.getvalue()

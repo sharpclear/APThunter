@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { LoginMobileParams, LoginParams } from '~@/api/common/login'
-import { AlipayCircleFilled, LockOutlined, MobileOutlined, TaobaoCircleFilled, UserOutlined, WeiboCircleFilled } from '@ant-design/icons-vue'
+import { LockOutlined, MobileOutlined, UserOutlined } from '@ant-design/icons-vue'
 import { AxiosError } from 'axios'
 import { loginApi } from '~/api/common/login'
 import GlobalLayoutFooter from '~/layouts/components/global-footer/index.vue'

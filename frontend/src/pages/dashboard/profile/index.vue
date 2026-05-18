@@ -276,6 +276,7 @@ const mockOrganizations: OrganizationProfile[] = [
     ],
   },
 ]
+void mockOrganizations
 
 // 解析JSON字段辅助函数
 function parseJsonField(field: any): any {
@@ -290,6 +291,7 @@ function parseJsonField(field: any): any {
   }
   return field
 }
+void parseJsonField
 
 // 初始化数据
 onMounted(() => {

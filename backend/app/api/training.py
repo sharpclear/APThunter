@@ -47,6 +47,16 @@ os.makedirs(MODEL_SAVE_DIR, exist_ok=True)
 training_tasks_status = {}
 training_tasks_lock = threading.Lock()
 
+
+def _normalize_progress(progress) -> float:
+    """Convert DB numeric values such as Decimal into a bounded float."""
+    try:
+        progress_value = float(progress or 0)
+    except (TypeError, ValueError):
+        progress_value = 0.0
+    return max(0.0, min(100.0, progress_value))
+
+
 # 设置全局keywords（utils_ML的edit_dist函数需要）
 # 注意：utils_ML.py中edit_dist函数直接使用keywords变量，需要在模块级别设置
 utils_ML.keywords = ['gov', 'pk', 'mail', 'serve']
@@ -621,14 +631,16 @@ async def get_training_status(
         if not task_row:
             raise HTTPException(status_code=404, detail="训练任务不存在")
         
+        progress_value = _normalize_progress(task_row["progress"])
+
         # 计算预计剩余时间
-        estimated_remaining = None
-        if task_row["training_status"] == "training" and task_row["started_at"] and task_row["progress"] > 0:
+        estimated_remaining = task_row["estimated_remaining_seconds"]
+        if task_row["training_status"] == "training" and task_row["started_at"] and progress_value > 0:
             elapsed = (datetime.now() - task_row["started_at"]).total_seconds()
-            if elapsed > 0 and task_row["progress"] < 100:
-                rate = task_row["progress"] / elapsed  # % per second
+            if elapsed > 0 and progress_value < 100:
+                rate = progress_value / elapsed  # % per second
                 if rate > 0:
-                    remaining = (100 - task_row["progress"]) / rate
+                    remaining = (100 - progress_value) / rate
                     estimated_remaining = int(remaining)
                     
                     # 更新数据库
@@ -663,7 +675,7 @@ async def get_training_status(
             "data": {
                 "taskId": task_row["task_id"],
                 "status": status_map.get(task_row["training_status"], task_row["training_status"]),
-                "progress": float(task_row["progress"]),
+                "progress": progress_value,
                 "estimatedRemaining": estimated_remaining,
                 "metrics": metrics,
                 "modelId": task_row["model_id"],

@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import type { TableProps } from 'ant-design-vue'
 import dayjs from 'dayjs'
 
 const { t } = useI18n()
 
 const activeKey = ref()
 
-const columns = ref([
+const columns = ref<NonNullable<TableProps['columns']>>([
   {
     title: t('profile.advanced.log-type'),
     dataIndex: 'type',

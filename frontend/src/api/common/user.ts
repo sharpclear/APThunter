@@ -1,5 +1,6 @@
 export interface UserInfo {
   id: number | string
+  userid?: number | string
   username: string
   nickname: string
   avatar: string

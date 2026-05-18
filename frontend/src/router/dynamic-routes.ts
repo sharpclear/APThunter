@@ -1,5 +1,4 @@
 import type { RouteRecordRaw } from 'vue-router'
-import { AccessEnum } from '~@/utils/constant'
 import { basicRouteMap } from './router-modules'
 
 export default [
@@ -41,7 +40,7 @@ export default [
   },
   {
     path: '/detection',
-    redirect: '/detection/malicious-detection',
+    redirect: '/detection/create-task',
     name: 'detection',
     meta: {
       title: '检测任务',
@@ -50,13 +49,43 @@ export default [
     component: basicRouteMap.RouteView,
     children: [
       {
-        path: '/detection/malicious-detection',
-        name: 'detectionBasic',
-        component: () => import('~/pages/detection/malicious-detection/index.vue'),
+        path: '/detection/create-task',
+        redirect: '/detection/malicious-domain-detection',
+        name: 'CreateDetectionTask',
+        component: basicRouteMap.RouteView,
         meta: {
-          title: '创建任务',
+          title: '创建检测任务',
           locale: 'menu.detection.create-task',
         },
+        children: [
+          {
+            path: '/detection/malicious-domain-detection',
+            name: 'MaliciousDomainDetection',
+            component: () => import('~/pages/detection/malicious-domain-detection/index.vue'),
+            meta: {
+              title: '恶意域名检测',
+              locale: 'menu.detection.malicious-domain-detection',
+            },
+          },
+          {
+            path: '/detection/impersonation-domain-detection',
+            name: 'ImpersonationDomainDetection',
+            component: () => import('~/pages/detection/impersonation-domain-detection/index.vue'),
+            meta: {
+              title: '仿冒域名检测',
+              locale: 'menu.detection.impersonation-domain-detection',
+            },
+          },
+          {
+            path: '/detection/malicious-ip-detection',
+            name: 'MaliciousIpDetection',
+            component: () => import('~/pages/detection/malicious-ip-detection/index.vue'),
+            meta: {
+              title: '恶意IP检测',
+              locale: 'menu.detection.malicious-ip-detection',
+            },
+          },
+        ],
       },
       {
         path: '/detection/step-detection',
@@ -201,43 +230,6 @@ export default [
         meta: {
           title: 'menu.profile.basic',
           locale: 'menu.profile.basic',
-        },
-      },
-    ],
-  },
-  {
-    path: '/access',
-    redirect: '/access/common',
-    name: 'Access',
-    meta: {
-      title: '权限模块',
-      icon: 'ClusterOutlined',
-    },
-    children: [
-      {
-        path: '/access/common',
-        name: 'AccessCommon',
-        component: () => import('~/pages/access/common.vue'),
-        meta: {
-          title: '通用权限',
-        },
-      },
-      {
-        path: '/access/user',
-        name: 'AccessUser',
-        component: () => import('~/pages/access/user.vue'),
-        meta: {
-          title: '普通用户',
-          access: [AccessEnum.USER, AccessEnum.ADMIN],
-        },
-      },
-      {
-        path: '/access/admin',
-        name: 'AccessAdmin',
-        component: () => import('~/pages/access/admin.vue'),
-        meta: {
-          title: '管理员',
-          access: [AccessEnum.ADMIN],
         },
       },
     ],

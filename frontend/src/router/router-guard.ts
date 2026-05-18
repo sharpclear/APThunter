@@ -1,5 +1,6 @@
 import { AxiosError } from 'axios'
 import { setRouteEmitter } from '~@/utils/route-listener'
+import { isAuthorizationExpired } from '~/composables/authorization'
 import { useMetaTitle } from '~/composables/meta-title'
 import router from '~/router'
 
@@ -11,6 +12,10 @@ router.beforeEach(async (to, _, next) => {
   // 获取
   const userStore = useUserStore()
   const token = useAuthorization()
+  if (isAuthorizationExpired(token.value)) {
+    userStore.clearLocalSession()
+  }
+
   if (!token.value) {
     //  如果token不存在就跳转到登录页面
     if (!allowList.includes(to.path) && !to.path.startsWith('/redirect')) {
@@ -39,10 +44,15 @@ router.beforeEach(async (to, _, next) => {
       }
       catch (e) {
         if (e instanceof AxiosError && e?.response?.status === 401) {
-          // 跳转到error页面
+          // token 已失效时直接清理本地会话并回到登录页，避免首次访问先落到 401 页面
+          userStore.clearLocalSession()
           next({
-            path: '/401',
+            path: loginPath,
+            query: {
+              redirect: encodeURIComponent(to.fullPath),
+            },
           })
+          return
         }
       }
     }

@@ -29,7 +29,7 @@ const menuData = [
     title: '检测任务',
     icon: 'FormOutlined',
     component: 'RouteView',
-    redirect: '/detection/basic',
+    redirect: '/detection/create-task',
     path: '/detection',
     name: 'detection',
     locale: 'menu.detection',
@@ -134,35 +134,6 @@ const menuData = [
     keepAlive: true,
     locale: 'menu.my-model.menu2',
   }, */
-  {
-    id: 15,
-    path: '/access',
-    component: 'RouteView',
-    redirect: '/access/common',
-    title: '权限模块',
-    name: 'Access',
-    parentId: null,
-    icon: 'ClusterOutlined',
-    locale: 'menu.access',
-  },
-  {
-    id: 16,
-    parentId: 15,
-    path: '/access/common',
-    title: '通用权限',
-    name: 'AccessCommon',
-    component: '/access/common',
-    locale: 'menu.access.common',
-  },
-  {
-    id: 17,
-    parentId: 15,
-    path: '/access/user',
-    title: '普通用户',
-    name: 'AccessUser',
-    component: '/access/user',
-    locale: 'menu.access.user',
-  },
   {
     id: 19,
     parentId: null,
@@ -327,12 +298,43 @@ const menuData = [
   {
     id: 4,
     parentId: 3,
-    title: '创建任务',
-    component: '/detection/malicious-detection/index',
-    path: '/detection/malicious-detection',
-    name: 'CreateTask',
+    title: '创建检测任务',
+    component: 'RouteView',
+    redirect: '/detection/malicious-domain-detection',
+    path: '/detection/create-task',
+    name: 'CreateDetectionTask',
     keepAlive: false,
     locale: 'menu.detection.create-task',
+  },
+  {
+    id: 51,
+    parentId: 4,
+    title: '恶意域名检测',
+    component: '/detection/malicious-domain-detection/index',
+    path: '/detection/malicious-domain-detection',
+    name: 'MaliciousDomainDetection',
+    keepAlive: false,
+    locale: 'menu.detection.malicious-domain-detection',
+  },
+  {
+    id: 52,
+    parentId: 4,
+    title: '仿冒域名检测',
+    component: '/detection/impersonation-domain-detection/index',
+    path: '/detection/impersonation-domain-detection',
+    name: 'ImpersonationDomainDetection',
+    keepAlive: false,
+    locale: 'menu.detection.impersonation-domain-detection',
+  },
+  {
+    id: 53,
+    parentId: 4,
+    title: '恶意IP检测',
+    component: '/detection/malicious-ip-detection/index',
+    path: '/detection/malicious-ip-detection',
+    name: 'MaliciousIpDetection',
+    keepAlive: false,
+    locale: 'menu.detection.malicious-ip-detection',
   },
   {
     id: 36,
@@ -451,26 +453,10 @@ const menuData = [
   },
 ]
 
-export const accessMenuData = [
-  {
-    id: 18,
-    parentId: 15,
-    path: '/access/admin',
-    title: '管理员',
-    name: 'AccessAdmin',
-    component: '/access/admin',
-    locale: 'menu.access.admin',
-  },
-
-]
-
 export default defineEventHandler((event) => {
-  const token = event.req.headers.get('Authorization')
-  // eslint-disable-next-line node/prefer-global/buffer
-  const username = Buffer.from(token as any, 'base64').toString('utf-8')
   return {
     code: 200,
     msg: '获取成功',
-    data: [...menuData, ...(username === 'admin' ? accessMenuData : [])],
+    data: menuData,
   }
 })

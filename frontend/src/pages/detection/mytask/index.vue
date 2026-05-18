@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { message, Modal } from 'ant-design-vue'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useAuthorization } from '~/composables/authorization'
 import { useUserId } from '~/composables/user-id'
 import { getApiBase } from '~/utils/api-public'
@@ -9,14 +9,16 @@ import TaskResultModal from './task-result-modal.vue'
 interface TaskItem {
   id: string
   createdAt: string
-  taskType: '恶意性检测' | '仿冒域名检测'
+  taskType: '恶意域名检测' | '恶意性检测' | '仿冒域名检测' | '恶意IP检测' | string
   model: string
   dataSource: {
-    type: '上传文件' | '新注册域名'
+    type: '上传文件' | '新注册域名' | '手动输入域名'
     fileName?: string | null
     dateRange?: [string, string]
+    queryName?: string
+    domainCount?: number
   }
-  status: '待执行' | '执行中' | '已完成' | '失败' | '已取消'
+  status: '待执行' | '执行中' | '已完成' | '失败' | '已取消' | '等待官方域名解析'
   progress?: number
   eta?: string
   resultFileKey?: string | null
@@ -40,6 +42,7 @@ const pageSize = ref(10)
 // 结果查看Modal
 const resultModalVisible = ref(false)
 const currentTaskId = ref<string | null>(null)
+let pollingTimer: number | null = null
 
 // 筛选条件
 const filterTaskType = ref<string | undefined>(undefined)
@@ -63,8 +66,9 @@ function buildHeaders(extra: Record<string, string> = {}) {
 }
 
 // 从服务端获取任务列表
-async function fetchTasks() {
-  loading.value = true
+async function fetchTasks(silent = false) {
+  if (!silent)
+    loading.value = true
   try {
     const resp = await fetch(`${API_BASE}/tasks`, {
       method: 'GET',
@@ -80,11 +84,33 @@ async function fetchTasks() {
     message.error(`任务列表加载失败：${e?.message || '未知错误'}`)
   }
   finally {
-    loading.value = false
+    if (!silent)
+      loading.value = false
   }
 }
 
-onMounted(fetchTasks)
+const hasRunningTask = computed(() => {
+  return tableData.value.some(task =>
+    task.status === '待执行'
+    || task.status === '执行中'
+    || task.status === '等待官方域名解析',
+  )
+})
+
+onMounted(() => {
+  fetchTasks()
+  pollingTimer = window.setInterval(() => {
+    if (hasRunningTask.value)
+      fetchTasks(true)
+  }, 3000)
+})
+
+onBeforeUnmount(() => {
+  if (pollingTimer) {
+    window.clearInterval(pollingTimer)
+    pollingTimer = null
+  }
+})
 
 // 计算筛选与搜索后的数据
 const filteredData = computed(() => {
@@ -109,7 +135,8 @@ const filteredData = computed(() => {
     data = data.filter(d =>
       d.id.toLowerCase().includes(k)
       || d.model.toLowerCase().includes(k)
-      || (d.dataSource.fileName?.toLowerCase().includes(k) ?? false),
+      || (d.dataSource.fileName?.toLowerCase().includes(k) ?? false)
+      || (d.dataSource.queryName?.toLowerCase().includes(k) ?? false),
     )
   }
   return data
@@ -229,6 +256,7 @@ function batchDelete() {
 function statusTagColor(status: TaskItem['status']) {
   switch (status) {
     case '待执行': return 'default'
+    case '等待官方域名解析': return 'warning'
     case '执行中': return 'processing'
     case '已完成': return 'success'
     case '已取消': return 'warning'
@@ -268,11 +296,14 @@ function handleModalDownload(taskId: string) {
             style="width: 180px;"
             placeholder="全部类型"
           >
-            <a-select-option value="恶意性检测">
-              恶意性检测
+            <a-select-option value="恶意域名检测">
+              恶意域名检测
             </a-select-option>
             <a-select-option value="仿冒域名检测">
               仿冒域名检测
+            </a-select-option>
+            <a-select-option value="恶意IP检测">
+              恶意IP检测
             </a-select-option>
           </a-select>
         </a-form-item>
@@ -285,6 +316,9 @@ function handleModalDownload(taskId: string) {
           >
             <a-select-option value="待执行">
               待执行
+            </a-select-option>
+            <a-select-option value="等待官方域名解析">
+              等待官方域名解析
             </a-select-option>
             <a-select-option value="执行中">
               执行中
@@ -307,7 +341,7 @@ function handleModalDownload(taskId: string) {
           <a-input-search
             v-model:value="keyword"
             allow-clear
-            placeholder="搜索任务ID/模型/文件名"
+            placeholder="搜索任务ID/模型/名称"
             style="width: 240px;"
             @search="handleSearch"
           />
@@ -344,7 +378,7 @@ function handleModalDownload(taskId: string) {
       >
         <a-table-column key="id" title="任务ID" data-index="id" width="180" />
         <a-table-column key="createdAt" title="创建时间" data-index="createdAt" width="180" />
-        <a-table-column key="taskType" title="任务类型" data-index="taskType" width="120" />
+        <a-table-column key="taskType" title="任务类型" data-index="taskType" width="140" />
         <a-table-column key="model" title="调用模型" data-index="model" width="160" />
 
         <!-- 数据来源 列，使用插槽替代 custom-render JSX -->
@@ -353,7 +387,11 @@ function handleModalDownload(taskId: string) {
             <template v-if="record.dataSource.type === '上传文件'">
               {{ record.dataSource.fileName }}
             </template>
+            <template v-else-if="record.dataSource.type === '手动输入域名'">
+              {{ record.dataSource.domainCount ?? 0 }} 个域名
+            </template>
             <template v-else>
+              <span v-if="record.dataSource.queryName">{{ record.dataSource.queryName }}：</span>
               {{ record.dataSource.dateRange?.[0] ?? '' }} ~ {{ record.dataSource.dateRange?.[1] ?? '' }}
             </template>
           </template>

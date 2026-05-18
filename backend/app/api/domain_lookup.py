@@ -12,6 +12,7 @@ import dns.resolver
 import ssl
 import socket
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from app.db.session import engine
 
@@ -255,35 +256,24 @@ def lookup_all(request: DomainLookupRequest = Body(...)):
         "queryTime": datetime.now().isoformat()
     }
     
-    # 查询 WHOIS
-    try:
-        whois_req = DomainLookupRequest(domain=domain, save=False)
-        whois_result = lookup_whois(whois_req)
-        whois_data = json.loads(whois_result.body)
-        if whois_data.get("code") == 200:
-            results["whois"] = whois_data["data"]
-    except Exception as e:
-        results["errors"].append(f"WHOIS 查询失败: {str(e)}")
-    
-    # 查询 DNS
-    try:
-        dns_req = DomainLookupRequest(domain=domain, save=False)
-        dns_result = lookup_dns(dns_req)
-        dns_data = json.loads(dns_result.body)
-        if dns_data.get("code") == 200:
-            results["dns"] = dns_data["data"]
-    except Exception as e:
-        results["errors"].append(f"DNS 查询失败: {str(e)}")
-    
-    # 查询 SSL
-    try:
-        ssl_req = DomainLookupRequest(domain=domain, save=False)
-        ssl_result = lookup_ssl(ssl_req)
-        ssl_data = json.loads(ssl_result.body)
-        if ssl_data.get("code") == 200:
-            results["certificate"] = ssl_data["data"]
-    except Exception as e:
-        results["errors"].append(f"SSL 证书查询失败: {str(e)}")
+    lookup_specs = {
+        "whois": ("WHOIS", lookup_whois),
+        "dns": ("DNS", lookup_dns),
+        "certificate": ("SSL 证书", lookup_ssl),
+    }
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {
+            key: executor.submit(handler, DomainLookupRequest(domain=domain, save=False))
+            for key, (_, handler) in lookup_specs.items()
+        }
+        for key, future in futures.items():
+            label, _ = lookup_specs[key]
+            try:
+                payload = json.loads(future.result().body)
+                if payload.get("code") == 200:
+                    results[key] = payload["data"]
+            except Exception as e:
+                results["errors"].append(f"{label} 查询失败: {str(e)}")
     
     # 如果需要保存到数据库
     if save_to_db and any([results["whois"], results["dns"], results["certificate"]]):

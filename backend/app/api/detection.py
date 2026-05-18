@@ -1,15 +1,19 @@
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException, status, Request, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Optional, List, Tuple
 import logging
 import json
+import math
 import uuid
 import io
 import sys
 import os
+import ipaddress
+import re
 import zipfile
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 from sqlalchemy import text
 # 添加models目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'models'))
@@ -18,6 +22,7 @@ from app.entities import Task, Model, StoredFile
 from app.infra.minio_client import minio_client
 from app.db.session import SessionLocal, engine
 from app.core.config import MINIO_BUCKET, IMPERSONATION_MODEL_NAME
+from app.services.official_domain_resolver import resolve_official_domains
 from app.services.task_dispatcher import dispatch_impersonation_task, dispatch_malicious_task
 
 logger = logging.getLogger("uvicorn.error")
@@ -35,16 +40,18 @@ STATUS_LABEL_MAP = {
     "failed": "失败",
 }
 TASK_TYPE_LABEL_MAP = {
-    "malicious": "恶意性检测",
+    "malicious": "恶意域名检测",
     "impersonation": "仿冒域名检测",
+    "malicious_ip": "恶意IP检测",
 }
 DATA_SOURCE_LABEL_MAP = {
     "upload": "上传文件",
     "newDomain": "新注册域名",
+    "manualInput": "手动输入域名",
 }
 STATUS_PROGRESS_MAP = {
     "pending": 0,
-    "processing": 60,
+    "processing": 10,
     "completed": 100,
     "failed": 0,
 }
@@ -150,6 +157,85 @@ def _normalize_extra(extra_value):
     return dict(extra_value)
 
 
+def _build_attribution_index(extra_data: dict) -> dict:
+    results = extra_data.get("attribution_results") or []
+    if not isinstance(results, list):
+        return {}
+    indexed = {}
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        domain = str(item.get("domain") or item.get("domain_name") or "").strip().lower()
+        if domain:
+            indexed[domain] = item
+    return indexed
+
+
+_ACTOR_CONFIDENCE_LABELS = {
+    "high": "高",
+    "medium": "中",
+    "low": "低",
+    "candidate": "候选",
+    "none": "无",
+}
+
+_MATCH_STATUS_LABELS = {
+    "suspected_match": "疑似关联",
+    "candidate_only": "候选关联",
+    "ambiguous": "多候选不确定",
+    "no_match": "未关联",
+    "match_failed": "关联失败",
+}
+
+
+def _actor_confidence_label(value) -> str:
+    raw = str(value or "").strip()
+    return _ACTOR_CONFIDENCE_LABELS.get(raw, raw)
+
+
+def _match_status_label(value) -> str:
+    raw = str(value or "").strip()
+    return _MATCH_STATUS_LABELS.get(raw, raw)
+
+
+def _json_safe_value(value):
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, float):
+        return value if math.isfinite(value) else ""
+    if isinstance(value, dict):
+        return {key: _json_safe_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe_value(item) for item in value]
+    if hasattr(value, "item"):
+        try:
+            return _json_safe_value(value.item())
+        except Exception:
+            pass
+    return value
+
+
+def _attach_attribution_fields(rows: list, attribution_index: dict) -> list:
+    if not attribution_index:
+        return rows
+    enriched_rows = []
+    for row in rows:
+        item = dict(row)
+        domain = str(item.get("域名") or item.get("domain") or "").strip().lower()
+        match = attribution_index.get(domain)
+        if match:
+            item["关联组织"] = match.get("matched_organization_name") or ""
+            item["组织置信度"] = match.get("actor_confidence_label") or _actor_confidence_label(match.get("actor_confidence")) or ""
+            item["组织评分"] = match.get("actor_score")
+            item["关联状态"] = match.get("match_status_label") or _match_status_label(match.get("match_status")) or ""
+            item["关联说明"] = match.get("reason_summary") or ""
+            item["组织关联详情"] = match
+        enriched_rows.append(item)
+    return enriched_rows
+
+
 def _task_result_status_payload(task: Task, extra_data: dict) -> dict:
     """pending / processing / failed，或 completed 但缺少结果文件时的统一 JSON 结构。"""
     raw = task.status
@@ -193,6 +279,9 @@ def _parse_date_string(date_str: str) -> datetime.date:
 
 # 新注册域名日期范围：开始日期从 2024-09-01 起，最多可选往后一个月
 _MIN_START_DATE = datetime(2024, 9, 1).date()
+_MAX_MANUAL_DOMAIN_COUNT = 1000
+_MAX_MANUAL_INPUT_LENGTH = 20000
+_DOMAIN_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 
 
 def _validate_new_domain_date_range(start_date, end_date) -> None:
@@ -208,6 +297,181 @@ def _validate_new_domain_date_range(start_date, end_date) -> None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="日期范围最多为一个月"
         )
+
+
+def _inspect_daily_domain_availability(start_date, end_date) -> dict:
+    available_dates = []
+    missing_dates = []
+    invalid_dates = []
+    total_domain_count = 0
+    current = start_date
+
+    while current <= end_date:
+        date_key = current.isoformat()
+        month_folder = os.path.join(DAILY_DATA_DIR, current.strftime("%Y-%m"))
+        zip_name = f"{current.strftime('%Y-%m-%d')}-domain.zip"
+        zip_path = os.path.join(month_folder, zip_name)
+
+        if not os.path.exists(zip_path):
+            missing_dates.append(date_key)
+            current += timedelta(days=1)
+            continue
+
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                if "dailyupdate.txt" not in zf.namelist():
+                    invalid_dates.append(date_key)
+                    current += timedelta(days=1)
+                    continue
+                with zf.open("dailyupdate.txt") as file_handle:
+                    content = file_handle.read().decode("utf-8", errors="ignore")
+                    domain_count = sum(1 for line in content.splitlines() if line.strip())
+                    if domain_count > 0:
+                        available_dates.append(date_key)
+                        total_domain_count += domain_count
+                    else:
+                        invalid_dates.append(date_key)
+        except Exception:
+            logger.exception("检查每日域名数据失败: %s", zip_path)
+            invalid_dates.append(date_key)
+        current += timedelta(days=1)
+
+    return {
+        "available": len(available_dates) > 0,
+        "availableDates": available_dates,
+        "missingDates": missing_dates,
+        "invalidDates": invalid_dates,
+        "domainCount": total_domain_count,
+    }
+
+
+def _extract_hostname_from_input(raw_value: str) -> Optional[str]:
+    candidate = raw_value.strip().strip("\"'`<>[](){}")
+    if not candidate:
+        return None
+
+    parsed_host = None
+    try:
+        if "://" in candidate:
+            parsed_host = urlsplit(candidate).hostname
+        elif candidate.startswith("//"):
+            parsed_host = urlsplit(f"http:{candidate}").hostname
+        elif any(separator in candidate for separator in ["/", "?", "#"]):
+            parsed_host = urlsplit(f"http://{candidate}").hostname
+        elif ":" in candidate:
+            parsed_host = urlsplit(f"//{candidate}").hostname
+        else:
+            parsed_host = candidate
+    except ValueError:
+        return None
+
+    if not parsed_host:
+        return None
+
+    return parsed_host.strip().strip(".").lower()
+
+
+def _normalize_domain(hostname: str) -> Optional[str]:
+    if not hostname:
+        return None
+    try:
+        ipaddress.ip_address(hostname)
+        return None
+    except ValueError:
+        pass
+
+    try:
+        ascii_domain = hostname.encode("idna").decode("ascii").lower().strip(".")
+    except UnicodeError:
+        return None
+
+    if len(ascii_domain) > 253 or "." not in ascii_domain:
+        return None
+
+    labels = ascii_domain.split(".")
+    if any(not label or not _DOMAIN_LABEL_RE.match(label) for label in labels):
+        return None
+    return ascii_domain
+
+
+def _parse_manual_domains(manual_domains: str) -> Tuple[List[str], dict]:
+    if not manual_domains or not manual_domains.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="manualDomains is required when dataSource is 'manualInput'"
+        )
+    if len(manual_domains) > _MAX_MANUAL_INPUT_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"manualDomains length exceeds {_MAX_MANUAL_INPUT_LENGTH} characters"
+        )
+
+    raw_items = [
+        item.strip()
+        for item in re.split(r"[\s,，;；]+", manual_domains)
+        if item.strip()
+    ]
+    domains: List[str] = []
+    seen = set()
+    invalid_count = 0
+    duplicate_count = 0
+
+    for item in raw_items:
+        hostname = _extract_hostname_from_input(item)
+        normalized = _normalize_domain(hostname or "")
+        if not normalized:
+            invalid_count += 1
+            continue
+        if normalized in seen:
+            duplicate_count += 1
+            continue
+        seen.add(normalized)
+        domains.append(normalized)
+
+    if not domains:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未解析到有效域名，请检查输入内容"
+        )
+    if len(domains) > _MAX_MANUAL_DOMAIN_COUNT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"手动输入域名最多支持 {_MAX_MANUAL_DOMAIN_COUNT} 条"
+        )
+
+    return domains, {
+        "raw_count": len(raw_items),
+        "valid_count": len(domains),
+        "invalid_count": invalid_count,
+        "duplicate_count": duplicate_count,
+    }
+
+
+def _parse_similarity_threshold(use_custom_threshold: str, threshold: Optional[str]) -> Tuple[Optional[float], dict]:
+    use_custom = str(use_custom_threshold or "false").strip().lower() == "true"
+    if not use_custom:
+        return None, {"use_custom_threshold": False, "threshold_percent": None}
+    if threshold is None or str(threshold).strip() == "":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="threshold is required when useCustomThreshold is true",
+        )
+    try:
+        threshold_percent = float(str(threshold).strip())
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="threshold must be a number between 0 and 100",
+        ) from exc
+    if threshold_percent < 0 or threshold_percent > 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="threshold must be between 0 and 100",
+        )
+    return threshold_percent / 100, {
+        "use_custom_threshold": True,
+        "threshold_percent": threshold_percent,
+    }
 
 
 def _collect_daily_domains(date_range: List[str]) -> Tuple[List[str], List[str]]:
@@ -254,6 +518,67 @@ def _collect_daily_domains(date_range: List[str]) -> Tuple[List[str], List[str]]
     return domains, missing_dates
 
 
+def _parse_detection_date_range_payload(detection_date_range: str) -> List[str]:
+    try:
+        date_range_parsed = json.loads(detection_date_range)
+    except json.JSONDecodeError as exc:
+        logger.error("日期范围JSON解析失败: %s, 原始数据: %s", exc, detection_date_range)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid detectionDateRange format",
+        ) from exc
+    if not isinstance(date_range_parsed, list) or len(date_range_parsed) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="detectionDateRange must be a JSON array with start and end date",
+        )
+    try:
+        start_date = _parse_date_string(str(date_range_parsed[0]))
+        end_date = _parse_date_string(str(date_range_parsed[1]))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid detectionDateRange date value",
+        ) from exc
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+        date_range_parsed = [start_date.isoformat(), end_date.isoformat()]
+    _validate_new_domain_date_range(start_date, end_date)
+    return [str(date_range_parsed[0]), str(date_range_parsed[1])]
+
+
+@router.get("/api/new-domain-data/availability")
+async def check_new_domain_data_availability(
+    startDate: str = Query(...),
+    endDate: str = Query(...),
+):
+    """检查所选日期范围内是否存在可用的新注册域名数据。"""
+    try:
+        start_date = _parse_date_string(str(startDate))
+        end_date = _parse_date_string(str(endDate))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="日期格式无效",
+        ) from exc
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+    _validate_new_domain_date_range(start_date, end_date)
+    availability = _inspect_daily_domain_availability(start_date, end_date)
+    message = (
+        f"所选范围内有 {len(availability['availableDates'])} 天可用数据"
+        if availability["available"]
+        else "所选日期范围内暂无可用的新注册域名数据"
+    )
+    return {
+        "ok": True,
+        "startDate": start_date.isoformat(),
+        "endDate": end_date.isoformat(),
+        "message": message,
+        **availability,
+    }
+
+
 @router.post("/api/tasks")
 async def create_detection_task(
     request: Request,
@@ -261,17 +586,19 @@ async def create_detection_task(
     dataSource: str = Form(...),
     withAttribution: str = Form("false"),
     file: Optional[UploadFile] = File(None),
-    dateRange: Optional[str] = Form(None)
+    dateRange: Optional[str] = Form(None),
+    manualDomains: Optional[str] = Form(None),
 ):
     """
     创建恶意性检测任务
     
     参数:
     - model: 检测模型ID
-    - dataSource: 数据来源 ('upload' 或 'newDomain')
+    - dataSource: 数据来源 ('upload'、'newDomain' 或 'manualInput')
     - withAttribution: 是否包含归因分析 ('true' 或 'false')
     - file: 上传的文件（当 dataSource 为 'upload' 时必填）
     - dateRange: 日期范围JSON字符串（当 dataSource 为 'newDomain' 时必填）
+    - manualDomains: 用户手动输入的域名或 URL（当 dataSource 为 'manualInput' 时必填）
     """
     try:
         created_by_user_id: Optional[int] = _extract_user_id(request)
@@ -288,10 +615,10 @@ async def create_detection_task(
             }
         logger.info(f"Received task creation request: model={model}, dataSource={dataSource}, withAttribution={withAttribution}, file={file_info}, dateRange={dateRange}")
         # 验证数据来源参数
-        if dataSource not in ["upload", "newDomain"]:
+        if dataSource not in ["upload", "newDomain", "manualInput"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="dataSource must be 'upload' or 'newDomain'"
+                detail="dataSource must be 'upload', 'newDomain' or 'manualInput'"
             )
         
         # 验证文件上传
@@ -307,6 +634,25 @@ async def create_detection_task(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="dateRange is required when dataSource is 'newDomain'"
             )
+        date_range_parsed = None
+        if dataSource == "newDomain":
+            date_range_parsed = _parse_detection_date_range_payload(dateRange or "")
+            start_date = _parse_date_string(date_range_parsed[0])
+            end_date = _parse_date_string(date_range_parsed[1])
+            availability = _inspect_daily_domain_availability(start_date, end_date)
+            if not availability["available"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "message": "所选日期范围内暂无可用的新注册域名数据，请重新选择日期",
+                        **availability,
+                    },
+                )
+
+        manual_domain_list = None
+        manual_domain_stats = None
+        if dataSource == "manualInput":
+            manual_domain_list, manual_domain_stats = _parse_manual_domains(manualDomains or "")
         
         # 处理文件上传
         file_key = None
@@ -346,10 +692,9 @@ async def create_detection_task(
             }
         
         # 解析日期范围（如果提供）
-        date_range_parsed = None
         if dateRange:
             try:
-                date_range_parsed = json.loads(dateRange)
+                date_range_parsed = date_range_parsed or json.loads(dateRange)
             except json.JSONDecodeError:
                 logger.warning(f"Failed to parse dateRange: {dateRange}")
         
@@ -362,6 +707,9 @@ async def create_detection_task(
         if uploaded_file_meta:
             extra_data["file_bucket"] = uploaded_file_meta["bucket"]
             extra_data["file_object_key"] = uploaded_file_meta["object_key"]
+        if manual_domain_list is not None:
+            extra_data["manual_domains"] = manual_domain_list
+            extra_data["manual_domain_stats"] = manual_domain_stats
         
         # 生成任务ID
         task_id = f"T{int(datetime.utcnow().timestamp())}"
@@ -503,22 +851,44 @@ async def list_tasks(
             .filter(Task.created_by == user_id)
             .count()
         )
-        records = (
-            db.query(Task, Model, StoredFile)
-            .join(Model, Model.id == Task.model_id)
-            .outerjoin(StoredFile, StoredFile.id == Task.file_id)
+        # 避免 tasks.extra 这类大 JSON 字段参与 MySQL 排序。归因结果会让 extra 变大，
+        # 先只按轻量字段取分页 ID，再回查详情。
+        task_id_rows = (
+            db.query(Task.id)
             .filter(Task.created_by == user_id)
             .order_by(Task.created_at.desc())
             .offset((page - 1) * pageSize)
             .limit(pageSize)
             .all()
         )
+        ordered_task_ids = [row[0] for row in task_id_rows]
+        if not ordered_task_ids:
+            return {"items": [], "total": total}
+
+        records = (
+            db.query(Task, Model, StoredFile)
+            .join(Model, Model.id == Task.model_id)
+            .outerjoin(StoredFile, StoredFile.id == Task.file_id)
+            .filter(Task.id.in_(ordered_task_ids))
+            .all()
+        )
+        order_index = {task_id: index for index, task_id in enumerate(ordered_task_ids)}
+        records.sort(key=lambda record: order_index.get(record[0].id, 0))
         items = []
         for task, model, stored_file in records:
             extra_data = _normalize_extra(task.extra)
             task_type_label = TASK_TYPE_LABEL_MAP.get(task.task_type, task.task_type)
             status_label = STATUS_LABEL_MAP.get(task.status, task.status)
             progress = STATUS_PROGRESS_MAP.get(task.status, 0)
+            raw_progress = extra_data.get("progress")
+            if isinstance(raw_progress, (int, float)):
+                progress = max(0, min(100, int(raw_progress)))
+            if (
+                task.task_type == "impersonation"
+                and extra_data.get("official_domain_resolution_status") == "pending"
+            ):
+                status_label = "等待官方域名解析"
+                progress = 0
             
             # 对于仿冒域名检测任务，使用 detectionSource；对于恶意性检测任务，使用 dataSource
             data_source_type = ""
@@ -529,6 +899,8 @@ async def list_tasks(
             
             data_source_label = DATA_SOURCE_LABEL_MAP.get(data_source_type, "上传文件")
             data_source_payload = {"type": data_source_label}
+            if task.task_type == "impersonation" and extra_data.get("queryName"):
+                data_source_payload["queryName"] = extra_data.get("queryName")
             
             if data_source_type == "upload":
                 if task.task_type == "impersonation":
@@ -552,6 +924,9 @@ async def list_tasks(
                 date_range = extra_data.get("dateRange") or []
                 if isinstance(date_range, list) and len(date_range) >= 2:
                     data_source_payload["dateRange"] = [str(date_range[0]), str(date_range[1])]
+            elif data_source_type == "manualInput":
+                manual_stats = extra_data.get("manual_domain_stats") or {}
+                data_source_payload["domainCount"] = manual_stats.get("valid_count") or len(extra_data.get("manual_domains") or [])
             items.append({
                 "id": task.task_id,
                 "createdAt": task.created_at.isoformat() if task.created_at else "",
@@ -644,7 +1019,7 @@ async def get_task_result_json(task_id: str, request: Request):
                     results_df = pd.read_excel(excel_file, sheet_name='检测结果')
                 except Exception:
                     # 如果没有检测结果工作表，创建一个空的DataFrame
-                    results_df = pd.DataFrame(columns=["钓鱼域名", "目标域名", "公司名称", "相似度", "匹配类型"])
+                    results_df = pd.DataFrame(columns=["钓鱼域名", "官方域名", "公司名称", "相似度", "匹配类型"])
 
                 # 读取统计信息表
                 stats_df = pd.read_excel(excel_file, sheet_name='统计信息')
@@ -660,6 +1035,12 @@ async def get_task_result_json(task_id: str, request: Request):
 
                 # 将DataFrame转换为字典列表
                 results_list = results_df.to_dict('records')
+                for item in results_list:
+                    if "二分类置信度" not in item and "恶意概率" in item:
+                        item["二分类置信度"] = item.get("恶意概率")
+                for item in results_list:
+                    if "官方域名" not in item and "目标域名" in item:
+                        item["官方域名"] = item.get("目标域名")
 
                 # 将统计信息转换为字典
                 statistics_dict = {}
@@ -669,10 +1050,14 @@ async def get_task_result_json(task_id: str, request: Request):
                 # 如果没有钓鱼域名列表，从结果中筛选
                 if not phishing_list:
                     phishing_list = [r for r in results_list if r.get('钓鱼域名')]
+                else:
+                    for item in phishing_list:
+                        if "官方域名" not in item and "目标域名" in item:
+                            item["官方域名"] = item.get("目标域名")
 
                 return JSONResponse(
                     status_code=status.HTTP_200_OK,
-                    content={
+                    content=_json_safe_value({
                         "ok": True,
                         "task_id": task.task_id,
                         "task_type": task.task_type,
@@ -683,7 +1068,7 @@ async def get_task_result_json(task_id: str, request: Request):
                         "result_filename": extra_data.get("result_filename") or f"{task.task_id}_result.xlsx",
                         "total_count": len(results_list),
                         "phishing_count": len(phishing_list),
-                    }
+                    })
                 )
             else:
                 # 恶意性检测结果（原有的逻辑）
@@ -713,10 +1098,18 @@ async def get_task_result_json(task_id: str, request: Request):
                 # 如果没有恶意域名列表，从结果中筛选
                 if not malicious_list:
                     malicious_list = [r for r in results_list if r.get('预测标签') == 1 or r.get('预测结果') == '恶意']
+                else:
+                    for item in malicious_list:
+                        if "二分类置信度" not in item and "恶意概率" in item:
+                            item["二分类置信度"] = item.get("恶意概率")
+
+                attribution_index = _build_attribution_index(extra_data)
+                results_list = _attach_attribution_fields(results_list, attribution_index)
+                malicious_list = _attach_attribution_fields(malicious_list, attribution_index)
 
                 return JSONResponse(
                     status_code=status.HTTP_200_OK,
-                    content={
+                    content=_json_safe_value({
                         "ok": True,
                         "task_id": task.task_id,
                         "task_type": task.task_type,
@@ -727,7 +1120,9 @@ async def get_task_result_json(task_id: str, request: Request):
                         "result_filename": extra_data.get("result_filename") or f"{task.task_id}_result.xlsx",
                         "total_count": len(results_list),
                         "malicious_count": len(malicious_list),
-                    }
+                        "attribution_enabled": bool(extra_data.get("attribution_enabled")),
+                        "attribution_results": extra_data.get("attribution_results") or [],
+                    })
                 )
         except Exception as exc:
             logger.exception("解析结果文件失败: %s", exc)
@@ -774,126 +1169,52 @@ async def download_task_result(task_id: str, request: Request):
 @router.post("/api/impersonation-tasks")
 async def create_impersonation_task(
     request: Request,
-    officialFile: UploadFile = File(...),
-    detectionSource: str = Form(...),
-    detectionFile: Optional[UploadFile] = File(None),
-    detectionDateRange: Optional[str] = Form(None),
+    queryName: str = Form(...),
+    detectionDateRange: str = Form(...),
+    useCustomThreshold: str = Form("false"),
+    threshold: Optional[str] = Form(None),
 ):
     """
     创建仿冒域名检测任务
     
     参数:
-    - officialFile: 官方域名文件（必填，csv/txt/xlsx格式，每行为企业名,域名）
-    - detectionSource: 待检测域名来源 ('upload' 或 'newDomain')
-    - detectionFile: 待检测域名文件（当 detectionSource 为 'upload' 时必填）
-    - detectionDateRange: 日期范围JSON字符串（当 detectionSource 为 'newDomain' 时必填）
+    - queryName: 事件名或单位名
+    - detectionDateRange: 新注册域名日期范围JSON字符串
+    - useCustomThreshold: 是否使用自定义阈值
+    - threshold: 自定义阈值（0-100）
     """
     try:
         logger.info("收到仿冒域名检测任务创建请求")
         created_by_user_id: Optional[int] = _extract_user_id(request)
         uploaded_by_header = request.headers.get("X-User-Name") or request.headers.get("X-User")
         logger.info(f"用户ID: {created_by_user_id}, 上传者: {uploaded_by_header}")
-        
-        # 验证参数
-        if detectionSource not in ["upload", "newDomain"]:
+
+        query_name = queryName.strip()
+        if not query_name:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="detectionSource must be 'upload' or 'newDomain'"
+                detail="queryName is required"
             )
-        if detectionSource == "upload" and detectionFile is None:
+        if not detectionDateRange or detectionDateRange.strip() == "":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="detectionFile is required when detectionSource is 'upload'"
+                detail="detectionDateRange is required"
             )
-        if detectionSource == "newDomain" and (not detectionDateRange or detectionDateRange.strip() == ""):
+        date_range_parsed = _parse_detection_date_range_payload(detectionDateRange)
+        start_date = _parse_date_string(date_range_parsed[0])
+        end_date = _parse_date_string(date_range_parsed[1])
+        availability = _inspect_daily_domain_availability(start_date, end_date)
+        if not availability["available"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="detectionDateRange is required when detectionSource is 'newDomain'"
+                detail={
+                    "message": "所选日期范围内暂无可用的新注册域名数据，请重新选择日期",
+                    **availability,
+                },
             )
-        
-        # 验证官方文件类型
-        official_file_ext = officialFile.filename.split(".")[-1].lower() if officialFile.filename else ""
-        allowed_extensions = ["csv", "txt", "xlsx"]
-        if official_file_ext not in allowed_extensions:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Official file type not allowed. Only {', '.join(allowed_extensions)} are supported"
-            )
-        
-        # 读取官方文件内容
-        official_file_content = await officialFile.read()
-        official_file_size = len(official_file_content)
-        max_size = 5 * 1024 * 1024  # 5MB
-        if official_file_size > max_size:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Official file size exceeds maximum allowed size of {max_size / 1024 / 1024}MB"
-            )
-        
-        # 上传官方文件到MinIO
-        official_file_key = upload_file_content_to_minio(
-            official_file_content,
-            officialFile.filename or "unknown",
-            officialFile.content_type
-        )
-        
-        # 处理待检测域名
-        detection_file_key = None
-        detection_file_content = None
-        detection_domains = None
-        missing_dates = []
-        
-        if detectionSource == "upload":
-            # 验证待检测文件类型
-            if detectionFile is None:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="detectionFile is required"
-                )
-            detection_file_ext = detectionFile.filename.split(".")[-1].lower() if detectionFile.filename else ""
-            if detection_file_ext not in allowed_extensions:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Detection file type not allowed. Only {', '.join(allowed_extensions)} are supported"
-                )
-            
-            # 读取待检测文件内容
-            detection_file_content = await detectionFile.read()
-            detection_file_size = len(detection_file_content)
-            if detection_file_size > max_size:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Detection file size exceeds maximum allowed size of {max_size / 1024 / 1024}MB"
-                )
-            
-            # 上传待检测文件到MinIO
-            detection_file_key = upload_file_content_to_minio(
-                detection_file_content,
-                detectionFile.filename or "unknown",
-                detectionFile.content_type
-            )
-        else:  # newDomain
-            # 解析日期范围
-            try:
-                date_range_parsed = json.loads(detectionDateRange)
-                logger.info(f"解析日期范围: {date_range_parsed}")
-            except json.JSONDecodeError as e:
-                logger.error(f"日期范围JSON解析失败: {e}, 原始数据: {detectionDateRange}")
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid detectionDateRange format"
-                )
-            
-            # 收集每日数据
-            logger.info("开始收集每日域名数据")
-            detection_domains, missing_dates = _collect_daily_domains(date_range_parsed)
-            logger.info(f"收集到域名数量: {len(detection_domains) if detection_domains else 0}, 缺失日期: {missing_dates}")
-            
-            if not detection_domains:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="指定日期范围内没有找到域名数据"
-                )
+        similarity_threshold, threshold_meta = _parse_similarity_threshold(useCustomThreshold, threshold)
+        official_domains = resolve_official_domains(query_name)
+        official_domain_resolution_status = "resolved" if official_domains else "pending"
         
         # 生成任务ID
         task_id = f"T{int(datetime.utcnow().timestamp())}"
@@ -911,54 +1232,27 @@ async def create_impersonation_task(
                 )
             logger.info(f"找到模型记录: id={model_record.id}, name={model_record.name}")
             
-            # 保存官方文件记录
-            official_file_record = StoredFile(
-                bucket=MINIO_BUCKET,
-                object_key=official_file_key,
-                filename=officialFile.filename,
-                content_type=officialFile.content_type,
-                size=official_file_size,
-                uploaded_by=uploaded_by_header,
-                metadata_json={"source": "impersonation_task", "role": "official"},
-            )
-            db.add(official_file_record)
-            
-            # 保存待检测文件记录（如果有）
-            detection_file_record = None
-            if detection_file_key:
-                detection_file_record = StoredFile(
-                    bucket=MINIO_BUCKET,
-                    object_key=detection_file_key,
-                    filename=detectionFile.filename if detectionFile else None,
-                    content_type=detectionFile.content_type if detectionFile else None,
-                    size=len(detection_file_content) if detection_file_content else None,
-                    uploaded_by=uploaded_by_header,
-                    metadata_json={"source": "impersonation_task", "role": "detection"},
-                )
-                db.add(detection_file_record)
-            
-            db.flush()
-            
             # 构建extra字段
             extra_data = {
-                "detectionSource": detectionSource,
-                "official_file_id": official_file_record.id,
-                "official_file_object_key": official_file_key,
+                "detectionSource": "newDomain",
+                "queryName": query_name,
+                "dateRange": date_range_parsed,
+                "official_domains": official_domains,
+                "official_domain_resolution_status": official_domain_resolution_status,
+                "official_domain_resolution_pending": not bool(official_domains),
+                "threshold_policy": "custom" if similarity_threshold is not None else "adaptive",
+                "similarity_threshold": similarity_threshold,
+                "threshold_percent": threshold_meta["threshold_percent"],
             }
-            if detection_file_record:
-                extra_data["detection_file_id"] = detection_file_record.id
-                extra_data["detection_file_object_key"] = detection_file_key
-            if detectionSource == "newDomain":
-                extra_data["dateRange"] = date_range_parsed
-                if missing_dates:
-                    extra_data["missing_dates"] = missing_dates
+            if not official_domains:
+                extra_data["official_domain_resolution_message"] = "官方域名检索能力尚未接入或未检索到官方域名"
             
             # 创建任务
             task = Task(
                 task_id=task_id,
                 task_type="impersonation",
                 model_id=model_record.id,
-                file_id=official_file_record.id,
+                file_id=None,
                 extra=extra_data,
                 status="pending",
                 created_by=created_by_user_id,
@@ -967,31 +1261,33 @@ async def create_impersonation_task(
             db.commit()
             db.refresh(task)
             
-            # 通过 Celery 异步执行检测，接口仅负责创建任务并入队
-            try:
-                dispatch_impersonation_task(task.task_id)
-            except Exception as exc:
-                # 处理入队失败：避免任务长期停留在 pending（DB 已创建但 Redis 未入队）
-                logger.exception("enqueue impersonation task failed: %s", exc)
-                task.status = "failed"
-                extra_data_failed = dict(task.extra or {})
-                extra_data_failed["error"] = str(exc)
-                extra_data_failed["enqueue_failed"] = True
-                extra_data_failed["enqueue_failed_at"] = datetime.utcnow().isoformat()
-                task.extra = extra_data_failed
-                db.commit()
-                db.refresh(task)
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to enqueue task",
-                ) from exc
+            if official_domains:
+                # 通过 Celery 异步执行检测，接口仅负责创建任务并入队
+                try:
+                    dispatch_impersonation_task(task.task_id)
+                except Exception as exc:
+                    # 处理入队失败：避免任务长期停留在 pending（DB 已创建但 Redis 未入队）
+                    logger.exception("enqueue impersonation task failed: %s", exc)
+                    task.status = "failed"
+                    extra_data_failed = dict(task.extra or {})
+                    extra_data_failed["error"] = str(exc)
+                    extra_data_failed["enqueue_failed"] = True
+                    extra_data_failed["enqueue_failed_at"] = datetime.utcnow().isoformat()
+                    task.extra = extra_data_failed
+                    db.commit()
+                    db.refresh(task)
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Failed to enqueue task",
+                    ) from exc
             
             return JSONResponse(
                 status_code=status.HTTP_200_OK,
                 content={
                     "ok": True,
                     "task_id": task.task_id,
-                    "status": "pending"
+                    "status": "pending",
+                    "officialDomainStatus": official_domain_resolution_status,
                 }
             )
         except HTTPException:

@@ -1,6 +1,5 @@
 import type { UserInfo } from '~@/api/common/user'
 import type { MenuData } from '~@/layouts/basic-layout/typing'
-import { logoutApi } from '~@/api/common/login'
 import { getRouteMenusApi } from '~@/api/common/menu'
 import { getUserInfoApi } from '~@/api/common/user'
 import { rootRoute } from '~@/router/constant'
@@ -65,18 +64,16 @@ export const useUserStore = defineStore('user', () => {
   }
 
   const logout = async () => {
-    // 退出登录
-    // 1. 清空用户信息
-    try {
-      await logoutApi()
-    }
-    finally {
-      token.value = null
-      userId.value = null
-      userInfo.value = undefined
-      routerData.value = undefined
-      menuData.value = []
-    }
+    // 当前认证使用无状态 JWT，服务端没有需要销毁的会话；退出时清理本地状态即可
+    clearLocalSession()
+  }
+
+  const clearLocalSession = () => {
+    token.value = null
+    userId.value = null
+    userInfo.value = undefined
+    routerData.value = undefined
+    menuData.value = []
   }
 
   return {
@@ -84,6 +81,7 @@ export const useUserStore = defineStore('user', () => {
     roles,
     getUserInfo,
     logout,
+    clearLocalSession,
     routerData,
     menuData,
     generateDynamicRoutes,

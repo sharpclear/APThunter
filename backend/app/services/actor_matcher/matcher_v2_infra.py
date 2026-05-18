@@ -253,7 +253,9 @@ def _domain_profile_score(
         domain_profile.get("sld_patterns")
         or domain_profile.get("sld_structure_patterns")
     )
-    structure_score = 1.0 if sld_pattern and sld_pattern in actor_patterns else 0.0
+    structure_score = 0.0
+    if sld_pattern and sld_pattern in actor_patterns:
+        structure_score = _clamp_score(_uniqueness_weight(global_stats, f"domain:{sld_pattern}"))
 
     org_name_tokens = _tokenize_text(actor.get("organization_name"))
     label_hit_score = 1.0 if features.sld and features.sld in org_name_tokens else 0.0
@@ -296,9 +298,10 @@ def _domain_profile_score(
             description="命中组织域名画像中的相对独特关键词",
         )
     if structure_score > 0:
+        structure_strength = "medium" if structure_score >= 0.45 else "weak"
         _add_evidence(
             evidence,
-            strength="medium",
+            strength=structure_strength,
             category="domain",
             field="sld_structure",
             values=[sld_pattern],

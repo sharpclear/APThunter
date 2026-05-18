@@ -11,12 +11,6 @@ defineOptions({
 
 const userId = useUserId()
 
-// 文件上传控制
-const fileRules = {
-  maxSize: 5 * 1024 * 1024, // 5MB
-  accept: '.csv,.txt,.xlsx',
-}
-
 // 新注册域名日期范围：开始日期 >= 2024-09-01，窗口最多 30 天
 const MIN_START_DATE = dayjs('2024-09-01')
 const detectionDomainDateRange = ref<[string, string] | null>(null)
@@ -67,89 +61,67 @@ function onDetOpenChange(open: boolean) {
 }
 
 // 仿冒域名检测表单
-const officialDomainFile = ref<File | null>(null)
-const officialDomainUploadLoading = ref(false)
-const detectionDomainSource = ref<'upload' | 'newDomain'>('upload')
-const detectionDomainFile = ref<File | null>(null)
-const detectionDomainUploadLoading = ref(false)
+const queryName = ref('')
 const impersonationSubmitLoading = ref(false)
+const useCustomThreshold = ref(false)
+const threshold = ref(60)
 
 const API_BASE = getApiBase()
 
-function beforeOfficialDomainUpload(file: File) {
-  const isValid = file.size <= fileRules.maxSize && fileRules.accept.split(',').includes(`.${file.name.split('.').pop()!}`)
-  if (!isValid) {
-    message.error('文件不符合要求，仅支持csv/txt/xlsx格式且不超过5MB')
-  }
-  return false // 阻止自动上传，手动处理
-}
-function handleOfficialDomainUpload(info: any) {
-  const { file } = info
-  if (file.status === 'removed') {
-    officialDomainFile.value = null
-    return
-  }
-  let originalFile: File | null = null
-  if (file.originFileObj && file.originFileObj instanceof File) {
-    originalFile = file.originFileObj
-  } else if (file.raw && file.raw instanceof File) {
-    originalFile = file.raw
-  } else if (file instanceof File) {
-    originalFile = file
-  }
-  if (originalFile) {
-    officialDomainFile.value = originalFile
-  } else {
-    officialDomainFile.value = null
-    message.error('无法获取有效的文件对象')
-  }
+function buildHeaders(extra: Record<string, string> = {}) {
+  const headers: Record<string, string> = { ...extra }
+  if (userId.value)
+    headers['X-User-Id'] = userId.value
+  return headers
 }
 
-function beforeDetectionDomainUpload(file: File) {
-  const isValid = file.size <= fileRules.maxSize && fileRules.accept.split(',').includes(`.${file.name.split('.').pop()!}`)
-  if (!isValid) {
-    message.error('文件不符合要求，仅支持csv/txt/xlsx格式且不超过5MB')
-  }
-  return false // 阻止自动上传，手动处理
+function formatDateList(dates: string[]) {
+  if (!dates.length)
+    return ''
+  const visible = dates.slice(0, 5).join('、')
+  return dates.length > 5 ? `${visible} 等 ${dates.length} 天` : visible
 }
-function handleDetectionDomainUpload(info: any) {
-  const { file } = info
-  if (file.status === 'removed') {
-    detectionDomainFile.value = null
-    return
+
+async function ensureNewDomainDataAvailable(range: [string, string]) {
+  const params = new URLSearchParams({
+    startDate: range[0],
+    endDate: range[1],
+  })
+  const resp = await fetch(`${API_BASE}/new-domain-data/availability?${params.toString()}`, {
+    method: 'GET',
+    headers: buildHeaders(),
+  })
+  const json = await resp.json().catch(() => null)
+  if (!resp.ok) {
+    const detail = json?.detail
+    const detailMessage = typeof detail === 'object' ? detail?.message : detail
+    throw new Error(detailMessage || json?.message || '检查新注册域名数据失败')
   }
-  let originalFile: File | null = null
-  if (file.originFileObj && file.originFileObj instanceof File) {
-    originalFile = file.originFileObj
-  } else if (file.raw && file.raw instanceof File) {
-    originalFile = file.raw
-  } else if (file instanceof File) {
-    originalFile = file
+  if (!json.available) {
+    message.warning(json.message || '所选日期范围内暂无可用的新注册域名数据，请重新选择日期')
+    return false
   }
-  if (originalFile) {
-    detectionDomainFile.value = originalFile
-  } else {
-    detectionDomainFile.value = null
-    message.error('无法获取有效的文件对象')
+  const unavailableDates = [...(json.missingDates || []), ...(json.invalidDates || [])]
+  if (unavailableDates.length > 0) {
+    message.warning(`部分日期暂无可用数据：${formatDateList(unavailableDates)}，将仅检测可用日期。`)
   }
+  return true
 }
+
 function resetImpersonationForm() {
-  officialDomainFile.value = null
-  detectionDomainSource.value = 'upload'
-  detectionDomainFile.value = null
+  queryName.value = ''
   detectionDomainDateRange.value = null
+  useCustomThreshold.value = false
+  threshold.value = 60
 }
 async function handleImpersonationSubmit() {
-  if (!officialDomainFile.value) {
-    return message.warning('请上传被仿冒官方域名文件')
+  if (!queryName.value.trim()) {
+    return message.warning('请输入事件名或单位名')
   }
-  if (detectionDomainSource.value === 'upload' && !detectionDomainFile.value) {
-    return message.warning('请上传待检测域名文件')
-  }
-  if (detectionDomainSource.value === 'newDomain' && !detectionDomainDateRange.value) {
+  if (!detectionDomainDateRange.value) {
     return message.warning('请选择日期范围')
   }
-  if (detectionDomainSource.value === 'newDomain' && detectionDomainDateRange.value) {
+  if (detectionDomainDateRange.value) {
     const [start, end] = detectionDomainDateRange.value
     const days = dayjs(end).startOf('day').diff(dayjs(start).startOf('day'), 'day')
     if (days > 30) {
@@ -158,41 +130,22 @@ async function handleImpersonationSubmit() {
   }
   impersonationSubmitLoading.value = true
   try {
-    // 验证文件对象
-    if (!(officialDomainFile.value instanceof File)) {
-      message.error('官方域名文件对象无效，请重新选择文件')
-      throw new Error('官方域名文件对象无效')
-    }
-    
+    const available = await ensureNewDomainDataAvailable(detectionDomainDateRange.value)
+    if (!available)
+      return
+
     const fd = new FormData()
-    fd.append('officialFile', officialDomainFile.value, officialDomainFile.value.name)
-    fd.append('detectionSource', detectionDomainSource.value)
+    fd.append('queryName', queryName.value.trim())
+    fd.append('detectionDateRange', JSON.stringify(detectionDomainDateRange.value || []))
+    fd.append('useCustomThreshold', String(useCustomThreshold.value))
+    if (useCustomThreshold.value)
+      fd.append('threshold', String(threshold.value))
     
-    if (detectionDomainSource.value === 'upload') {
-      if (!detectionDomainFile.value) {
-        return message.warning('请上传待检测域名文件')
-      }
-      if (!(detectionDomainFile.value instanceof File)) {
-        message.error('待检测域名文件对象无效，请重新选择文件')
-        throw new Error('待检测域名文件对象无效')
-      }
-      fd.append('detectionFile', detectionDomainFile.value, detectionDomainFile.value.name)
-    } else {
-      if (!detectionDomainDateRange.value) {
-        return message.warning('请选择日期范围')
-      }
-      fd.append('detectionDateRange', JSON.stringify(detectionDomainDateRange.value || []))
-    }
-    
-    const headers: HeadersInit = {}
-    if (userId.value) {
-      headers['X-User-Id'] = userId.value
-    }
     // 注意：不要设置 Content-Type，让浏览器自动设置 multipart/form-data 边界
     const resp = await fetch(`${API_BASE}/impersonation-tasks`, { 
       method: 'POST', 
       body: fd,
-      headers,
+      headers: buildHeaders(),
     })
     if (!resp.ok) {
       let errorText = ''
@@ -207,7 +160,10 @@ async function handleImpersonationSubmit() {
       throw new Error(`提交失败: ${resp.status} ${errorText}`)
     }
     const json = await resp.json()
-    message.success(`仿冒域名检测任务已提交！ task: ${json.task_id || ''}`)
+    if (json.officialDomainStatus === 'pending')
+      message.success(`任务参数已保存，等待官方域名检索能力接入。task: ${json.task_id || ''}`)
+    else
+      message.success(`仿冒域名检测任务已提交！ task: ${json.task_id || ''}`)
     resetImpersonationForm()
   }
   catch (e: any) {
@@ -230,7 +186,7 @@ async function handleImpersonationSubmit() {
               创建仿冒域名检测任务
             </div>
             <div class="card-subtitle">
-              上传官方域名清单与待检测域名，系统将进行相似域名分析。
+              输入事件名或单位名并选择新注册域名时间窗，系统将基于检索到的官方域名进行相似域名分析。
             </div>
             <div class="header-tags">
               <span class="mini-tag">相似域名</span>
@@ -242,71 +198,23 @@ async function handleImpersonationSubmit() {
           <a-form layout="vertical" class="task-form">
             <div class="form-section">
               <div class="section-title">
-                步骤 1：上传官方域名清单
+                步骤 1：输入事件名或单位名
               </div>
-              <a-form-item label="官方域名" required>
-                <a-upload-dragger
-                  :before-upload="beforeOfficialDomainUpload"
-                  :show-upload-list="false"
-                  accept=".csv,.txt,.xlsx"
-                  :disabled="officialDomainUploadLoading"
-                  :custom-request="() => {}"
-                  class="upload-card"
-                  @change="handleOfficialDomainUpload"
-                >
-                  <p class="ant-upload-drag-icon">
-                    <i class="iconfont icon-upload-cloud upload-icon" />
-                  </p>
-                  <p class="upload-title">
-                    {{ officialDomainFile ? officialDomainFile.name : '上传官方域名清单' }}
-                  </p>
-                  <p class="upload-subtitle">
-                    用于建立基准特征，建议包含权威域名
-                  </p>
-                </a-upload-dragger>
+              <a-form-item label="事件名或单位名" required>
+                <a-input
+                  v-model:value="queryName"
+                  allow-clear
+                  placeholder="请输入事件名或单位名"
+                  size="large"
+                />
               </a-form-item>
             </div>
 
             <div class="form-section">
               <div class="section-title">
-                步骤 2：选择待检测域名来源
+                步骤 2：选择新注册域名日期范围
               </div>
-              <a-form-item label="待检测域名来源" required>
-                <a-radio-group v-model:value="detectionDomainSource" button-style="solid">
-                  <a-radio-button value="upload">
-                    上传文件
-                  </a-radio-button>
-                  <a-radio-button value="newDomain">
-                    选择新注册域名
-                  </a-radio-button>
-                </a-radio-group>
-              </a-form-item>
-              <a-form-item
-                v-if="detectionDomainSource === 'upload'"
-                label="待检测域名文件"
-                required
-              >
-                <a-upload-dragger
-                  :before-upload="beforeDetectionDomainUpload"
-                  :show-upload-list="false"
-                  accept=".csv,.txt,.xlsx"
-                  :disabled="detectionDomainUploadLoading"
-                  :custom-request="() => {}"
-                  class="upload-card"
-                  @change="handleDetectionDomainUpload"
-                >
-                  <p class="ant-upload-drag-icon">
-                    <i class="iconfont icon-upload-cloud upload-icon" />
-                  </p>
-                  <p class="upload-title">
-                    {{ detectionDomainFile ? detectionDomainFile.name : '上传待检测域名文件' }}
-                  </p>
-                  <p class="upload-subtitle">
-                    系统将与官方域名进行相似性分析
-                  </p>
-                </a-upload-dragger>
-              </a-form-item>
-              <a-form-item v-if="detectionDomainSource === 'newDomain'" label="新注册域名数据日期范围" required>
+              <a-form-item label="新注册域名数据日期范围" required>
                 <a-range-picker
                   v-model:value="detectionDomainDateRange"
                   :disabled-date="disabledNewDomainDate"
@@ -316,6 +224,26 @@ async function handleImpersonationSubmit() {
                   @calendar-change="onDetCalendarChange"
                   @open-change="onDetOpenChange"
                 />
+              </a-form-item>
+            </div>
+
+            <div class="form-section">
+              <div class="section-title">
+                步骤 3：设置相似度阈值
+              </div>
+              <a-form-item label="阈值策略">
+                <a-checkbox v-model:checked="useCustomThreshold">
+                  自定义相似度阈值
+                </a-checkbox>
+                <div v-if="!useCustomThreshold" class="threshold-tip">
+                  默认使用自适应阈值，系统会根据官方域名关键部分长度自动调整判定标准。
+                </div>
+              </a-form-item>
+              <a-form-item v-if="useCustomThreshold" label="相似度阈值（0-100）">
+                <div class="threshold-row">
+                  <a-slider v-model:value="threshold" class="threshold-slider" :min="0" :max="100" />
+                  <span class="threshold-value">{{ threshold }}</span>
+                </div>
               </a-form-item>
             </div>
 
@@ -340,8 +268,8 @@ async function handleImpersonationSubmit() {
         <div class="side-panel">
           <a-card title="填写说明" class="guide-card" :bordered="false">
             <ul class="guide-list">
-              <li><span class="dot">1</span><span>官方域名用于建立基准特征。</span></li>
-              <li><span class="dot">2</span><span>待检测域名可来自上传文件或新注册域名时间窗。</span></li>
+              <li><span class="dot">1</span><span>事件名或单位名将用于检索相关官方域名。</span></li>
+              <li><span class="dot">2</span><span>待检测域名来自所选时间窗内的新注册域名。</span></li>
               <li><span class="dot">3</span><span>日期范围最多 30 天，避免任务过大。</span></li>
             </ul>
           </a-card>
@@ -470,6 +398,35 @@ async function handleImpersonationSubmit() {
   margin-bottom: 0;
 }
 
+.threshold-tip {
+  margin-top: 8px;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.threshold-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.threshold-slider {
+  flex: 1;
+}
+
+.threshold-value {
+  min-width: 44px;
+  height: 28px;
+  line-height: 28px;
+  text-align: center;
+  border-radius: 6px;
+  color: #1f2937;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  font-weight: 600;
+}
+
 .action-footer {
   margin-top: auto;
   border-top: 1px solid #e5e7eb;
@@ -523,5 +480,3 @@ async function handleImpersonationSubmit() {
   margin-top: 4px;
 }
 </style>
-
-

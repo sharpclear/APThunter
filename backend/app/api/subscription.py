@@ -93,6 +93,7 @@ from app.db.base import Base
 from app.core.config import MINIO_BUCKET, IMPERSONATION_MODEL_NAME
 from sqlalchemy import Column, BigInteger, String, DateTime, ForeignKey, Enum as SqlEnum, Integer, JSON, text, Boolean
 from app.services.notification.alert_notifier import build_alert_data_dict, dispatch_alert_notifications
+from app.services.notification.email_service import send_impersonation_result_email
 from app.services.actor_matcher import (
     AlertResultStorageError,
     build_alert_result_json,
@@ -677,6 +678,42 @@ def execute_subscription(subscription_id: str):
         })
         db.commit()
         db.refresh(task)
+
+        if model.model_category == "impersonation":
+            try:
+                user = db.query(User).filter(User.id == subscription.user_id).first()
+                user_email = str(user.email or "").strip() if user else ""
+                if user_email:
+                    phishing_count_for_email = int(
+                        statistics.get("phishing", 0)
+                        or statistics.get("钓鱼域名数量", 0)
+                        or statistics.get("检测到的钓鱼域名数量", 0)
+                        or 0
+                    )
+                    total_count_for_email = int(
+                        statistics.get("total", 0)
+                        or statistics.get("总域名数", 0)
+                        or statistics.get("检测域名总数", 0)
+                        or statistics.get("总数量", 0)
+                        or 0
+                    )
+                    send_impersonation_result_email(
+                        user_email=user_email,
+                        model_name=model.name,
+                        result_filename=result_filename,
+                        excel_content=excel_content,
+                        detected_count=total_count_for_email,
+                        phishing_count=phishing_count_for_email,
+                        created_at=task.extra.get("completed_at") or beijing_now().isoformat(),
+                    )
+                else:
+                    logger.warning(
+                        "订阅 %s 对应用户 %s 未配置邮箱，跳过仿冒域名检测结果邮件",
+                        subscription_id,
+                        subscription.user_id,
+                    )
+            except Exception:
+                logger.exception("发送订阅仿冒域名检测结果邮件异常（已吞掉，不影响订阅主流程）")
         
         # 检查是否需要创建预警
         high_risk_count = 0

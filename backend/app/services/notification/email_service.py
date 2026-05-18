@@ -3,7 +3,6 @@
 """
 from __future__ import annotations
 
-import io
 import logging
 import os
 import smtplib
@@ -13,6 +12,8 @@ from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
+
+from app.core.config import ALERT_EMAIL_ENABLED
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -71,20 +72,61 @@ SMTP_FROM = os.getenv("SMTP_FROM", "noreply@example.com")
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
 
 
+def _smtp_configured() -> bool:
+    return bool(SMTP_USER and SMTP_PASSWORD)
+
+
+def _build_message(*, user_email: str, subject: str, body: str) -> MIMEMultipart:
+    msg = MIMEMultipart()
+    msg["From"] = SMTP_FROM
+    msg["To"] = user_email
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain", "utf-8"))
+    return msg
+
+
+def _attach_bytes(
+    msg: MIMEMultipart,
+    *,
+    content: bytes,
+    filename: str,
+    maintype: str = "application",
+    subtype: str = "octet-stream",
+) -> None:
+    attachment = MIMEBase(maintype, subtype)
+    attachment.set_payload(content)
+    encoders.encode_base64(attachment)
+    attachment.add_header(
+        "Content-Disposition",
+        f"attachment; filename*=utf-8''{filename}",
+    )
+    msg.attach(attachment)
+
+
+def _send_message(msg: MIMEMultipart) -> None:
+    if SMTP_PORT == 465:
+        server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT)
+    else:
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+        if SMTP_USE_TLS:
+            server.starttls()
+
+    try:
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.send_message(msg)
+    finally:
+        server.quit()
+
+
 def send_alert_email(user_email: str, alert_data: dict, domains_csv_content: Optional[bytes]):
     """
     发送预警邮件（正文摘要+CSV附件）
     """
-    if not SMTP_USER or not SMTP_PASSWORD:
+    if not _smtp_configured():
         logger.warning("SMTP配置不完整，跳过邮件发送")
         return
 
     try:
-        msg = MIMEMultipart()
-        msg["From"] = SMTP_FROM
-        msg["To"] = user_email
-        msg["Subject"] = f"域名检测预警 - {alert_data.get('model_name', '未知模型')}"
-
         all_domains = alert_data.get("high_risk_domains", [])
         domain_type = "恶意域名" if alert_data.get("task_type") == "malicious" else "仿冒域名"
 
@@ -112,34 +154,78 @@ def send_alert_email(user_email: str, alert_data: dict, domains_csv_content: Opt
 
 此邮件由系统自动发送，请勿回复。
         """
-
-        msg.attach(MIMEText(body, "plain", "utf-8"))
+        msg = _build_message(
+            user_email=user_email,
+            subject=f"域名检测预警 - {alert_data.get('model_name', '未知模型')}",
+            body=body,
+        )
 
         if domains_csv_content:
-            attachment = MIMEBase("application", "octet-stream")
-            attachment.set_payload(domains_csv_content)
-            encoders.encode_base64(attachment)
-
             task_type_label = "malicious" if alert_data.get("task_type") == "malicious" else "phishing"
             timestamp = beijing_now().strftime("%Y%m%d_%H%M%S")
             filename = f"{task_type_label}_domains_{timestamp}.csv"
-            attachment.add_header(
-                "Content-Disposition",
-                f"attachment; filename*=utf-8''{filename}",
+            _attach_bytes(
+                msg,
+                content=domains_csv_content,
+                filename=filename,
             )
-            msg.attach(attachment)
 
-        if SMTP_PORT == 465:
-            server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT)
-        else:
-            server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
-            if SMTP_USE_TLS:
-                server.starttls()
-
-        server.login(SMTP_USER, SMTP_PASSWORD)
-        server.send_message(msg)
-        server.quit()
+        _send_message(msg)
 
         logger.info(f"预警邮件已发送至: {user_email}，包含 {len(all_domains)} 个{domain_type}")
     except Exception as e:
         logger.exception(f"发送预警邮件失败: {e}")
+
+
+def send_impersonation_result_email(
+    *,
+    user_email: str,
+    model_name: str,
+    result_filename: str,
+    excel_content: bytes,
+    detected_count: int,
+    phishing_count: int,
+    created_at: str,
+) -> None:
+    """
+    发送订阅仿冒域名检测结果邮件，附件即任务结果 Excel 本体。
+    """
+    if not ALERT_EMAIL_ENABLED:
+        logger.info("ALERT_EMAIL_ENABLED=false，跳过仿冒域名检测结果邮件发送")
+        return
+    if not _smtp_configured():
+        logger.warning("SMTP配置不完整，跳过仿冒域名检测结果邮件发送")
+        return
+
+    try:
+        body = f"""您好，
+
+您的订阅仿冒域名检测任务已完成，结果如下：
+
+模型名称：{model_name or '未知'}
+任务类型：仿冒域名检测
+检测域名总数：{detected_count}
+检测到的仿冒域名数量：{phishing_count}
+检测时间：{created_at}
+
+完整检测结果请查看本邮件附件。附件内容与“我的任务”页面下载的 Excel 文件一致。
+
+此邮件由系统自动发送，请勿回复。
+        """
+        msg = _build_message(
+            user_email=user_email,
+            subject=f"仿冒域名检测结果 - {model_name or '未知模型'}",
+            body=body,
+        )
+        _attach_bytes(
+            msg,
+            content=excel_content,
+            filename=result_filename,
+            subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+        _send_message(msg)
+
+        logger.info("仿冒域名检测结果邮件已发送至: %s", user_email)
+    except Exception as e:
+        logger.exception("发送仿冒域名检测结果邮件失败: %s", e)

@@ -17,7 +17,6 @@ import numpy as np
 import pandas as pd
 import joblib
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
@@ -259,9 +258,9 @@ def train_model_task(task_id: str, training_data_file_id: int, model_name: str, 
                        {"task_id": task_id})
             conn.commit()
         
-        # 7. 训练模型（使用RandomForest）
+        # 7. 训练模型（固定使用 SVM/SVC）
         logger.info(f"任务 {task_id}: 开始训练模型")
-        model = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
+        model = SVC(kernel="rbf", probability=True, random_state=42)
         model.fit(X_train_scaled, y_train)
         
         # 更新进度 85%

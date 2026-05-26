@@ -13,8 +13,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
 
-from app.core.config import ALERT_EMAIL_ENABLED
-
 logger = logging.getLogger("uvicorn.error")
 
 BEIJING_TZ = timezone(timedelta(hours=8))
@@ -118,9 +116,9 @@ def _send_message(msg: MIMEMultipart) -> None:
         server.quit()
 
 
-def send_alert_email(user_email: str, alert_data: dict, domains_csv_content: Optional[bytes]):
+def send_alert_email(user_email: str, alert_data: dict, domains_attachment_content: Optional[bytes]):
     """
-    发送预警邮件（正文摘要+CSV附件）
+    发送预警邮件（正文摘要+Excel附件）
     """
     if not _smtp_configured():
         logger.warning("SMTP配置不完整，跳过邮件发送")
@@ -160,14 +158,15 @@ def send_alert_email(user_email: str, alert_data: dict, domains_csv_content: Opt
             body=body,
         )
 
-        if domains_csv_content:
+        if domains_attachment_content:
             task_type_label = "malicious" if alert_data.get("task_type") == "malicious" else "phishing"
             timestamp = beijing_now().strftime("%Y%m%d_%H%M%S")
-            filename = f"{task_type_label}_domains_{timestamp}.csv"
+            filename = f"{task_type_label}_domains_{timestamp}.xlsx"
             _attach_bytes(
                 msg,
-                content=domains_csv_content,
+                content=domains_attachment_content,
                 filename=filename,
+                subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
 
         _send_message(msg)
@@ -175,57 +174,3 @@ def send_alert_email(user_email: str, alert_data: dict, domains_csv_content: Opt
         logger.info(f"预警邮件已发送至: {user_email}，包含 {len(all_domains)} 个{domain_type}")
     except Exception as e:
         logger.exception(f"发送预警邮件失败: {e}")
-
-
-def send_impersonation_result_email(
-    *,
-    user_email: str,
-    model_name: str,
-    result_filename: str,
-    excel_content: bytes,
-    detected_count: int,
-    phishing_count: int,
-    created_at: str,
-) -> None:
-    """
-    发送订阅仿冒域名检测结果邮件，附件即任务结果 Excel 本体。
-    """
-    if not ALERT_EMAIL_ENABLED:
-        logger.info("ALERT_EMAIL_ENABLED=false，跳过仿冒域名检测结果邮件发送")
-        return
-    if not _smtp_configured():
-        logger.warning("SMTP配置不完整，跳过仿冒域名检测结果邮件发送")
-        return
-
-    try:
-        body = f"""您好，
-
-您的订阅仿冒域名检测任务已完成，结果如下：
-
-模型名称：{model_name or '未知'}
-任务类型：仿冒域名检测
-检测域名总数：{detected_count}
-检测到的仿冒域名数量：{phishing_count}
-检测时间：{created_at}
-
-完整检测结果请查看本邮件附件。附件内容与“我的任务”页面下载的 Excel 文件一致。
-
-此邮件由系统自动发送，请勿回复。
-        """
-        msg = _build_message(
-            user_email=user_email,
-            subject=f"仿冒域名检测结果 - {model_name or '未知模型'}",
-            body=body,
-        )
-        _attach_bytes(
-            msg,
-            content=excel_content,
-            filename=result_filename,
-            subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-
-        _send_message(msg)
-
-        logger.info("仿冒域名检测结果邮件已发送至: %s", user_email)
-    except Exception as e:
-        logger.exception("发送仿冒域名检测结果邮件失败: %s", e)

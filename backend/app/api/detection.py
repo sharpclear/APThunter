@@ -1169,16 +1169,18 @@ async def download_task_result(task_id: str, request: Request):
 @router.post("/api/impersonation-tasks")
 async def create_impersonation_task(
     request: Request,
-    queryName: str = Form(...),
+    queryName: Optional[str] = Form(None),
     detectionDateRange: str = Form(...),
     useCustomThreshold: str = Form("false"),
     threshold: Optional[str] = Form(None),
+    officialFile: Optional[UploadFile] = File(None),
 ):
     """
     创建仿冒域名检测任务
     
     参数:
-    - queryName: 事件名或单位名
+    - queryName: 事件名或单位名（首选，当前解析能力为占位）
+    - officialFile: 官方域名文件（当事件名未解析出官方域名时可使用）
     - detectionDateRange: 新注册域名日期范围JSON字符串
     - useCustomThreshold: 是否使用自定义阈值
     - threshold: 自定义阈值（0-100）
@@ -1189,11 +1191,11 @@ async def create_impersonation_task(
         uploaded_by_header = request.headers.get("X-User-Name") or request.headers.get("X-User")
         logger.info(f"用户ID: {created_by_user_id}, 上传者: {uploaded_by_header}")
 
-        query_name = queryName.strip()
-        if not query_name:
+        query_name = (queryName or "").strip()
+        if not query_name and officialFile is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="queryName is required"
+                detail="queryName or officialFile is required"
             )
         if not detectionDateRange or detectionDateRange.strip() == "":
             raise HTTPException(
@@ -1213,8 +1215,41 @@ async def create_impersonation_task(
                 },
             )
         similarity_threshold, threshold_meta = _parse_similarity_threshold(useCustomThreshold, threshold)
-        official_domains = resolve_official_domains(query_name)
+        official_domains = resolve_official_domains(query_name) if query_name else []
         official_domain_resolution_status = "resolved" if official_domains else "pending"
+        official_file_meta = None
+        if officialFile is not None:
+            file_ext = officialFile.filename.split(".")[-1].lower() if officialFile.filename else ""
+            allowed_extensions = ["csv", "txt", "xlsx"]
+            if file_ext not in allowed_extensions:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Official file type not allowed. Only {', '.join(allowed_extensions)} are supported"
+                )
+
+            official_file_content = await officialFile.read()
+            official_file_size = len(official_file_content)
+            max_size = 5 * 1024 * 1024
+            if official_file_size > max_size:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Official file size exceeds maximum allowed size of {max_size / 1024 / 1024}MB"
+                )
+
+            official_file_key = upload_file_content_to_minio(
+                official_file_content,
+                officialFile.filename or "unknown",
+                officialFile.content_type,
+            )
+            official_file_meta = {
+                "bucket": MINIO_BUCKET,
+                "object_key": official_file_key,
+                "filename": officialFile.filename or "unknown",
+                "content_type": officialFile.content_type,
+                "size": official_file_size,
+            }
+            if not official_domains:
+                official_domain_resolution_status = "file_uploaded"
         
         # 生成任务ID
         task_id = f"T{int(datetime.utcnow().timestamp())}"
@@ -1239,20 +1274,42 @@ async def create_impersonation_task(
                 "dateRange": date_range_parsed,
                 "official_domains": official_domains,
                 "official_domain_resolution_status": official_domain_resolution_status,
-                "official_domain_resolution_pending": not bool(official_domains),
+                "official_domain_resolution_pending": not bool(official_domains) and official_file_meta is None,
                 "threshold_policy": "custom" if similarity_threshold is not None else "adaptive",
                 "similarity_threshold": similarity_threshold,
                 "threshold_percent": threshold_meta["threshold_percent"],
             }
-            if not official_domains:
+            file_record = None
+            if official_file_meta:
+                file_record = StoredFile(
+                    bucket=official_file_meta["bucket"],
+                    object_key=official_file_meta["object_key"],
+                    filename=official_file_meta["filename"],
+                    content_type=official_file_meta["content_type"],
+                    size=official_file_meta["size"],
+                    uploaded_by=uploaded_by_header,
+                    metadata_json={
+                        "source": "impersonation_detection",
+                        "role": "official_domains",
+                        "original_filename": official_file_meta["filename"],
+                    },
+                )
+                db.add(file_record)
+                db.flush()
+                extra_data["official_file_bucket"] = official_file_meta["bucket"]
+                extra_data["official_file_object_key"] = official_file_meta["object_key"]
+                extra_data["official_file_filename"] = official_file_meta["filename"]
+            if not official_domains and official_file_meta is None:
                 extra_data["official_domain_resolution_message"] = "官方域名检索能力尚未接入或未检索到官方域名"
+            elif not official_domains and official_file_meta is not None:
+                extra_data["official_domain_resolution_message"] = "已使用上传的官方域名文件"
             
             # 创建任务
             task = Task(
                 task_id=task_id,
                 task_type="impersonation",
                 model_id=model_record.id,
-                file_id=None,
+                file_id=file_record.id if file_record else None,
                 extra=extra_data,
                 status="pending",
                 created_by=created_by_user_id,
@@ -1261,7 +1318,7 @@ async def create_impersonation_task(
             db.commit()
             db.refresh(task)
             
-            if official_domains:
+            if official_domains or official_file_meta is not None:
                 # 通过 Celery 异步执行检测，接口仅负责创建任务并入队
                 try:
                     dispatch_impersonation_task(task.task_id)

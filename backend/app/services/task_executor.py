@@ -387,10 +387,11 @@ def execute_impersonation_task(task_id: str):
 
         official_domains = extra_data.get("official_domains") or []
         official_key = extra_data.get("official_file_object_key")
+        official_bucket = extra_data.get("official_file_bucket") or MINIO_BUCKET
         official_file_content = None
-        official_filename = official_key
+        official_filename = extra_data.get("official_file_filename") or official_key
         if not official_domains and official_key:
-            official_file_content = _download_file_from_minio(official_key, MINIO_BUCKET)
+            official_file_content = _download_file_from_minio(official_key, official_bucket)
             official_domains = read_official_domains_from_file(
                 official_file_content,
                 official_filename,

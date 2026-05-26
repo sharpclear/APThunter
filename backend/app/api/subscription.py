@@ -93,7 +93,6 @@ from app.db.base import Base
 from app.core.config import MINIO_BUCKET, IMPERSONATION_MODEL_NAME
 from sqlalchemy import Column, BigInteger, String, DateTime, ForeignKey, Enum as SqlEnum, Integer, JSON, text, Boolean
 from app.services.notification.alert_notifier import build_alert_data_dict, dispatch_alert_notifications
-from app.services.notification.email_service import send_impersonation_result_email
 from app.services.actor_matcher import (
     AlertResultStorageError,
     build_alert_result_json,
@@ -433,8 +432,8 @@ def _clean_optional_text(value) -> str:
 
 def _extract_impersonation_alert_items(rows) -> List[dict]:
     """
-    从仿冒检测结果 DataFrame 提取飞书/CSV 预警明细。
-    兼容列：钓鱼域名、官方域名/目标域名、公司名称、相似度、匹配类型。
+    从仿冒检测结果 DataFrame 提取飞书/邮件附件预警明细。
+    兼容列：钓鱼域名、官方域名/目标域名、公司名称、相似度、匹配类型、风险等级、最终风险分、命中原因。
     """
     items: List[dict] = []
     seen = set()
@@ -453,6 +452,9 @@ def _extract_impersonation_alert_items(rows) -> List[dict]:
         official_unit_name = _clean_optional_text(row.get("公司名称"))
         similarity = _clean_optional_text(row.get("相似度"))
         match_type = _clean_optional_text(row.get("匹配类型"))
+        risk_level = _clean_optional_text(row.get("风险等级"))
+        final_risk_score = _clean_optional_text(row.get("最终风险分") or row.get("相似度"))
+        hit_reason = _clean_optional_text(row.get("命中原因"))
         dedupe_key = (
             phishing_domain.lower(),
             official_domain.lower(),
@@ -468,9 +470,69 @@ def _extract_impersonation_alert_items(rows) -> List[dict]:
                 "phishing_domain": phishing_domain,
                 "similarity": similarity,
                 "match_type": match_type,
+                "risk_level": risk_level,
+                "final_risk_score": final_risk_score,
+                "hit_reason": hit_reason,
             }
         )
     return items
+
+
+def _build_alert_attachment_excel(
+    *,
+    task_type: str,
+    high_risk_domains: List[str],
+    phishing_alert_items: List[dict],
+) -> bytes:
+    """
+    生成预警邮件附件 Excel。仿冒订阅按产品要求输出固定六列。
+    """
+    import pandas as pd
+
+    columns = ["疑似仿冒域名", "目标域名", "单位名称", "风险等级", "最终风险分", "命中原因"]
+    rows = []
+    if task_type == "impersonation":
+        if phishing_alert_items:
+            for item in phishing_alert_items:
+                rows.append(
+                    {
+                        "疑似仿冒域名": item.get("phishing_domain", ""),
+                        "目标域名": item.get("official_domain", ""),
+                        "单位名称": item.get("official_unit_name", ""),
+                        "风险等级": item.get("risk_level", ""),
+                        "最终风险分": item.get("final_risk_score", ""),
+                        "命中原因": item.get("hit_reason", ""),
+                    }
+                )
+        else:
+            for domain in high_risk_domains:
+                rows.append(
+                    {
+                        "疑似仿冒域名": domain,
+                        "目标域名": "",
+                        "单位名称": "",
+                        "风险等级": "",
+                        "最终风险分": "",
+                        "命中原因": "",
+                    }
+                )
+    else:
+        for domain in high_risk_domains:
+            rows.append(
+                {
+                    "疑似仿冒域名": domain,
+                    "目标域名": "",
+                    "单位名称": "",
+                    "风险等级": "",
+                    "最终风险分": "",
+                    "命中原因": "",
+                }
+            )
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        pd.DataFrame(rows, columns=columns).to_excel(writer, sheet_name="预警域名", index=False)
+    return output.getvalue()
 
 
 def execute_subscription(subscription_id: str):
@@ -679,42 +741,6 @@ def execute_subscription(subscription_id: str):
         db.commit()
         db.refresh(task)
 
-        if model.model_category == "impersonation":
-            try:
-                user = db.query(User).filter(User.id == subscription.user_id).first()
-                user_email = str(user.email or "").strip() if user else ""
-                if user_email:
-                    phishing_count_for_email = int(
-                        statistics.get("phishing", 0)
-                        or statistics.get("钓鱼域名数量", 0)
-                        or statistics.get("检测到的钓鱼域名数量", 0)
-                        or 0
-                    )
-                    total_count_for_email = int(
-                        statistics.get("total", 0)
-                        or statistics.get("总域名数", 0)
-                        or statistics.get("检测域名总数", 0)
-                        or statistics.get("总数量", 0)
-                        or 0
-                    )
-                    send_impersonation_result_email(
-                        user_email=user_email,
-                        model_name=model.name,
-                        result_filename=result_filename,
-                        excel_content=excel_content,
-                        detected_count=total_count_for_email,
-                        phishing_count=phishing_count_for_email,
-                        created_at=task.extra.get("completed_at") or beijing_now().isoformat(),
-                    )
-                else:
-                    logger.warning(
-                        "订阅 %s 对应用户 %s 未配置邮箱，跳过仿冒域名检测结果邮件",
-                        subscription_id,
-                        subscription.user_id,
-                    )
-            except Exception:
-                logger.exception("发送订阅仿冒域名检测结果邮件异常（已吞掉，不影响订阅主流程）")
-        
         # 检查是否需要创建预警
         high_risk_count = 0
         high_risk_domains = []
@@ -935,35 +961,16 @@ def execute_subscription(subscription_id: str):
             
             logger.info(f"创建预警: {alert_id}, {high_risk_count} 个高风险域名，高风险比例: {risk_ratio:.2f}%")
             
-            # 生成CSV文件内容
-            csv_content = None
+            # 生成预警邮件 Excel 附件
+            attachment_content = None
             try:
-                import csv
-                csv_buffer = io.StringIO()
-                domain_type = '恶意域名' if task.task_type == 'malicious' else '仿冒域名'
-                writer = csv.writer(csv_buffer)
-                if task.task_type == 'impersonation':
-                    writer.writerow(['序号', '官方域名单位名称', '官方域名', '仿冒域名', '相似度'])
-                    if phishing_alert_items:
-                        for i, item in enumerate(phishing_alert_items, 1):
-                            writer.writerow([
-                                i,
-                                item.get("official_unit_name", ""),
-                                item.get("official_domain", ""),
-                                item.get("phishing_domain", ""),
-                                item.get("similarity", ""),
-                            ])
-                    else:
-                        for i, domain in enumerate(high_risk_domains, 1):
-                            writer.writerow([i, "", "", domain, ""])
-                else:
-                    writer.writerow(['序号', domain_type])  # CSV表头
-                    for i, domain in enumerate(high_risk_domains, 1):
-                        writer.writerow([i, domain])
-                csv_content = csv_buffer.getvalue().encode('utf-8-sig')  # 使用utf-8-sig以支持Excel正确显示中文
-                csv_buffer.close()
+                attachment_content = _build_alert_attachment_excel(
+                    task_type=task.task_type,
+                    high_risk_domains=high_risk_domains,
+                    phishing_alert_items=phishing_alert_items,
+                )
             except Exception as e:
-                logger.warning(f"生成CSV文件失败: {e}")
+                logger.warning(f"生成预警Excel附件失败: {e}")
             
             # 预警通知：仅在预警记录已提交后调用（与「检测任务完成」无关）
             alert_data = build_alert_data_dict(
@@ -983,7 +990,7 @@ def execute_subscription(subscription_id: str):
                     db,
                     alert_row=alert,
                     alert_data=alert_data,
-                    domains_csv_content=csv_content,
+                    domains_attachment_content=attachment_content,
                     user_id=subscription.user_id,
                 )
             except Exception:

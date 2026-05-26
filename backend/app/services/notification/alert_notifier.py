@@ -189,7 +189,7 @@ def dispatch_alert_notifications(
     *,
     alert_row,
     alert_data: dict,
-    domains_csv_content: Optional[bytes],
+    domains_attachment_content: Optional[bytes],
     user_id: int,
 ) -> None:
     """
@@ -204,7 +204,7 @@ def dispatch_alert_notifications(
         user_email = _get_user_email(db, user_id)
         if user_email:
             try:
-                send_alert_email(user_email, alert_data, domains_csv_content)
+                send_alert_email(user_email, alert_data, domains_attachment_content)
             except Exception:
                 logger.exception("预警邮件分发异常（已吞掉）")
         else:

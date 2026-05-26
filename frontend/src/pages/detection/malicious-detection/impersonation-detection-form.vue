@@ -62,6 +62,7 @@ function onDetOpenChange(open: boolean) {
 
 // 仿冒域名检测表单
 const queryName = ref('')
+const officialFile = ref<File | null>(null)
 const impersonationSubmitLoading = ref(false)
 const useCustomThreshold = ref(false)
 const threshold = ref(60)
@@ -110,13 +111,32 @@ async function ensureNewDomainDataAvailable(range: [string, string]) {
 
 function resetImpersonationForm() {
   queryName.value = ''
+  officialFile.value = null
   detectionDomainDateRange.value = null
   useCustomThreshold.value = false
   threshold.value = 60
 }
+
+function beforeOfficialFileUpload(file: File) {
+  const ext = file.name.split('.').pop()?.toLowerCase()
+  const ok = file.size <= 5 * 1024 * 1024 && !!ext && ['csv', 'txt', 'xlsx'].includes(ext)
+  if (!ok) {
+    message.error('仅支持 csv/txt/xlsx 且不超过5MB')
+    return false
+  }
+  officialFile.value = file
+  return false
+}
+
+function onOfficialFileChange({ file }: { file: any }) {
+  const rawFile = file?.originFileObj
+  if (rawFile instanceof File)
+    officialFile.value = rawFile
+}
+
 async function handleImpersonationSubmit() {
-  if (!queryName.value.trim()) {
-    return message.warning('请输入事件名或单位名')
+  if (!queryName.value.trim() && !officialFile.value) {
+    return message.warning('请输入事件名或单位名，或上传官方域名文件')
   }
   if (!detectionDomainDateRange.value) {
     return message.warning('请选择日期范围')
@@ -135,7 +155,10 @@ async function handleImpersonationSubmit() {
       return
 
     const fd = new FormData()
-    fd.append('queryName', queryName.value.trim())
+    if (queryName.value.trim())
+      fd.append('queryName', queryName.value.trim())
+    if (officialFile.value)
+      fd.append('officialFile', officialFile.value)
     fd.append('detectionDateRange', JSON.stringify(detectionDomainDateRange.value || []))
     fd.append('useCustomThreshold', String(useCustomThreshold.value))
     if (useCustomThreshold.value)
@@ -162,6 +185,8 @@ async function handleImpersonationSubmit() {
     const json = await resp.json()
     if (json.officialDomainStatus === 'pending')
       message.success(`任务参数已保存，等待官方域名检索能力接入。task: ${json.task_id || ''}`)
+    else if (json.officialDomainStatus === 'file_uploaded')
+      message.success(`仿冒域名检测任务已提交，已使用上传的官方域名文件。task: ${json.task_id || ''}`)
     else
       message.success(`仿冒域名检测任务已提交！ task: ${json.task_id || ''}`)
     resetImpersonationForm()
@@ -186,7 +211,7 @@ async function handleImpersonationSubmit() {
               创建仿冒域名检测任务
             </div>
             <div class="card-subtitle">
-              输入事件名或单位名并选择新注册域名时间窗，系统将基于检索到的官方域名进行相似域名分析。
+              优先输入事件名或单位名；也可以上传官方域名文件，并选择新注册域名时间窗进行相似域名分析。
             </div>
             <div class="header-tags">
               <span class="mini-tag">相似域名</span>
@@ -198,15 +223,39 @@ async function handleImpersonationSubmit() {
           <a-form layout="vertical" class="task-form">
             <div class="form-section">
               <div class="section-title">
-                步骤 1：输入事件名或单位名
+                步骤 1：提供官方域名来源
               </div>
-              <a-form-item label="事件名或单位名" required>
+              <a-form-item label="事件名或单位名（首选）">
                 <a-input
                   v-model:value="queryName"
                   allow-clear
                   placeholder="请输入事件名或单位名"
                   size="large"
                 />
+              </a-form-item>
+              <a-form-item label="官方域名文件（可选）">
+                <a-upload-dragger
+                  class="upload-card"
+                  :before-upload="beforeOfficialFileUpload"
+                  :show-upload-list="false"
+                  accept=".csv,.txt,.xlsx"
+                  @change="onOfficialFileChange"
+                >
+                  <p class="ant-upload-drag-icon">
+                    <i class="iconfont icon-upload-cloud upload-icon" />
+                  </p>
+                  <p v-if="officialFile" class="upload-title">
+                    {{ officialFile.name }}
+                  </p>
+                  <template v-else>
+                    <p class="upload-title">
+                      点击或拖拽上传官方域名文件
+                    </p>
+                    <p class="upload-subtitle">
+                      支持 csv / txt / xlsx，文件不超过 5MB
+                    </p>
+                  </template>
+                </a-upload-dragger>
               </a-form-item>
             </div>
 
@@ -268,7 +317,7 @@ async function handleImpersonationSubmit() {
         <div class="side-panel">
           <a-card title="填写说明" class="guide-card" :bordered="false">
             <ul class="guide-list">
-              <li><span class="dot">1</span><span>事件名或单位名将用于检索相关官方域名。</span></li>
+              <li><span class="dot">1</span><span>事件名或单位名将用于检索相关官方域名；检索能力未接入时可上传文件。</span></li>
               <li><span class="dot">2</span><span>待检测域名来自所选时间窗内的新注册域名。</span></li>
               <li><span class="dot">3</span><span>日期范围最多 30 天，避免任务过大。</span></li>
             </ul>

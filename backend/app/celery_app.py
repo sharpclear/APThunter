@@ -34,11 +34,13 @@ if CELERY_MULTI_QUEUE_ENABLED:
     atdv_exchange = Exchange("atdv", type="direct")
     malicious_queue_name = os.getenv("CELERY_MALICIOUS_QUEUE", "atdv_malicious")
     impersonation_queue_name = os.getenv("CELERY_IMPERSONATION_QUEUE", "atdv_impersonation")
+    dga_queue_name = os.getenv("CELERY_DGA_QUEUE", "atdv_dga")
 
     celery_app.conf.update(
         task_queues=(
             Queue(malicious_queue_name, exchange=atdv_exchange, routing_key=malicious_queue_name),
             Queue(impersonation_queue_name, exchange=atdv_exchange, routing_key=impersonation_queue_name),
+            Queue(dga_queue_name, exchange=atdv_exchange, routing_key=dga_queue_name),
             # 保留默认队列，便于兼容
             Queue(CELERY_DEFAULT_QUEUE, exchange=atdv_exchange, routing_key=CELERY_DEFAULT_QUEUE),
         ),
@@ -50,6 +52,10 @@ if CELERY_MULTI_QUEUE_ENABLED:
             "tasks.execute_impersonation_task": {
                 "queue": impersonation_queue_name,
                 "routing_key": impersonation_queue_name,
+            },
+            "tasks.execute_dga_task": {
+                "queue": dga_queue_name,
+                "routing_key": dga_queue_name,
             },
         },
     )

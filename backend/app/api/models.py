@@ -72,6 +72,8 @@ def map_model_category_to_type(category: Optional[str]) -> Optional[str]:
         return "恶意性检测"
     elif category == "impersonation":
         return "仿冒域名检测"
+    elif category == "dga":
+        return "DGA域名检测"
     return None
 
 
@@ -87,7 +89,8 @@ def format_datetime(dt: Optional[datetime]) -> str:
 @router.get("/api/models/available")
 async def get_available_models(
     request: Request,
-    authorization: Optional[str] = Header(None)
+    authorization: Optional[str] = Header(None),
+    category: Optional[str] = None,
 ):
     """
     获取当前用户可用的模型列表（用于任务创建时的模型选择）
@@ -96,6 +99,7 @@ async def get_available_models(
     """
     user_id = get_current_user_id(request, authorization)
     username = None
+    category_filter = category if category in {"malicious", "impersonation", "dga"} else None
     
     # 如果有有效的用户ID，获取用户名
     if user_id:
@@ -115,6 +119,7 @@ async def get_available_models(
             WHERE um.user_id = :user_id
               AND m.status = 'active'
               AND um.is_active = 1
+              AND (:category IS NULL OR m.model_category = :category)
             ORDER BY 
                 CASE um.source 
                     WHEN 'official' THEN 1 
@@ -123,7 +128,7 @@ async def get_available_models(
                 END,
                 um.acquired_at DESC
         """)
-        params = {"user_id": user_id}
+        params = {"user_id": user_id, "category": category_filter}
     else:
         # 未认证或token过期：只返回官方模型
         query = text("""
@@ -131,9 +136,10 @@ async def get_available_models(
                 m.id, m.name
             FROM models m
             WHERE m.status = 'active' AND m.model_type = 'official'
+              AND (:category IS NULL OR m.model_category = :category)
             ORDER BY m.created_at DESC
         """)
-        params = {}
+        params = {"category": category_filter}
     
     with engine.connect() as conn:
         rows = conn.execute(query, params).mappings().all()

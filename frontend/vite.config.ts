@@ -12,6 +12,7 @@ const baseSrc = fileURLToPath(new URL('./src', import.meta.url))
 // https://vitejs.dev/config/
 export default ({ mode }: ConfigEnv): UserConfig => {
   const env = loadEnv(mode, process.cwd())
+  const apiProxyTarget = env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8001'
   const proxyObj = {}
   if (mode === 'development' && env.VITE_APP_BASE_API_DEV && env.VITE_APP_BASE_URL_DEV) {
     proxyObj[env.VITE_APP_BASE_API_DEV] = {
@@ -119,7 +120,7 @@ export default ({ mode }: ConfigEnv): UserConfig => {
       proxy: {
         ...proxyObj,
         '/api': {
-          target: 'http://127.0.0.1:8001',
+          target: apiProxyTarget,
           changeOrigin: true,
           secure: false,
           rewrite: path => path.replace(/^\/api/, '/api'),

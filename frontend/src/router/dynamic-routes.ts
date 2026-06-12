@@ -77,6 +77,15 @@ export default [
             },
           },
           {
+            path: '/detection/dga-domain-detection',
+            name: 'DgaDomainDetection',
+            component: () => import('~/pages/detection/dga-domain-detection/index.vue'),
+            meta: {
+              title: 'DGA域名检测',
+              locale: 'menu.detection.dga-domain-detection',
+            },
+          },
+          {
             path: '/detection/malicious-ip-detection',
             name: 'MaliciousIpDetection',
             component: () => import('~/pages/detection/malicious-ip-detection/index.vue'),

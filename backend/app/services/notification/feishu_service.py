@@ -191,6 +191,10 @@ def send_post(title: str, zh_cn_lines: List[List[Dict[str, Any]]]) -> bool:
     发送富文本：msg_type=post，content.post.zh_cn。
     zh_cn_lines: 段落列表，每段为官方文档中的节点数组。
     """
+    return send_webhook_raw(_build_post_body(title, zh_cn_lines))
+
+
+def _build_post_body(title: str, zh_cn_lines: List[List[Dict[str, Any]]]) -> Dict[str, Any]:
     body: Dict[str, Any] = {
         "msg_type": "post",
         "content": {
@@ -202,7 +206,11 @@ def send_post(title: str, zh_cn_lines: List[List[Dict[str, Any]]]) -> bool:
             }
         },
     }
-    return send_webhook_raw(body)
+    return body
+
+
+def _body_size_bytes(body: Dict[str, Any]) -> int:
+    return len(json.dumps(_maybe_wrap_with_sign(body), ensure_ascii=False).encode("utf-8"))
 
 
 def send_alert_notification(
@@ -234,8 +242,7 @@ def send_alert_notification(
         [{"tag": "text", "text": f"检测类型：{type_label}\n"}],
     ]
     if task_type == "impersonation":
-        lines.extend(_build_impersonation_alert_lines(phishing_matches or []))
-        return send_post(title, lines)
+        return _send_impersonation_alert_posts(title, lines, phishing_matches or [])
 
     if suspected_association_text and suspected_association_text.strip():
         lines.append(
@@ -269,10 +276,20 @@ def _safe_text(value: Any, default: str = "") -> str:
     return text if text else default
 
 
+def _filter_impersonation_matches(
+    phishing_matches: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    keep_dispositions = {"保留人工复核", "保留高危告警"}
+    return [
+        item for item in phishing_matches
+        if str(item.get("llm_disposition") or "").strip() in keep_dispositions
+    ]
+
+
 def _build_impersonation_alert_lines(
     phishing_matches: List[Dict[str, Any]],
-    limit: int = 30,
 ) -> List[List[Dict[str, Any]]]:
+    phishing_matches = _filter_impersonation_matches(phishing_matches)
     if not phishing_matches:
         return [[{"tag": "text", "text": "仿冒检测结果：未能提取仿冒明细，请查看预警详情文件。\n"}]]
 
@@ -281,11 +298,15 @@ def _build_impersonation_alert_lines(
         [{"tag": "text", "text": "仿冒明细：\n"}],
     ]
 
-    for idx, item in enumerate(phishing_matches[:limit], start=1):
+    for idx, item in enumerate(phishing_matches, start=1):
         official_unit_name = _safe_text(item.get("official_unit_name"), "未知单位")
         official_domain = _safe_text(item.get("official_domain"), "未知官方域名")
         phishing_domain = _safe_text(item.get("phishing_domain"), "未知仿冒域名")
-        similarity = _safe_text(item.get("similarity"), "未知")
+        llm_score = _safe_text(item.get("llm_score"), "未知")
+        llm_reason = _safe_text(item.get("llm_reason"), "")
+        llm_disposition = _safe_text(item.get("llm_disposition"), "")
+        llm_reason_line = f"   LLM研判原因：{llm_reason}\n" if llm_reason else ""
+        llm_disposition_line = f"   LLM处置结果：{llm_disposition}\n" if llm_disposition else ""
         lines.append(
             [
                 {
@@ -294,13 +315,71 @@ def _build_impersonation_alert_lines(
                         f"{idx}. 官方域名：{official_domain}\n"
                         f"   官方域名单位名称：{official_unit_name}\n"
                         f"   检测出的仿冒域名：{phishing_domain}\n"
-                        f"   相似度：{similarity}\n"
+                        f"   LLM风险分：{llm_score}\n"
+                        f"{llm_disposition_line}"
+                        f"{llm_reason_line}"
                     ),
                 }
             ]
         )
 
-    omitted = len(phishing_matches) - limit
-    if omitted > 0:
-        lines.append([{"tag": "text", "text": f"其余 {omitted} 条请查看预警详情文件。\n"}])
     return lines
+
+
+def _build_impersonation_match_line(idx: int, item: Dict[str, Any]) -> List[Dict[str, Any]]:
+    official_unit_name = _safe_text(item.get("official_unit_name"), "未知单位")
+    official_domain = _safe_text(item.get("official_domain"), "未知官方域名")
+    phishing_domain = _safe_text(item.get("phishing_domain"), "未知仿冒域名")
+    llm_score = _safe_text(item.get("llm_score"), "未知")
+    llm_reason = _safe_text(item.get("llm_reason"), "")
+    llm_disposition = _safe_text(item.get("llm_disposition"), "")
+    llm_reason_line = f"   LLM研判原因：{llm_reason}\n" if llm_reason else ""
+    llm_disposition_line = f"   LLM处置结果：{llm_disposition}\n" if llm_disposition else ""
+    return [
+        {
+            "tag": "text",
+            "text": (
+                f"{idx}. 官方域名：{official_domain}\n"
+                f"   官方域名单位名称：{official_unit_name}\n"
+                f"   检测出的仿冒域名：{phishing_domain}\n"
+                f"   LLM风险分：{llm_score}\n"
+                f"{llm_disposition_line}"
+                f"{llm_reason_line}"
+            ),
+        }
+    ]
+
+
+def _send_impersonation_alert_posts(
+    title: str,
+    header_lines: List[List[Dict[str, Any]]],
+    phishing_matches: List[Dict[str, Any]],
+) -> bool:
+    filtered_matches = _filter_impersonation_matches(phishing_matches)
+    if not filtered_matches:
+        return send_post(
+            title,
+            header_lines + [[{"tag": "text", "text": "仿冒检测结果：未能提取仿冒明细，请查看预警详情文件。\n"}]],
+        )
+
+    intro_lines = [
+        [{"tag": "text", "text": f"仿冒域名数量：{len(filtered_matches)}\n"}],
+        [{"tag": "text", "text": "仿冒明细：\n"}],
+    ]
+    chunks: List[List[List[Dict[str, Any]]]] = []
+    current = header_lines + intro_lines
+
+    for idx, item in enumerate(filtered_matches, start=1):
+        item_line = _build_impersonation_match_line(idx, item)
+        candidate = current + [item_line]
+        if len(current) > len(header_lines) + len(intro_lines) and _body_size_bytes(_build_post_body(title, candidate)) > _MAX_BODY_BYTES:
+            chunks.append(current)
+            current = header_lines + intro_lines + [item_line]
+        else:
+            current = candidate
+    chunks.append(current)
+
+    ok = True
+    for chunk in chunks:
+        ok = send_post(title, chunk) and ok
+    return ok

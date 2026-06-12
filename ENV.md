@@ -31,6 +31,10 @@
 | `MYSQL_URL` | MySQL 连接字符串 | `mysql+pymysql://apthunter:4CyUhr2zu6!@mysql:3306/apthunter_new` | 是 |
 | `IMPERSONATION_MODEL_NAME` | 仿冒检测模型名称 | `impersonation_detector` | 否 |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | 登录 JWT 有效期（分钟） | `1440`（24 小时） | 否 |
+| `ANTHROPIC_API_KEY` | 仿冒域名检测 LLM 研判 API Key | 空 | 是（运行仿冒检测时） |
+| `ANTHROPIC_MODEL` | 仿冒域名检测 LLM 模型 | `claude-opus-4-8` | 否 |
+| `ANTHROPIC_API_URL` | Anthropic Messages API 地址 | `https://api.anthropic.com/v1/messages` | 否 |
+| `PHISHING_LLM_MAX_RETRIES` | 仿冒域名 LLM 调用最大重试次数 | `3` | 否 |
 
 ### 前端服务
 
@@ -74,6 +78,8 @@ MINIO_BUCKET=uploads
 MYSQL_URL=mysql+pymysql://apthunter:your_secure_password@mysql:3306/apthunter_new
 IMPERSONATION_MODEL_NAME=impersonation_detector
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
+ANTHROPIC_API_KEY=your_anthropic_api_key
+ANTHROPIC_MODEL=claude-opus-4-8
 ```
 
 2. 在 `docker-compose.yml` 中使用变量：

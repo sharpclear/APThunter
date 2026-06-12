@@ -2,14 +2,17 @@ import os
 import re
 import io
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
 from urllib.parse import urlparse
 from collections import defaultdict
-from typing import Dict, List, Set, Tuple, Iterable, Optional
+from typing import Any, Dict, List, Set, Tuple, Iterable, Optional
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+
+from phishing_opus_llm_judge import KEEP_RECOMMENDATIONS, MODEL_NAME as LLM_MODEL_NAME, build_candidate_items, judge_batch
 
 
 # =========================================================
@@ -30,6 +33,14 @@ CANINE_BATCH_SIZE = 64
 
 # 最终最低输出阈值。实际还会按 strong / medium / short / weak 分层过滤
 GLOBAL_MIN_SCORE = 0.58
+
+# Claude Opus LLM 作为仿冒候选最终输出前的研判步骤
+LLM_BATCH_SIZE = int(os.getenv("PHISHING_LLM_BATCH_SIZE", os.getenv("LLM_JUDGER_BATCH_SIZE", "200")))
+LLM_MAX_WORKERS = int(os.getenv("PHISHING_LLM_MAX_WORKERS", os.getenv("LLM_JUDGER_MAX_WORKERS", "10")))
+LLM_TIMEOUT_SEC = int(os.getenv("PHISHING_LLM_TIMEOUT_SEC", os.getenv("LLM_JUDGER_TIMEOUT_SEC", "180")))
+LLM_MAX_RETRIES = int(os.getenv("PHISHING_LLM_MAX_RETRIES", "3"))
+LLM_RETRY_SLEEP_SEC = int(os.getenv("PHISHING_LLM_RETRY_SLEEP_SEC", "5"))
+LLM_MAX_TOKENS = int(os.getenv("PHISHING_LLM_MAX_TOKENS", "32768"))
 
 # Excel 单文件行数上限
 EXCEL_MAX_ROWS = 1_000_000
@@ -345,6 +356,11 @@ class MatchResult:
     need_canine: bool
     match_type: str
     evidence: List[str]
+    llm_label: str = ""
+    llm_score: Optional[float] = None
+    llm_reason: str = ""
+    llm_key_features: str = ""
+    llm_disposition: str = ""
 
 
 # =========================================================
@@ -1790,6 +1806,99 @@ def dedup_evidence(evidence: List[str]) -> List[str]:
 
     return result
 
+
+def _result_to_llm_candidate(result: MatchResult) -> Dict[str, Any]:
+    return {
+        "domain": result.domain,
+        "official_domain": result.target_domain,
+        "company": result.company,
+        "algorithm_score": result.score,
+        "match_type": result.match_type,
+        "risk_level": risk_level(result.score),
+        "evidence": "；".join(dedup_evidence(result.evidence)),
+    }
+
+
+def _safe_float_or_none(value: Any) -> Optional[float]:
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except Exception:
+        return None
+
+
+def _judge_candidates_with_llm(results: List[MatchResult]) -> Tuple[List[MatchResult], Dict[str, Any]]:
+    if not results:
+        return [], {"status": "no_candidates", "judged_count": 0, "candidate_count": 0, "failed_batches": 0}
+
+    api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("仿冒检测LLM研判需要配置 ANTHROPIC_API_KEY，未研判结果不会输出")
+
+    candidate_items = build_candidate_items([_result_to_llm_candidate(result) for result in results])
+    batches = [
+        candidate_items[index : index + LLM_BATCH_SIZE]
+        for index in range(0, len(candidate_items), LLM_BATCH_SIZE)
+    ]
+    completed: Dict[int, List[Dict[str, Any]]] = {}
+    errors: Dict[int, str] = {}
+    max_workers = max(1, min(LLM_MAX_WORKERS, len(batches)))
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_index = {
+            executor.submit(
+                judge_batch,
+                api_key,
+                batch,
+                index + 1,
+                timeout_seconds=LLM_TIMEOUT_SEC,
+                max_retries=LLM_MAX_RETRIES,
+                retry_sleep_seconds=LLM_RETRY_SLEEP_SEC,
+                max_tokens=LLM_MAX_TOKENS,
+            ): index + 1
+            for index, batch in enumerate(batches)
+        }
+        for future in as_completed(future_to_index):
+            batch_index = future_to_index[future]
+            try:
+                completed[batch_index] = future.result()
+            except Exception as exc:
+                errors[batch_index] = str(exc)
+
+    rows: List[Dict[str, Any]] = []
+    for index in sorted(completed):
+        rows.extend(completed[index])
+
+    llm_index = {str(row.get("domain") or ""): row for row in rows}
+    final_results: List[MatchResult] = []
+    for result in results:
+        llm = llm_index.get(result.domain)
+        if not llm:
+            continue
+        result.llm_label = str(llm.get("label") or "uncertain")
+        result.llm_score = _safe_float_or_none(llm.get("impersonation_likelihood"))
+        result.llm_reason = str(llm.get("reason") or "")
+        key_features = llm.get("key_features") or ""
+        if isinstance(key_features, list):
+            result.llm_key_features = ",".join(str(item) for item in key_features)
+        else:
+            result.llm_key_features = str(key_features)
+        result.llm_disposition = str(llm.get("disposition") or "")
+        if result.llm_disposition in KEEP_RECOMMENDATIONS:
+            final_results.append(result)
+
+    status = "completed" if not errors else ("failed" if not rows else "partial_failed")
+    return final_results, {
+        "status": status,
+        "model": os.getenv("ANTHROPIC_MODEL", LLM_MODEL_NAME),
+        "judged_count": len(rows),
+        "candidate_count": len(results),
+        "batch_size": LLM_BATCH_SIZE,
+        "batch_count": len(batches),
+        "failed_batches": len(errors),
+        "errors": errors,
+        "kept_count": len(final_results),
+    }
+
 '''"规则分": f"{r.rule_score:.4f}",
         "CANINE相似度": "" if r.canine_similarity is None else f"{r.canine_similarity:.4f}",
         "目标词类别": r.category,
@@ -2000,6 +2109,8 @@ def _run_detection(
         r for r in results
         if r.score >= max(float(min_score), category_threshold(r.category))
     ]
+    llm_candidates_count = len(results)
+    results, llm_meta = _judge_candidates_with_llm(results)
     results.sort(key=lambda x: x.score, reverse=True)
     _log_required(f"最终输出疑似仿冒域名数量: {len(results):,}")
 
@@ -2009,15 +2120,32 @@ def _run_detection(
         "benign": len(detection_domains) - len(results),
         "phishing_rate": len(results) / len(detection_domains) * 100 if detection_domains else 0,
         "总域名数": len(detection_domains),
+        "算法候选数": llm_candidates_count,
         "钓鱼域名数": len(results),
         "正常域名数": len(detection_domains) - len(results),
         "钓鱼域名占比": f"{len(results) / len(detection_domains) * 100:.2f}%" if detection_domains else "0.00%",
+        "LLM研判状态": llm_meta.get("status"),
+        "LLM研判模型": llm_meta.get("model", LLM_MODEL_NAME),
+        "LLM已研判数": llm_meta.get("judged_count", 0),
     }
     return results, statistics
 
 
 def _build_result_dataframe(results: List[MatchResult]) -> pd.DataFrame:
-    columns = ["钓鱼域名", "官方域名", "公司名称", "相似度", "匹配类型", "风险等级", "命中原因"]
+    columns = [
+        "钓鱼域名",
+        "官方域名",
+        "公司名称",
+        "相似度",
+        "匹配类型",
+        "风险等级",
+        "命中原因",
+        "LLM研判标签",
+        "LLM研判分数",
+        "研判原因",
+        "LLM处置结果",
+        "关键特征",
+    ]
     rows = []
     for result in results:
         rows.append({
@@ -2028,6 +2156,11 @@ def _build_result_dataframe(results: List[MatchResult]) -> pd.DataFrame:
             "匹配类型": result.match_type,
             "风险等级": risk_level(result.score),
             "命中原因": "；".join(dedup_evidence(result.evidence)),
+            "LLM研判标签": result.llm_label,
+            "LLM研判分数": "" if result.llm_score is None else f"{result.llm_score:.4f}",
+            "研判原因": result.llm_reason,
+            "LLM处置结果": result.llm_disposition,
+            "关键特征": result.llm_key_features,
         })
     return pd.DataFrame(rows, columns=columns)
 
@@ -2038,12 +2171,16 @@ def _build_result_excel(results: List[MatchResult], statistics: dict) -> bytes:
     with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="检测结果", index=False)
         stats_df = pd.DataFrame({
-            "统计项": ["总域名数", "钓鱼域名数", "正常域名数", "钓鱼域名占比"],
+            "统计项": ["总域名数", "算法候选数", "钓鱼域名数", "正常域名数", "钓鱼域名占比", "LLM研判状态", "LLM研判模型", "LLM已研判数"],
             "数值": [
                 statistics.get("total", 0),
+                statistics.get("算法候选数", 0),
                 statistics.get("phishing", 0),
                 statistics.get("benign", 0),
                 f"{statistics.get('phishing_rate', 0):.2f}%",
+                statistics.get("LLM研判状态", ""),
+                statistics.get("LLM研判模型", ""),
+                statistics.get("LLM已研判数", 0),
             ],
         })
         stats_df.to_excel(writer, sheet_name="统计信息", index=False)

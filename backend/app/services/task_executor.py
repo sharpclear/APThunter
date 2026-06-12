@@ -18,6 +18,10 @@ from app.services.domain_infra_collector import collect_missing_domain_infra
 # 添加models目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "models"))
 from malicious_detection import predict_from_file, predict_from_domains
+from dga_domain_detection import (
+    predict_from_file as dga_predict_from_file,
+    predict_from_domains as dga_predict_from_domains,
+)
 from phishing_detector import (
     predict_from_file as phishing_predict_from_file,
     predict_from_domains as phishing_predict_from_domains,
@@ -357,6 +361,109 @@ def execute_malicious_task(task_id: str):
         db.commit()
     except Exception as exc:
         logger.exception("执行恶意检测任务失败 %s: %s", task_id, exc)
+        task = db.query(Task).filter(Task.task_id == task_id).first()
+        if task:
+            extra_data = dict(task.extra or {})
+            task.status = "failed"
+            extra_data["progress"] = 0
+            extra_data["progress_stage"] = "任务失败"
+            extra_data["error"] = str(exc)
+            task.extra = extra_data
+            db.commit()
+        raise
+    finally:
+        db.close()
+
+
+def execute_dga_task(task_id: str):
+    db = SessionLocal()
+    try:
+        task = db.query(Task).filter(Task.task_id == task_id).first()
+        if not task:
+            raise ValueError(f"任务不存在: {task_id}")
+        model_record = db.query(Model).filter(Model.id == task.model_id).first()
+        if not model_record:
+            raise ValueError(f"模型不存在: {task.model_id}")
+
+        extra_data = dict(task.extra or {})
+        if task.status == "completed" and extra_data.get("result_file_key"):
+            logger.info("Skip already completed dga task_id=%s", task_id)
+            return
+
+        task.status = "processing"
+        _set_task_progress(db, task, extra_data, 10, "任务开始执行")
+
+        data_source = extra_data.get("dataSource")
+        model_path_to_use = model_record.model_path or None
+        candidate_threshold = float(extra_data.get("candidate_threshold") or 0.99)
+        result_filename = f"result_{task_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+
+        if data_source == "upload":
+            _set_task_progress(db, task, extra_data, 20, "读取上传文件")
+            file_key = extra_data.get("file_object_key")
+            file_bucket = extra_data.get("file_bucket") or MINIO_BUCKET
+            if not file_key:
+                raise ValueError("上传文件任务缺少 file_object_key")
+            file_content = _download_file_from_minio(file_key, file_bucket)
+            _set_task_progress(db, task, extra_data, 40, "DGA CNN模型评分中")
+            excel_content, statistics, dga_meta = dga_predict_from_file(
+                file_content,
+                file_key,
+                model_path_to_use,
+                candidate_threshold=candidate_threshold,
+            )
+        elif data_source == "newDomain":
+            _set_task_progress(db, task, extra_data, 20, "收集新注册域名")
+            date_range = extra_data.get("dateRange")
+            if not date_range or len(date_range) < 2:
+                raise ValueError("newDomain 任务缺少 dateRange")
+            domains, missing_dates = _collect_daily_domains(date_range)
+            _set_task_progress(db, task, extra_data, 40, "DGA CNN模型评分中")
+            excel_content, statistics, dga_meta = dga_predict_from_domains(
+                domains,
+                f"daily_{task_id}",
+                model_path_to_use,
+                candidate_threshold=candidate_threshold,
+            )
+            extra_data["daily_missing_dates"] = missing_dates
+            extra_data["daily_domain_count"] = len(domains)
+        elif data_source == "manualInput":
+            _set_task_progress(db, task, extra_data, 20, "读取手动输入域名")
+            domains = extra_data.get("manual_domains") or []
+            if not isinstance(domains, list) or not domains:
+                raise ValueError("manualInput 任务缺少有效域名")
+            _set_task_progress(db, task, extra_data, 40, "DGA CNN模型评分中")
+            excel_content, statistics, dga_meta = dga_predict_from_domains(
+                domains,
+                f"manual_{task_id}",
+                model_path_to_use,
+                candidate_threshold=candidate_threshold,
+            )
+        else:
+            raise ValueError(f"未知 dataSource: {data_source}")
+
+        extra_data["dga_detection"] = dga_meta
+        _set_task_progress(db, task, extra_data, 85, "上传结果文件")
+        result_key = _upload_file_content_to_minio(
+            excel_content,
+            result_filename,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            bucket=RESULTS_BUCKET,
+        )
+
+        task.status = "completed"
+        extra_data["result_file_key"] = result_key
+        extra_data["result_bucket"] = RESULTS_BUCKET
+        extra_data["result_filename"] = result_filename
+        extra_data["statistics"] = statistics
+        extra_data["completed_at"] = datetime.utcnow().isoformat()
+        extra_data["progress"] = 100
+        extra_data["progress_stage"] = "任务完成"
+        extra_data["progress_updated_at"] = datetime.utcnow().isoformat()
+        task.extra = extra_data
+        db.commit()
+    except Exception as exc:
+        logger.exception("执行DGA检测任务失败 %s: %s", task_id, exc)
         task = db.query(Task).filter(Task.task_id == task_id).first()
         if task:
             extra_data = dict(task.extra or {})

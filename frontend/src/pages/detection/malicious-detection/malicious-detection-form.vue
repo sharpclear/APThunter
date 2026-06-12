@@ -138,7 +138,7 @@ async function ensureNewDomainDataAvailable(range: [string, string]) {
 async function fetchAvailableModels() {
   modelListLoading.value = true
   try {
-    const resp = await fetch(`${API_BASE}/models/available`, {
+    const resp = await fetch(`${API_BASE}/models/available?category=malicious`, {
       method: 'GET',
       headers: buildHeaders(),
     })

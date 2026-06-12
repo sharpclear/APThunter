@@ -433,8 +433,9 @@ def _clean_optional_text(value) -> str:
 def _extract_impersonation_alert_items(rows) -> List[dict]:
     """
     从仿冒检测结果 DataFrame 提取飞书/邮件附件预警明细。
-    兼容列：钓鱼域名、官方域名/目标域名、公司名称、相似度、匹配类型、风险等级、最终风险分、命中原因。
+    兼容列：钓鱼域名、官方域名/目标域名、公司名称、相似度、匹配类型、风险等级、最终风险分、命中原因、LLM研判标签、LLM研判分数、研判原因、LLM处置结果。
     """
+    keep_dispositions = {"保留人工复核", "保留高危告警"}
     items: List[dict] = []
     seen = set()
     try:
@@ -455,6 +456,13 @@ def _extract_impersonation_alert_items(rows) -> List[dict]:
         risk_level = _clean_optional_text(row.get("风险等级"))
         final_risk_score = _clean_optional_text(row.get("最终风险分") or row.get("相似度"))
         hit_reason = _clean_optional_text(row.get("命中原因"))
+        llm_label = _clean_optional_text(row.get("LLM研判标签"))
+        llm_score = _clean_optional_text(row.get("LLM研判分数"))
+        llm_reason = _clean_optional_text(row.get("研判原因"))
+        llm_disposition = _clean_optional_text(row.get("LLM处置结果") or row.get("LLM处置建议"))
+        if llm_disposition not in keep_dispositions:
+            continue
+        llm_key_features = _clean_optional_text(row.get("关键特征"))
         dedupe_key = (
             phishing_domain.lower(),
             official_domain.lower(),
@@ -473,6 +481,11 @@ def _extract_impersonation_alert_items(rows) -> List[dict]:
                 "risk_level": risk_level,
                 "final_risk_score": final_risk_score,
                 "hit_reason": hit_reason,
+                "llm_label": llm_label,
+                "llm_score": llm_score,
+                "llm_reason": llm_reason,
+                "llm_disposition": llm_disposition,
+                "llm_key_features": llm_key_features,
             }
         )
     return items
@@ -489,7 +502,7 @@ def _build_alert_attachment_excel(
     """
     import pandas as pd
 
-    columns = ["疑似仿冒域名", "目标域名", "单位名称", "风险等级", "最终风险分", "命中原因"]
+    columns = ["疑似仿冒域名", "目标域名", "单位名称", "风险等级", "最终风险分", "LLM研判标签", "LLM研判分数", "研判原因", "LLM处置结果", "命中原因"]
     rows = []
     if task_type == "impersonation":
         if phishing_alert_items:
@@ -501,19 +514,11 @@ def _build_alert_attachment_excel(
                         "单位名称": item.get("official_unit_name", ""),
                         "风险等级": item.get("risk_level", ""),
                         "最终风险分": item.get("final_risk_score", ""),
+                        "LLM研判标签": item.get("llm_label", ""),
+                        "LLM研判分数": item.get("llm_score", ""),
+                        "研判原因": item.get("llm_reason", ""),
+                        "LLM处置结果": item.get("llm_disposition", ""),
                         "命中原因": item.get("hit_reason", ""),
-                    }
-                )
-        else:
-            for domain in high_risk_domains:
-                rows.append(
-                    {
-                        "疑似仿冒域名": domain,
-                        "目标域名": "",
-                        "单位名称": "",
-                        "风险等级": "",
-                        "最终风险分": "",
-                        "命中原因": "",
                     }
                 )
     else:
@@ -525,6 +530,10 @@ def _build_alert_attachment_excel(
                     "单位名称": "",
                     "风险等级": "",
                     "最终风险分": "",
+                    "LLM研判标签": "",
+                    "LLM研判分数": "",
+                    "研判原因": "",
+                    "LLM处置结果": "",
                     "命中原因": "",
                 }
             )
@@ -760,7 +769,6 @@ def execute_subscription(subscription_id: str):
                     results_df = pd.read_excel(excel_file, sheet_name='检测结果')
                     # 筛选出有钓鱼域名的行
                     phishing_rows = results_df[results_df['钓鱼域名'].notna()]
-                    high_risk_domains = phishing_rows['钓鱼域名'].dropna().unique().tolist()
                     phishing_alert_items = _extract_impersonation_alert_items(phishing_rows)
                 except Exception as e:
                     logger.warning(f"从Excel提取钓鱼域名列表失败: {e}")
@@ -769,12 +777,20 @@ def execute_subscription(subscription_id: str):
                         excel_file.seek(0)
                         phishing_df = pd.read_excel(excel_file, sheet_name='钓鱼域名列表')
                         if '钓鱼域名' in phishing_df.columns:
-                            high_risk_domains = phishing_df['钓鱼域名'].dropna().unique().tolist()
                             phishing_alert_items = _extract_impersonation_alert_items(phishing_df)
                         else:
                             high_risk_domains = []
                     except:
                         pass
+                high_risk_domains = []
+                seen_phishing_domains = set()
+                for item in phishing_alert_items:
+                    domain = _clean_optional_text(item.get("phishing_domain"))
+                    domain_key = domain.lower()
+                    if domain and domain_key not in seen_phishing_domains:
+                        seen_phishing_domains.add(domain_key)
+                        high_risk_domains.append(domain)
+                high_risk_count = len(high_risk_domains)
             else:
                 # 恶意订阅预警：
                 # - 默认策略：model.predict 判为恶意的结果全部预警

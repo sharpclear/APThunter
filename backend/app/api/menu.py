@@ -108,6 +108,16 @@ async def get_menu(authorization: str | None = Header(None)):
             "locale": "menu.detection.malicious-ip-detection",
         },
         {
+            "id": 54,
+            "parentId": 4,
+            "title": "DGA域名检测",
+            "component": "/detection/dga-domain-detection/index",
+            "path": "/detection/dga-domain-detection",
+            "name": "DgaDomainDetection",
+            "keepAlive": False,
+            "locale": "menu.detection.dga-domain-detection",
+        },
+        {
             "id": 36,
             "parentId": None,
             "title": "个人页",

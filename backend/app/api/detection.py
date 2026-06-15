@@ -23,7 +23,7 @@ from app.infra.minio_client import minio_client
 from app.db.session import SessionLocal, engine
 from app.core.config import MINIO_BUCKET, IMPERSONATION_MODEL_NAME
 from app.services.official_domain_resolver import resolve_official_domains
-from app.services.task_dispatcher import dispatch_impersonation_task, dispatch_malicious_task
+from app.services.task_dispatcher import dispatch_dga_task, dispatch_impersonation_task, dispatch_malicious_task
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -43,6 +43,7 @@ TASK_TYPE_LABEL_MAP = {
     "malicious": "恶意域名检测",
     "impersonation": "仿冒域名检测",
     "malicious_ip": "恶意IP检测",
+    "dga": "DGA域名检测",
 }
 DATA_SOURCE_LABEL_MAP = {
     "upload": "上传文件",
@@ -114,6 +115,18 @@ def _get_impersonation_model_record(db):
         db.query(Model)
         .filter(
             Model.model_category == "impersonation",
+            Model.status == "active",
+        )
+        .order_by(Model.model_type.asc(), Model.id.asc())
+        .first()
+    )
+
+
+def _get_dga_model_record(db):
+    return (
+        db.query(Model)
+        .filter(
+            Model.model_category == "dga",
             Model.status == "active",
         )
         .order_by(Model.model_type.asc(), Model.id.asc())
@@ -836,6 +849,200 @@ async def create_detection_task(
         )
 
 
+@router.post("/api/dga-tasks")
+async def create_dga_task(
+    request: Request,
+    model: Optional[str] = Form(None),
+    dataSource: str = Form(...),
+    file: Optional[UploadFile] = File(None),
+    dateRange: Optional[str] = Form(None),
+    manualDomains: Optional[str] = Form(None),
+):
+    """创建DGA域名检测任务。"""
+    try:
+        created_by_user_id: Optional[int] = _extract_user_id(request)
+        uploaded_by_header = request.headers.get("X-User-Name") or request.headers.get("X-User")
+
+        if dataSource not in ["upload", "newDomain", "manualInput"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="dataSource must be 'upload', 'newDomain' or 'manualInput'",
+            )
+        if dataSource == "upload" and file is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="file is required")
+        if dataSource == "newDomain" and (not dateRange or dateRange.strip() == ""):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="dateRange is required")
+
+        date_range_parsed = None
+        if dataSource == "newDomain":
+            date_range_parsed = _parse_detection_date_range_payload(dateRange or "")
+            start_date = _parse_date_string(date_range_parsed[0])
+            end_date = _parse_date_string(date_range_parsed[1])
+            availability = _inspect_daily_domain_availability(start_date, end_date)
+            if not availability["available"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "message": "所选日期范围内暂无可用的新注册域名数据，请重新选择日期",
+                        **availability,
+                    },
+                )
+
+        manual_domain_list = None
+        manual_domain_stats = None
+        if dataSource == "manualInput":
+            manual_domain_list, manual_domain_stats = _parse_manual_domains(manualDomains or "")
+
+        uploaded_file_meta = None
+        if file is not None:
+            file_ext = file.filename.split(".")[-1].lower() if file.filename else ""
+            allowed_extensions = ["csv", "txt", "xlsx"]
+            if file_ext not in allowed_extensions:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"File type not allowed. Only {', '.join(allowed_extensions)} are supported",
+                )
+            file_content = await file.read()
+            file_size = len(file_content)
+            max_size = 5 * 1024 * 1024
+            if file_size > max_size:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"File size exceeds maximum allowed size of {max_size / 1024 / 1024}MB",
+                )
+            file_key = upload_file_content_to_minio(
+                file_content,
+                file.filename or "unknown",
+                file.content_type,
+            )
+            uploaded_file_meta = {
+                "bucket": MINIO_BUCKET,
+                "object_key": file_key,
+                "filename": file.filename or "unknown",
+                "content_type": file.content_type,
+                "size": file_size,
+            }
+
+        extra_data = {
+            "dataSource": dataSource,
+            "dateRange": date_range_parsed,
+            "candidate_threshold": 0.99,
+        }
+        if uploaded_file_meta:
+            extra_data["file_bucket"] = uploaded_file_meta["bucket"]
+            extra_data["file_object_key"] = uploaded_file_meta["object_key"]
+        if manual_domain_list is not None:
+            extra_data["manual_domains"] = manual_domain_list
+            extra_data["manual_domain_stats"] = manual_domain_stats
+
+        task_id = f"DGA{int(datetime.utcnow().timestamp())}{uuid.uuid4().hex[:6]}"
+        db = SessionLocal()
+        try:
+            model_record = None
+            if model:
+                try:
+                    model_record = db.query(Model).filter(Model.id == int(model)).first()
+                except ValueError:
+                    model_record = db.query(Model).filter(Model.name == model).first()
+            if model_record is None:
+                model_record = _get_dga_model_record(db)
+            if not model_record or model_record.model_category != "dga":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No active DGA model configured",
+                )
+
+            if created_by_user_id is not None:
+                with engine.connect() as conn:
+                    user_model_result = conn.execute(
+                        text("""
+                            SELECT um.id
+                            FROM user_models um
+                            WHERE um.user_id = :user_id
+                              AND um.model_id = :model_id
+                              AND um.is_active = 1
+                        """),
+                        {"user_id": created_by_user_id, "model_id": model_record.id},
+                    ).first()
+                if not user_model_result:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"您没有权限使用模型 {model_record.name}",
+                    )
+
+            file_record = None
+            if uploaded_file_meta:
+                file_record = StoredFile(
+                    bucket=uploaded_file_meta["bucket"],
+                    object_key=uploaded_file_meta["object_key"],
+                    filename=uploaded_file_meta["filename"],
+                    content_type=uploaded_file_meta["content_type"],
+                    size=uploaded_file_meta["size"],
+                    uploaded_by=uploaded_by_header,
+                    metadata_json={
+                        "source": "dga_detection",
+                        "original_filename": uploaded_file_meta["filename"],
+                    },
+                )
+                db.add(file_record)
+                db.flush()
+
+            task = Task(
+                task_id=task_id,
+                task_type="dga",
+                model_id=model_record.id,
+                file_id=file_record.id if file_record else None,
+                extra=extra_data,
+                status="pending",
+                created_by=created_by_user_id,
+            )
+            db.add(task)
+            db.commit()
+            db.refresh(task)
+
+            try:
+                dispatch_dga_task(task.task_id)
+            except Exception as exc:
+                logger.exception("enqueue dga task failed: %s", exc)
+                task.status = "failed"
+                extra_data_failed = dict(task.extra or {})
+                extra_data_failed["error"] = str(exc)
+                extra_data_failed["enqueue_failed"] = True
+                extra_data_failed["enqueue_failed_at"] = datetime.utcnow().isoformat()
+                task.extra = extra_data_failed
+                db.commit()
+                db.refresh(task)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to enqueue task",
+                ) from exc
+
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={"ok": True, "task_id": task.task_id, "status": "pending"},
+            )
+        except HTTPException:
+            db.rollback()
+            raise
+        except Exception as exc:
+            db.rollback()
+            logger.exception("Failed to create dga task: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create DGA task",
+            ) from exc
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Unexpected error in create_dga_task: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred",
+        ) from exc
+
+
 @router.get("/api/tasks")
 async def list_tasks(
     request: Request,
@@ -892,7 +1099,47 @@ async def list_tasks(
             
             # 对于仿冒域名检测任务，使用 detectionSource；对于恶意性检测任务，使用 dataSource
             data_source_type = ""
-            if task.task_type == "impersonation":
+            if task.task_type == "dga":
+                try:
+                    results_df = pd.read_excel(excel_file, sheet_name='预测结果')
+                except Exception:
+                    results_df = pd.DataFrame()
+                stats_df = pd.read_excel(excel_file, sheet_name='统计信息')
+                dga_list = []
+                try:
+                    excel_file.seek(0)
+                    dga_df = pd.read_excel(excel_file, sheet_name='DGA域名列表')
+                    dga_list = dga_df.to_dict('records')
+                except Exception:
+                    pass
+
+                results_list = results_df.to_dict('records')
+                statistics_dict = {}
+                for _, row in stats_df.iterrows():
+                    statistics_dict[row['统计项']] = row['数值']
+                if not dga_list:
+                    dga_list = [
+                        row for row in results_list
+                        if row.get('预测标签') == 1 or row.get('预测结果') == 'DGA-like'
+                    ]
+
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content=_json_safe_value({
+                        "ok": True,
+                        "task_id": task.task_id,
+                        "task_type": task.task_type,
+                        "statistics": statistics_dict,
+                        "results": results_list,
+                        "dga_domains": dga_list,
+                        "result_file_key": result_key,
+                        "result_filename": extra_data.get("result_filename") or f"{task.task_id}_result.xlsx",
+                        "total_count": len(results_list),
+                        "dga_count": len(dga_list),
+                        "dga_detection": extra_data.get("dga_detection") or {},
+                    })
+                )
+            elif task.task_type == "impersonation":
                 data_source_type = extra_data.get("detectionSource", "")
             else:
                 data_source_type = extra_data.get("dataSource", "")
@@ -1169,16 +1416,18 @@ async def download_task_result(task_id: str, request: Request):
 @router.post("/api/impersonation-tasks")
 async def create_impersonation_task(
     request: Request,
-    queryName: str = Form(...),
+    queryName: Optional[str] = Form(None),
     detectionDateRange: str = Form(...),
     useCustomThreshold: str = Form("false"),
     threshold: Optional[str] = Form(None),
+    officialFile: Optional[UploadFile] = File(None),
 ):
     """
     创建仿冒域名检测任务
     
     参数:
-    - queryName: 事件名或单位名
+    - queryName: 事件名或单位名（首选，当前解析能力为占位）
+    - officialFile: 官方域名文件（当事件名未解析出官方域名时可使用）
     - detectionDateRange: 新注册域名日期范围JSON字符串
     - useCustomThreshold: 是否使用自定义阈值
     - threshold: 自定义阈值（0-100）
@@ -1189,11 +1438,11 @@ async def create_impersonation_task(
         uploaded_by_header = request.headers.get("X-User-Name") or request.headers.get("X-User")
         logger.info(f"用户ID: {created_by_user_id}, 上传者: {uploaded_by_header}")
 
-        query_name = queryName.strip()
-        if not query_name:
+        query_name = (queryName or "").strip()
+        if not query_name and officialFile is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="queryName is required"
+                detail="queryName or officialFile is required"
             )
         if not detectionDateRange or detectionDateRange.strip() == "":
             raise HTTPException(
@@ -1213,8 +1462,41 @@ async def create_impersonation_task(
                 },
             )
         similarity_threshold, threshold_meta = _parse_similarity_threshold(useCustomThreshold, threshold)
-        official_domains = resolve_official_domains(query_name)
+        official_domains = resolve_official_domains(query_name) if query_name else []
         official_domain_resolution_status = "resolved" if official_domains else "pending"
+        official_file_meta = None
+        if officialFile is not None:
+            file_ext = officialFile.filename.split(".")[-1].lower() if officialFile.filename else ""
+            allowed_extensions = ["csv", "txt", "xlsx"]
+            if file_ext not in allowed_extensions:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Official file type not allowed. Only {', '.join(allowed_extensions)} are supported"
+                )
+
+            official_file_content = await officialFile.read()
+            official_file_size = len(official_file_content)
+            max_size = 5 * 1024 * 1024
+            if official_file_size > max_size:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Official file size exceeds maximum allowed size of {max_size / 1024 / 1024}MB"
+                )
+
+            official_file_key = upload_file_content_to_minio(
+                official_file_content,
+                officialFile.filename or "unknown",
+                officialFile.content_type,
+            )
+            official_file_meta = {
+                "bucket": MINIO_BUCKET,
+                "object_key": official_file_key,
+                "filename": officialFile.filename or "unknown",
+                "content_type": officialFile.content_type,
+                "size": official_file_size,
+            }
+            if not official_domains:
+                official_domain_resolution_status = "file_uploaded"
         
         # 生成任务ID
         task_id = f"T{int(datetime.utcnow().timestamp())}"
@@ -1239,20 +1521,42 @@ async def create_impersonation_task(
                 "dateRange": date_range_parsed,
                 "official_domains": official_domains,
                 "official_domain_resolution_status": official_domain_resolution_status,
-                "official_domain_resolution_pending": not bool(official_domains),
+                "official_domain_resolution_pending": not bool(official_domains) and official_file_meta is None,
                 "threshold_policy": "custom" if similarity_threshold is not None else "adaptive",
                 "similarity_threshold": similarity_threshold,
                 "threshold_percent": threshold_meta["threshold_percent"],
             }
-            if not official_domains:
+            file_record = None
+            if official_file_meta:
+                file_record = StoredFile(
+                    bucket=official_file_meta["bucket"],
+                    object_key=official_file_meta["object_key"],
+                    filename=official_file_meta["filename"],
+                    content_type=official_file_meta["content_type"],
+                    size=official_file_meta["size"],
+                    uploaded_by=uploaded_by_header,
+                    metadata_json={
+                        "source": "impersonation_detection",
+                        "role": "official_domains",
+                        "original_filename": official_file_meta["filename"],
+                    },
+                )
+                db.add(file_record)
+                db.flush()
+                extra_data["official_file_bucket"] = official_file_meta["bucket"]
+                extra_data["official_file_object_key"] = official_file_meta["object_key"]
+                extra_data["official_file_filename"] = official_file_meta["filename"]
+            if not official_domains and official_file_meta is None:
                 extra_data["official_domain_resolution_message"] = "官方域名检索能力尚未接入或未检索到官方域名"
+            elif not official_domains and official_file_meta is not None:
+                extra_data["official_domain_resolution_message"] = "已使用上传的官方域名文件"
             
             # 创建任务
             task = Task(
                 task_id=task_id,
                 task_type="impersonation",
                 model_id=model_record.id,
-                file_id=None,
+                file_id=file_record.id if file_record else None,
                 extra=extra_data,
                 status="pending",
                 created_by=created_by_user_id,
@@ -1261,7 +1565,7 @@ async def create_impersonation_task(
             db.commit()
             db.refresh(task)
             
-            if official_domains:
+            if official_domains or official_file_meta is not None:
                 # 通过 Celery 异步执行检测，接口仅负责创建任务并入队
                 try:
                     dispatch_impersonation_task(task.task_id)

@@ -48,6 +48,21 @@ interface PhishingResultItem {
   公司名称: string
   相似度: string
   匹配类型: string
+  LLM研判标签?: string
+  LLM研判分数?: string | number
+  LLM处置结果?: string
+  研判原因?: string
+  关键特征?: string
+}
+
+interface DgaResultItem {
+  域名: string
+  规范化域名?: string
+  SLD?: string
+  DGA_score?: number
+  模型候选?: string
+  预测标签?: number
+  预测结果?: string
 }
 
 interface MaliciousStatistics {
@@ -59,13 +74,25 @@ interface MaliciousStatistics {
 
 interface PhishingStatistics {
   总域名数?: string | number
+  算法候选数?: string | number
   钓鱼域名数?: string | number
   正常域名数?: string | number
   钓鱼域名占比?: string
+  LLM研判状态?: string
+  LLM研判模型?: string
+  LLM已研判数?: string | number
 }
 
-type ResultItem = MaliciousResultItem | PhishingResultItem
-type Statistics = MaliciousStatistics | PhishingStatistics
+interface DgaStatistics {
+  总域名数?: string | number
+  DGA候选数?: string | number
+  DGA域名数?: string | number
+  正常域名数?: string | number
+  DGA域名占比?: string
+}
+
+type ResultItem = MaliciousResultItem | PhishingResultItem | DgaResultItem
+type Statistics = MaliciousStatistics | PhishingStatistics | DgaStatistics
 
 interface ResultData {
   task_id: string
@@ -74,10 +101,12 @@ interface ResultData {
   results: ResultItem[]
   malicious_domains?: ResultItem[]
   phishing_domains?: ResultItem[]
+  dga_domains?: ResultItem[]
   result_filename: string
   total_count: number
   malicious_count?: number
   phishing_count?: number
+  dga_count?: number
   attribution_enabled?: boolean
   attribution_results?: any[]
 }
@@ -159,6 +188,25 @@ function displayBinaryConfidence(value?: number) {
   if (value === undefined || value === null || Number.isNaN(Number(value)))
     return '未知'
   return `${(Number(value) * 100).toFixed(2)}%`
+}
+
+function displayLlmDisposition(item: Partial<PhishingResultItem>) {
+  if (item.LLM处置结果)
+    return item.LLM处置结果
+  const labelMap: Record<string, string> = {
+    likely_impersonation: '保留高危告警',
+    suspicious_impersonation: '保留人工复核',
+    unlikely_impersonation: '建议剔除',
+    uncertain: '降低优先级',
+    likely_phishing: '保留高危告警',
+    suspicious_phishing: '保留人工复核',
+    unlikely_phishing: '建议剔除',
+  }
+  return labelMap[item.LLM研判标签 || ''] || '未知'
+}
+
+function displayLlmScore(item: Partial<PhishingResultItem>) {
+  return item.LLM研判分数 || '未知'
 }
 
 const evidenceStrengthMeta: Record<string, { label: string, color: string, weight: number }> = {
@@ -325,9 +373,11 @@ function handleDownload() {
           <a-col :xs="24" :sm="12" :md="6">
             <a-card>
               <a-statistic
-                :title="resultData.task_type === 'impersonation' ? '钓鱼域名' : '恶意域名'"
+                :title="resultData.task_type === 'impersonation' ? '仿冒域名' : (resultData.task_type === 'dga' ? 'DGA域名' : '恶意域名')"
                 :value="resultData.task_type === 'impersonation'
                   ? resultData.statistics['钓鱼域名数']
+                  : resultData.task_type === 'dga'
+                    ? resultData.statistics['DGA域名数']
                   : resultData.statistics['恶意域名数']"
                 :value-style="{ color: '#cf1322', fontSize: '24px' }"
               />
@@ -347,9 +397,11 @@ function handleDownload() {
           <a-col :xs="24" :sm="12" :md="6">
             <a-card>
               <a-statistic
-                :title="resultData.task_type === 'impersonation' ? '钓鱼域名占比' : '恶意域名占比'"
+                :title="resultData.task_type === 'impersonation' ? '仿冒域名占比' : (resultData.task_type === 'dga' ? 'DGA域名占比' : '恶意域名占比')"
                 :value="resultData.task_type === 'impersonation'
                   ? resultData.statistics['钓鱼域名占比'] || '0%'
+                  : resultData.task_type === 'dga'
+                    ? resultData.statistics['DGA域名占比'] || '0%'
                   : resultData.statistics['恶意域名占比'] || '0%'"
                 :value-style="{ fontSize: '24px' }"
               />
@@ -377,12 +429,13 @@ function handleDownload() {
         <!-- 恶意/钓鱼域名列表（如果有） -->
         <a-card
           v-if="(resultData.task_type === 'malicious' && resultData.malicious_domains && resultData.malicious_domains.length > 0) ||
-                (resultData.task_type === 'impersonation' && resultData.phishing_domains && resultData.phishing_domains.length > 0)"
-          :title="resultData.task_type === 'impersonation' ? '钓鱼域名列表' : '恶意域名列表'"
+                (resultData.task_type === 'impersonation' && resultData.phishing_domains && resultData.phishing_domains.length > 0) ||
+                (resultData.task_type === 'dga' && resultData.dga_domains && resultData.dga_domains.length > 0)"
+          :title="resultData.task_type === 'impersonation' ? '仿冒域名列表' : (resultData.task_type === 'dga' ? 'DGA域名列表' : '恶意域名列表')"
           style="margin-bottom: 16px;"
         >
           <a-list
-            :data-source="resultData.task_type === 'impersonation' ? resultData.phishing_domains : resultData.malicious_domains"
+            :data-source="resultData.task_type === 'impersonation' ? resultData.phishing_domains : (resultData.task_type === 'dga' ? resultData.dga_domains : resultData.malicious_domains)"
             :pagination="{ pageSize: 10, showSizeChanger: true }"
             size="large"
             bordered
@@ -398,8 +451,18 @@ function handleDownload() {
                   <template v-if="resultData.task_type === 'impersonation'" #description>
                     <div>
                       <span>官方域名: {{ item.官方域名 || item.目标域名 }}</span><br>
-                      <span>公司: {{ item.公司名称 }}</span> |
-                      <span>相似度: {{ item.相似度 }}</span>
+                      <span>官方域名单位名称: {{ item.公司名称 || '未知单位' }}</span>
+                      <span class="summary-item">LLM风险分: {{ displayLlmScore(item) }}</span>
+                      <span class="summary-item">LLM处置结果: {{ displayLlmDisposition(item) }}</span>
+                      <div v-if="item.研判原因" style="margin-top: 4px; color: #667085;">
+                        LLM研判原因: {{ item.研判原因 }}
+                      </div>
+                    </div>
+                  </template>
+                  <template v-else-if="resultData.task_type === 'dga'" #description>
+                    <div>
+                      <a-tag color="red">DGA-like</a-tag>
+                      <span class="summary-item">DGA_score: {{ item.DGA_score }}</span>
                     </div>
                   </template>
                   <template v-else #description>

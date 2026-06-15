@@ -11,7 +11,7 @@ class Task(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     task_id = Column(String(64), unique=True, index=True, nullable=False)
     task_type = Column(
-        SqlEnum("malicious", "impersonation", "malicious_ip", name="task_type_enum"),
+        SqlEnum("malicious", "impersonation", "malicious_ip", "dga", name="task_type_enum"),
         nullable=False,
     )
     model_id = Column(Integer, ForeignKey("models.id"), nullable=False)

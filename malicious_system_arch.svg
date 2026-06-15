@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1040" viewBox="0 0 1900 1040" role="img" aria-label="恶意域名检测模块系统框图">
+  <defs>
+    <marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
+      <path d="M1,1 L11,6 L1,11 Z" fill="#000"/>
+    </marker>
+    <marker id="smallArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M1,1 L9,5 L1,9 Z" fill="#111"/>
+    </marker>
+    <style>
+      .title { font-family: Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 30px; font-weight: 700; fill: #000; }
+      .phase-title { font-family: Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 24px; font-weight: 700; fill: #000; }
+      .label { font-family: Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 21px; fill: #000; }
+      .small { font-family: Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 17px; fill: #111; }
+      .tiny { font-family: Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 14px; fill: #111; }
+      .bold { font-weight: 700; }
+      .outer { fill: #fff; stroke: #000; stroke-width: 3; }
+      .dash { fill: #fff; stroke: #5b5b5b; stroke-width: 2.5; stroke-dasharray: 8 9; }
+      .solid { fill: #fff; stroke: #000; stroke-width: 2; }
+      .soft-green { fill: #dcefd7; stroke: #8bb880; stroke-width: 1.5; }
+      .soft-blue { fill: #e3f0fb; stroke: #7fb4df; stroke-width: 1.5; }
+      .soft-red { fill: #fee5e6; stroke: #ee8d92; stroke-width: 1.5; }
+      .soft-purple { fill: #eaddec; stroke: #a983ad; stroke-width: 1.5; }
+      .soft-yellow { fill: #fff3d8; stroke: #d7a84a; stroke-width: 1.5; }
+      .soft-gray { fill: #f6f6f6; stroke: #222; stroke-width: 1.6; }
+      .arrow { stroke: #000; stroke-width: 4; fill: none; marker-end: url(#arrow); }
+      .thin-arrow { stroke: #111; stroke-width: 2.7; fill: none; marker-end: url(#smallArrow); }
+      .mini-red { fill: #ff646b; }
+      .mini-blue { fill: #5aaeea; }
+      .mini-deep-blue { fill: #3329f5; }
+      .mini-green { fill: #28a745; }
+      .mini-purple { fill: #8b51d6; }
+      .mini-yellow { fill: #f2b84b; }
+      .bracket { stroke: #000; stroke-width: 4; fill: none; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1900" height="1040" fill="#fff"/>
+
+  <!-- Column titles -->
+  <circle cx="82" cy="54" r="23" fill="#000"/>
+  <text x="82" y="63" text-anchor="middle" class="title" fill="#fff" style="font-size:28px;">1</text>
+  <text x="118" y="65" class="title">特征工程与模型训练</text>
+
+  <circle cx="689" cy="54" r="23" fill="#000"/>
+  <text x="689" y="63" text-anchor="middle" class="title" fill="#fff" style="font-size:28px;">2</text>
+  <text x="725" y="65" class="title">在线检测与风险评分</text>
+
+  <circle cx="1296" cy="54" r="23" fill="#000"/>
+  <text x="1296" y="63" text-anchor="middle" class="title" fill="#fff" style="font-size:28px;">3</text>
+  <text x="1332" y="65" class="title">结果生成与检测结束</text>
+
+  <!-- Outer rounded panels -->
+  <rect x="60" y="95" width="540" height="770" rx="78" class="outer"/>
+  <rect x="680" y="95" width="540" height="770" rx="78" class="outer"/>
+  <rect x="1300" y="95" width="540" height="770" rx="78" class="outer"/>
+
+  <!-- Inter-column arrows -->
+  <path d="M610 480 H668" class="arrow"/>
+  <path d="M1230 480 H1288" class="arrow"/>
+
+  <!-- Column 1: Training -->
+  <text x="330" y="145" text-anchor="middle" class="phase-title">Training Phase：训练样本与模型发布</text>
+
+  <rect x="112" y="176" width="190" height="82" rx="14" class="soft-red"/>
+  <text x="207" y="205" text-anchor="middle" class="label bold">恶意域名样本</text>
+  <text x="207" y="231" text-anchor="middle" class="small">blacklist / threat data</text>
+
+  <rect x="356" y="176" width="190" height="82" rx="14" class="soft-blue"/>
+  <text x="451" y="205" text-anchor="middle" class="label bold">正常域名样本</text>
+  <text x="451" y="231" text-anchor="middle" class="small">benign corpus</text>
+
+  <path d="M207 260 V300" class="thin-arrow"/>
+  <path d="M451 260 V300" class="thin-arrow"/>
+
+  <rect x="112" y="306" width="436" height="286" rx="42" class="dash"/>
+  <text x="330" y="346" text-anchor="middle" class="phase-title">Consistent Feature Extraction</text>
+
+  <rect x="146" y="384" width="128" height="58" rx="8" class="soft-green"/>
+  <text x="210" y="408" text-anchor="middle" class="small bold">长度统计</text>
+  <text x="210" y="429" text-anchor="middle" class="tiny">len / label count</text>
+
+  <rect x="332" y="384" width="128" height="58" rx="8" class="soft-yellow"/>
+  <text x="396" y="408" text-anchor="middle" class="small bold">字符分布</text>
+  <text x="396" y="429" text-anchor="middle" class="tiny">digit / vowel / entropy</text>
+
+  <rect x="146" y="482" width="128" height="58" rx="8" class="soft-blue"/>
+  <text x="210" y="506" text-anchor="middle" class="small bold">关键词距离</text>
+  <text x="210" y="527" text-anchor="middle" class="tiny">gov / mail / serve</text>
+
+  <rect x="332" y="482" width="128" height="58" rx="8" class="soft-purple"/>
+  <text x="396" y="506" text-anchor="middle" class="small bold">结构模式</text>
+  <text x="396" y="527" text-anchor="middle" class="tiny">tokens / suffix</text>
+
+  <path d="M274 413 H330" class="thin-arrow"/>
+  <path d="M274 511 H330" class="thin-arrow"/>
+  <path d="M330 592 V625" class="thin-arrow"/>
+
+  <rect x="126" y="636" width="194" height="70" rx="16" class="soft-green"/>
+  <text x="223" y="664" text-anchor="middle" class="label bold">Standard Scaler</text>
+  <text x="223" y="691" text-anchor="middle" class="small">scaler.pkl / scaler2.pkl</text>
+
+  <rect x="366" y="636" width="194" height="70" rx="16" class="soft-purple"/>
+  <text x="463" y="664" text-anchor="middle" class="label bold">SVM Classifier</text>
+  <text x="463" y="691" text-anchor="middle" class="small">svm_model.pkl</text>
+
+  <path d="M320 671 H362" class="thin-arrow"/>
+  <path d="M330 706 V736" class="thin-arrow"/>
+
+  <path d="M150 754 V802 M150 754 H172 M150 802 H172" class="bracket"/>
+  <path d="M510 754 V802 M510 754 H488 M510 802 H488" class="bracket"/>
+  <rect x="206" y="762" width="38" height="26" rx="6" class="mini-red"/>
+  <rect x="264" y="762" width="38" height="26" rx="6" class="mini-blue"/>
+  <rect x="322" y="762" width="38" height="26" rx="6" class="mini-yellow"/>
+  <text x="384" y="784" class="label bold">...</text>
+  <rect x="438" y="762" width="38" height="26" rx="6" class="mini-purple"/>
+  <text x="330" y="830" text-anchor="middle" class="phase-title">已发布模型与标准化器</text>
+
+  <!-- Column 2: Online detection -->
+  <text x="950" y="145" text-anchor="middle" class="phase-title">Testing Phase：域名检测与判定</text>
+
+  <rect x="742" y="172" width="416" height="86" rx="16" class="soft-gray"/>
+  <text x="950" y="203" text-anchor="middle" class="label bold">待检测域名输入</text>
+  <text x="950" y="231" text-anchor="middle" class="small">上传文件 / 手动输入 / 新注册域名</text>
+
+  <path d="M950 260 V296" class="thin-arrow"/>
+
+  <rect x="730" y="304" width="440" height="298" rx="40" class="dash"/>
+  <text x="950" y="344" text-anchor="middle" class="phase-title">Prediction Pipeline</text>
+
+  <rect x="770" y="382" width="160" height="58" rx="10" class="soft-blue"/>
+  <text x="850" y="406" text-anchor="middle" class="small bold">域名清洗</text>
+  <text x="850" y="428" text-anchor="middle" class="tiny">csv / txt / xlsx</text>
+
+  <rect x="1000" y="382" width="160" height="58" rx="10" class="soft-green"/>
+  <text x="1080" y="406" text-anchor="middle" class="small bold">特征向量</text>
+  <text x="1080" y="428" text-anchor="middle" class="tiny">utils_ML.feature_extract</text>
+
+  <path d="M930 411 H998" class="thin-arrow"/>
+
+  <rect x="770" y="494" width="160" height="58" rx="10" class="soft-yellow"/>
+  <text x="850" y="518" text-anchor="middle" class="small bold">特征标准化</text>
+  <text x="850" y="540" text-anchor="middle" class="tiny">scaler.transform</text>
+
+  <rect x="1000" y="494" width="160" height="58" rx="10" class="soft-purple"/>
+  <text x="1080" y="518" text-anchor="middle" class="small bold">SVM 推理</text>
+  <text x="1080" y="540" text-anchor="middle" class="tiny">predict / predict_proba</text>
+
+  <path d="M930 523 H998" class="thin-arrow"/>
+  <path d="M1080 442 V492" class="thin-arrow"/>
+
+  <path d="M950 604 V632" class="thin-arrow"/>
+
+  <rect x="758" y="642" width="384" height="72" rx="16" class="soft-red"/>
+  <text x="950" y="671" text-anchor="middle" class="label bold">恶意概率与预测标签</text>
+  <text x="950" y="698" text-anchor="middle" class="small">预测结果：恶意 / 正常；二分类置信度</text>
+
+  <path d="M950 716 V746" class="thin-arrow"/>
+
+  <rect x="758" y="756" width="384" height="70" rx="16" class="solid"/>
+  <text x="950" y="785" text-anchor="middle" class="label bold">结果筛选与 Excel 生成</text>
+  <text x="950" y="812" text-anchor="middle" class="small">预测结果 · 统计信息 · 恶意域名列表</text>
+
+  <!-- Column 3: Detection result and completion -->
+  <text x="1570" y="145" text-anchor="middle" class="phase-title">Detection Result &amp; Task Completion</text>
+
+  <rect x="1342" y="166" width="456" height="292" rx="12" class="dash"/>
+  <text x="1368" y="206" class="phase-title">1. 检测结果生成</text>
+
+  <rect x="1380" y="238" width="168" height="56" rx="10" class="soft-blue"/>
+  <text x="1464" y="262" text-anchor="middle" class="small bold">预测结果表</text>
+  <text x="1464" y="284" text-anchor="middle" class="tiny">域名 / 预测结果 / 置信度</text>
+
+  <rect x="1592" y="238" width="168" height="56" rx="10" class="soft-green"/>
+  <text x="1676" y="262" text-anchor="middle" class="small bold">统计信息表</text>
+  <text x="1676" y="284" text-anchor="middle" class="tiny">总数 / 恶意数 / 占比</text>
+
+  <path d="M1548 266 H1588" class="thin-arrow"/>
+  <path d="M1570 296 V326" class="thin-arrow"/>
+
+  <rect x="1395" y="336" width="350" height="58" rx="10" class="soft-red"/>
+  <text x="1570" y="360" text-anchor="middle" class="label bold">恶意域名列表</text>
+  <text x="1570" y="386" text-anchor="middle" class="small">仅保留预测标签为恶意的样本</text>
+
+  <path d="M1570 396 V426" class="thin-arrow"/>
+
+  <rect x="1395" y="430" width="350" height="36" rx="8" class="soft-gray"/>
+  <text x="1570" y="454" text-anchor="middle" class="small bold">Excel 工作簿：预测结果 / 统计信息 / 恶意域名列表</text>
+
+  <rect x="1342" y="504" width="456" height="318" rx="12" class="dash"/>
+  <text x="1368" y="544" class="phase-title">2. 任务结果保存</text>
+
+  <rect x="1382" y="586" width="170" height="56" rx="10" class="soft-yellow"/>
+  <text x="1467" y="610" text-anchor="middle" class="small bold">上传结果文件</text>
+  <text x="1467" y="632" text-anchor="middle" class="tiny">results bucket</text>
+
+  <rect x="1590" y="586" width="170" height="56" rx="10" class="soft-purple"/>
+  <text x="1675" y="610" text-anchor="middle" class="small bold">写入任务记录</text>
+  <text x="1675" y="632" text-anchor="middle" class="tiny">result_file_key</text>
+
+  <path d="M1552 614 H1588" class="thin-arrow"/>
+  <path d="M1570 644 V676" class="thin-arrow"/>
+
+  <rect x="1370" y="686" width="402" height="70" rx="14" class="soft-green"/>
+  <text x="1571" y="716" text-anchor="middle" class="label bold">任务状态：completed</text>
+  <text x="1571" y="744" text-anchor="middle" class="small">前端“我的任务”读取结果文件并展示检测结果</text>
+
+  <!-- Mini result strip -->
+  <path d="M1392 802 V842 M1392 802 H1412 M1392 842 H1412" class="bracket"/>
+  <path d="M1748 802 V842 M1748 802 H1728 M1748 842 H1728" class="bracket"/>
+  <rect x="1438" y="812" width="36" height="24" rx="5" class="mini-red"/>
+  <rect x="1492" y="812" width="36" height="24" rx="5" class="mini-blue"/>
+  <rect x="1546" y="812" width="36" height="24" rx="5" class="mini-yellow"/>
+  <text x="1608" y="832" class="label bold">...</text>
+  <rect x="1664" y="812" width="36" height="24" rx="5" class="mini-green"/>
+
+  <!-- Bottom legend -->
+  <line x1="82" y1="910" x2="1818" y2="910" stroke="#000" stroke-width="2"/>
+  <text x="82" y="968" class="label bold">图例</text>
+
+  <rect x="120" y="944" width="28" height="28" rx="5" class="mini-red"/>
+  <rect x="158" y="944" width="28" height="28" rx="5" class="mini-blue"/>
+  <text x="210" y="967" class="label">恶意 / 正常域名样本或检测结果</text>
+
+  <rect x="520" y="944" width="72" height="34" rx="10" class="dash"/>
+  <text x="616" y="968" class="label">虚线框：训练 / 测试阶段边界</text>
+
+  <rect x="952" y="944" width="32" height="32" rx="7" class="soft-purple"/>
+  <rect x="992" y="944" width="32" height="32" rx="7" class="soft-yellow"/>
+  <text x="1050" y="968" class="label">模型推理与结果输出模块</text>
+
+  <path d="M1410 960 H1488" class="arrow"/>
+  <text x="1518" y="968" class="label">数据流与决策流</text>
+</svg>

@@ -4,9 +4,12 @@ import { SearchOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import { onMounted, nextTick, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import type { OrganizationProfile } from '~/api/dashboard/profile'
 import { queryOrganizationsApi } from '~/api/dashboard/profile'
 import { queryEventsApi } from '~/api/dashboard/spatial'
+import type { DomainListItem } from '~/api/dashboard/attributes'
+import { getDomainListApi } from '~/api/dashboard/attributes'
 import AptTimeline, { type AptEvent } from '~/components/apt-timeline/index.vue'
 
 defineOptions({ name: 'DashboardProfile' })
@@ -22,11 +25,16 @@ const detailVisible = ref(false)
 const detailLoading = ref(false)
 const selectedOrganization = ref<OrganizationProfile | null>(null)
 const selectedOrgEvents = ref<AptEvent[]>([])
+const selectedOrgDomains = ref<DomainListItem[]>([])
+const selectedOrgDomainsLoading = ref(false)
+const router = useRouter()
+const route = useRoute()
+const activeOnly = ref(false)
 
 // 分页配置
 const pagination = reactive({
   current: 1,
-  pageSize: 100,
+  pageSize: 6,
   total: 0,
 })
 
@@ -295,6 +303,10 @@ void parseJsonField
 
 // 初始化数据
 onMounted(() => {
+  const activeQuery = route.query.activeOnly
+  if (activeQuery === '1' || activeQuery === 'true') {
+    activeOnly.value = true
+  }
   loadOrganizations()
 })
 
@@ -302,23 +314,63 @@ onMounted(() => {
 async function loadOrganizations() {
   loading.value = true
   try {
-    const params: any = {
-      page: pagination.current,
-      pageSize: pagination.pageSize,
+    const keyword = searchKeyword.value.trim()
+
+    if (!activeOnly.value) {
+      const params: any = {
+        page: pagination.current,
+        pageSize: pagination.pageSize,
+      }
+
+      // 添加搜索关键词
+      if (keyword)
+        params.keyword = keyword
+
+      const result = await queryOrganizationsApi(params)
+      if (result.data) {
+        // 后端已经返回正确格式的数据，直接使用
+        organizationList.value = result.data.list || []
+        total.value = result.data.total || 0
+        pagination.total = total.value
+      }
+      return
     }
-    
-    // 添加搜索关键词
-    if (searchKeyword.value && searchKeyword.value.trim()) {
-      params.keyword = searchKeyword.value.trim()
+
+    const threshold = new Date('2025-01-01T00:00:00')
+    const pageSize = 100
+    let page = 1
+    let totalPages = 1
+    const allOrganizations: OrganizationProfile[] = []
+
+    while (page <= totalPages) {
+      const params: any = { page, pageSize }
+      if (keyword)
+        params.keyword = keyword
+
+      const response = await queryOrganizationsApi(params)
+      if (response.code !== 200 || !response.data?.list)
+        break
+
+      const list = response.data.list as OrganizationProfile[]
+      allOrganizations.push(...list)
+
+      const totalCount = response.data.total || list.length
+      totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
+      page++
     }
-    
-    const result = await queryOrganizationsApi(params)
-    if (result.data) {
-      // 后端已经返回正确格式的数据，直接使用
-      organizationList.value = result.data.list || []
-      total.value = result.data.total || 0
-      pagination.total = total.value
-    }
+
+    const filtered = allOrganizations.filter((org) => {
+      const dateSource = org.latestEventDate || org.updateTime
+      if (!dateSource)
+        return false
+      const updateDate = new Date(dateSource)
+      return !Number.isNaN(updateDate.getTime()) && updateDate > threshold
+    })
+
+    total.value = filtered.length
+    pagination.total = total.value
+    const start = (pagination.current - 1) * pagination.pageSize
+    organizationList.value = filtered.slice(start, start + pagination.pageSize)
   } catch (error) {
     console.error('加载组织数据失败:', error)
     message.error('加载组织数据失败，请稍后重试')
@@ -326,6 +378,12 @@ async function loadOrganizations() {
     loading.value = false
   }
 }
+
+function handlePageChange(page: number) {
+  pagination.current = page
+  loadOrganizations()
+}
+
 
 function mapToTimelineEvents(events: any[], orgName: string): AptEvent[] {
   return (events || []).map((event: any) => ({
@@ -341,11 +399,12 @@ function mapToTimelineEvents(events: any[], orgName: string): AptEvent[] {
 async function openOrganizationDetail(org: OrganizationProfile) {
   selectedOrganization.value = org
   selectedOrgEvents.value = []
+  selectedOrgDomains.value = []
   detailVisible.value = true
   detailLoading.value = true
+  const orgId = Number(org.id)
 
   try {
-    const orgId = Number(org.id)
     if (!Number.isNaN(orgId)) {
       const result = await queryEventsApi({
         organizationId: orgId,
@@ -362,6 +421,36 @@ async function openOrganizationDetail(org: OrganizationProfile) {
   finally {
     detailLoading.value = false
   }
+
+  if (!Number.isNaN(orgId)) {
+    selectedOrgDomainsLoading.value = true
+    try {
+      const response = await getDomainListApi({
+        organizationId: orgId,
+        maliciousOnly: true,
+      })
+      if (response.code === 200 && response.data) {
+        selectedOrgDomains.value = response.data
+      }
+    }
+    catch (error) {
+      console.error('加载组织恶意域名失败:', error)
+      message.error('加载组织恶意域名失败，请稍后重试')
+    }
+    finally {
+      selectedOrgDomainsLoading.value = false
+    }
+  }
+}
+
+function goToOrganizationDomains(org: OrganizationProfile) {
+  router.push({
+    path: '/dashboard/attributes',
+    query: {
+      orgId: String(org.id),
+      orgName: org.name,
+    },
+  })
 }
 
 // 搜索防抖定时器
@@ -385,6 +474,26 @@ watch(
   searchKeyword,
   () => {
     handleSearch()
+  },
+)
+
+watch(
+  activeOnly,
+  () => {
+    pagination.current = 1
+    loadOrganizations()
+  },
+)
+
+watch(
+  () => route.query.activeOnly,
+  (value) => {
+    const next = value === '1' || value === 'true'
+    if (next !== activeOnly.value) {
+      activeOnly.value = next
+      pagination.current = 1
+      loadOrganizations()
+    }
   },
 )
 
@@ -477,6 +586,9 @@ watch(
             <SearchOutlined />
           </template>
         </a-input>
+        <a-checkbox v-model:checked="activeOnly">
+          仅显示活跃组织
+        </a-checkbox>
         <a-button
           type="primary"
           size="large"
@@ -646,16 +758,27 @@ watch(
                 </div>
               </div>
               
-              <!-- 更新时间 -->
+              <!-- 最近活跃时间 -->
               <div class="org-section" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0f0f0;">
                 <a-typography-text type="secondary" style="font-size: 12px;">
-                  更新时间：{{ formatDate(org.updateTime) }}
+                  最近活跃时间：{{ formatDate(org.latestEventDate || org.updateTime) }}
                 </a-typography-text>
               </div>
             </div>
           </a-card>
         </a-col>
         </a-row>
+        <div style="display: flex; justify-content: flex-end; margin-top: 16px;">
+          <a-pagination
+            v-model:current="pagination.current"
+            :total="pagination.total"
+            :page-size="pagination.pageSize"
+            :show-size-changer="false"
+            :show-quick-jumper="true"
+            :show-total="(total:number) => `共 ${total} 条`"
+            @change="handlePageChange"
+          />
+        </div>
       </template>
       
       <!-- 空状态 -->
@@ -677,11 +800,16 @@ watch(
         <template v-if="selectedOrganization">
           <a-card :bordered="false" style="margin-bottom: 16px;">
             <template #title>
-              <div class="org-header">
-                <a-tag color="green" style="margin-right: 8px;">APT</a-tag>
-                <a-typography-title :level="4" style="margin: 0; display: inline;">
-                  {{ selectedOrganization.name }}
-                </a-typography-title>
+              <div class="org-header" style="justify-content: space-between; width: 100%;">
+                <div class="org-header">
+                  <a-tag color="green" style="margin-right: 8px;">APT</a-tag>
+                  <a-typography-title :level="4" style="margin: 0; display: inline;">
+                    {{ selectedOrganization.name }}
+                  </a-typography-title>
+                </div>
+                <a-button type="primary" @click="goToOrganizationDomains(selectedOrganization)">
+                  查看该组织域名
+                </a-button>
               </div>
             </template>
 
@@ -723,9 +851,32 @@ watch(
                 </a-space>
               </div>
 
+              <div class="org-section">
+                <a-typography-text type="secondary" strong>
+                  相关恶意域名：
+                </a-typography-text>
+                <div style="margin-top: 8px;">
+                  <a-spin :spinning="selectedOrgDomainsLoading">
+                    <a-space v-if="selectedOrgDomains.length > 0" wrap>
+                      <a-tag
+                        v-for="item in selectedOrgDomains"
+                        :key="item.domain"
+                        color="red"
+                        style="font-family: monospace; font-size: 11px;"
+                      >
+                        {{ item.domain }}
+                      </a-tag>
+                    </a-space>
+                    <a-typography-text v-else type="secondary">
+                      暂无恶意域名
+                    </a-typography-text>
+                  </a-spin>
+                </div>
+              </div>
+
               <div class="org-section" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0f0f0;">
                 <a-typography-text type="secondary" style="font-size: 12px;">
-                  更新时间：{{ formatDate(selectedOrganization.updateTime) }}
+                  最近活跃时间：{{ formatDate(selectedOrganization.latestEventDate || selectedOrganization.updateTime) }}
                 </a-typography-text>
               </div>
             </div>

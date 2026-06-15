@@ -198,8 +198,11 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      # 使用宿主机网络以避免构建阶段 DNS 异常
+      network: host
       args:
         VITE_BUILD_MODE: ${FRONTEND_BUILD_MODE:-production}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
     container_name: atdv-frontend
     restart: unless-stopped
     ports:

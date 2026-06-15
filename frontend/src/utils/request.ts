@@ -17,7 +17,7 @@ export interface RequestConfigExtra {
   loading?: boolean
 }
 const instance: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_APP_BASE_API ?? '/',
+  baseURL: import.meta.env.VITE_APP_BASE_API ?? '/api',
   timeout: 60000,
   headers: { 'Content-Type': ContentTypeEnum.JSON },
 })

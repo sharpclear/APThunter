@@ -12,6 +12,8 @@ import dns.resolver
 import ssl
 import socket
 import json
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from app.db.session import engine
@@ -30,6 +32,24 @@ def safe_str(value) -> Optional[str]:
         return None
     if isinstance(value, (list, tuple)) and value:
         return str(value[0]) if value else None
+    return str(value)
+
+
+def safe_date(value) -> Optional[str]:
+    """安全地转换日期为 ISO 字符串"""
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)) and value:
+        for item in value:
+            parsed = safe_date(item)
+            if parsed:
+                return parsed
+        return None
+    if hasattr(value, "strftime"):
+        try:
+            return value.strftime("%Y-%m-%d")
+        except Exception:
+            return str(value)
     return str(value)
 
 
@@ -72,9 +92,9 @@ def lookup_whois(request: DomainLookupRequest = Body(...)):
         data = {
             "domain": domain,
             "registrar": safe_str(w.registrar) if hasattr(w, 'registrar') else None,
-            "registrationDate": safe_str(w.creation_date) if hasattr(w, 'creation_date') else None,
-            "expirationDate": safe_str(w.expiration_date) if hasattr(w, 'expiration_date') else None,
-            "updatedDate": safe_str(w.updated_date) if hasattr(w, 'updated_date') else None,
+            "registrationDate": safe_date(w.creation_date) if hasattr(w, 'creation_date') else None,
+            "expirationDate": safe_date(w.expiration_date) if hasattr(w, 'expiration_date') else None,
+            "updatedDate": safe_date(w.updated_date) if hasattr(w, 'updated_date') else None,
             "nameServers": safe_list(w.name_servers) if hasattr(w, 'name_servers') and w.name_servers else [],
             "status": safe_list(w.status) if hasattr(w, 'status') and w.status else [],
             "registrant": registrant if registrant else None,
@@ -176,6 +196,8 @@ def lookup_ssl(request: DomainLookupRequest = Body(...)):
         with socket.create_connection((domain, 443), timeout=10) as sock:
             with context.wrap_socket(sock, server_hostname=domain) as ssock:
                 cert = ssock.getpeercert()
+                cert_bytes = ssock.getpeercert(binary_form=True)
+                parsed_cert = x509.load_der_x509_certificate(cert_bytes)
                 
                 # 解析 issuer 和 subject
                 issuer = {}
@@ -193,18 +215,41 @@ def lookup_ssl(request: DomainLookupRequest = Body(...)):
                 for item in cert.get('subjectAltName', []):
                     if item[0] == 'DNS':
                         san_names.append(item[1])
+
+                algorithm = None
+                try:
+                    if parsed_cert.signature_hash_algorithm:
+                        algorithm = parsed_cert.signature_hash_algorithm.name
+                except Exception:
+                    algorithm = None
+
+                key_size = None
+                try:
+                    public_key = parsed_cert.public_key()
+                    key_size = getattr(public_key, "key_size", None)
+                except Exception:
+                    key_size = None
+
+                fingerprint = None
+                try:
+                    fingerprint = parsed_cert.fingerprint(hashes.SHA256()).hex()
+                except Exception:
+                    fingerprint = None
                 
                 data = {
                     "domain": domain,
                     "issuer": issuer,
                     "subject": subject,
                     "validity": {
-                        "notBefore": cert.get('notBefore'),
-                        "notAfter": cert.get('notAfter')
+                        "notBefore": parsed_cert.not_valid_before.isoformat() if parsed_cert.not_valid_before else None,
+                        "notAfter": parsed_cert.not_valid_after.isoformat() if parsed_cert.not_valid_after else None
                     },
                     "version": cert.get('version'),
                     "serialNumber": cert.get('serialNumber'),
                     "sanNames": san_names if san_names else None,
+                    "algorithm": algorithm,
+                    "keySize": key_size,
+                    "fingerprint": fingerprint,
                     "isExpired": False,  # 可以根据日期判断
                     "isSelfSigned": issuer == subject
                 }
@@ -289,8 +334,8 @@ def lookup_all(request: DomainLookupRequest = Body(...)):
     # 判断查询是否成功
     if not any([results["whois"], results["dns"], results["certificate"]]):
         return JSONResponse(
-            status_code=404,
-            content={"code": 404, "msg": "所有查询均失败", "data": results}
+            status_code=200,
+            content={"code": 200, "msg": "无法查询到域名具体信息", "data": results}
         )
     
     return JSONResponse(content={
@@ -373,10 +418,12 @@ def save_to_database(domain: str, results: Dict[str, Any]):
                 text("""
                     INSERT INTO ssl_certificates (
                         domain_id, issuer, subject, not_before, not_after,
-                        serial_number, san_names, is_expired, is_self_signed, created_at
+                        algorithm, key_size, serial_number, fingerprint, san_names,
+                        is_expired, is_self_signed, created_at
                     ) VALUES (
                         :domain_id, :issuer, :subject, :not_before, :not_after,
-                        :serial_number, :san_names, :is_expired, :is_self_signed, NOW()
+                        :algorithm, :key_size, :serial_number, :fingerprint, :san_names,
+                        :is_expired, :is_self_signed, NOW()
                     )
                 """),
                 {
@@ -385,7 +432,10 @@ def save_to_database(domain: str, results: Dict[str, Any]):
                     "subject": json.dumps(cert_data.get("subject")) if cert_data.get("subject") else None,
                     "not_before": cert_data.get("validity", {}).get("notBefore"),
                     "not_after": cert_data.get("validity", {}).get("notAfter"),
+                    "algorithm": cert_data.get("algorithm"),
+                    "key_size": cert_data.get("keySize"),
                     "serial_number": cert_data.get("serialNumber"),
+                    "fingerprint": cert_data.get("fingerprint"),
                     "san_names": json.dumps(cert_data.get("sanNames")) if cert_data.get("sanNames") else None,
                     "is_expired": cert_data.get("isExpired", False),
                     "is_self_signed": cert_data.get("isSelfSigned", False)

@@ -2,7 +2,7 @@
 域名属性查询API
 提供域名的WHOIS、DNS、SSL证书等属性查询服务
 """
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from typing import Optional
@@ -17,24 +17,46 @@ class DomainQueryRequest(BaseModel):
 
 
 @router.get("/list")
-def get_domain_list():
+def get_domain_list(
+    organization_id: Optional[int] = Query(None, description="组织ID"),
+    organization_name: Optional[str] = Query(None, description="组织名称"),
+    malicious_only: bool = Query(False, description="仅返回恶意域名")
+):
     """获取数据库中有数据的域名列表（至少有WHOIS、DNS或SSL证书信息之一）"""
     try:
         with engine.connect() as conn:
-            results = conn.execute(
-                text("""
-                    SELECT DISTINCT d.domain_name, d.created_at,
-                           d.is_malicious,
-                           d.organization_id,
-                           o.name as organization_name,
-                           (SELECT COUNT(*) FROM whois_info WHERE domain_id = d.id) as has_whois,
-                           (SELECT COUNT(*) FROM dns_records WHERE domain_id = d.id) as has_dns,
-                           (SELECT COUNT(*) FROM ssl_certificates WHERE domain_id = d.id) as has_ssl
-                    FROM domains d
-                    LEFT JOIN apt_organizations o ON d.organization_id = o.id
-                    ORDER BY d.is_malicious DESC, d.created_at DESC
-                """)
-            ).fetchall()
+            where_clauses = []
+            params = {}
+
+            if organization_id is not None:
+                where_clauses.append("d.organization_id = :org_id")
+                params["org_id"] = organization_id
+
+            if organization_name:
+                where_clauses.append("o.name LIKE :org_name")
+                params["org_name"] = f"%{organization_name}%"
+
+            if malicious_only:
+                where_clauses.append("d.is_malicious = 1")
+
+            where_sql = " AND ".join(where_clauses)
+            where_sql = f"WHERE {where_sql}" if where_sql else ""
+
+            query = f"""
+                SELECT DISTINCT d.domain_name, d.created_at,
+                       d.is_malicious,
+                       d.organization_id,
+                       o.name as organization_name,
+                       (SELECT COUNT(*) FROM whois_info WHERE domain_id = d.id) as has_whois,
+                       (SELECT COUNT(*) FROM dns_records WHERE domain_id = d.id) as has_dns,
+                       (SELECT COUNT(*) FROM ssl_certificates WHERE domain_id = d.id) as has_ssl
+                FROM domains d
+                LEFT JOIN apt_organizations o ON d.organization_id = o.id
+                {where_sql}
+                ORDER BY d.is_malicious DESC, d.created_at DESC
+            """
+
+            results = conn.execute(text(query), params).fetchall()
             
             domains = []
             for row in results:

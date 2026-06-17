@@ -5,8 +5,13 @@ FROM node:20-alpine AS builder
 # 设置工作目录
 WORKDIR /app
 
-# 安装 pnpm
-RUN corepack enable && corepack prepare pnpm@10.17.1 --activate
+# 设置 npm/pnpm 镜像源（可在 compose 中通过 NPM_REGISTRY 覆盖）
+ARG NPM_REGISTRY=https://registry.npmjs.org
+ENV COREPACK_NPM_REGISTRY=${NPM_REGISTRY}
+RUN npm config set registry ${NPM_REGISTRY}
+
+# 安装 pnpm（避免 corepack 拉取失败）
+RUN npm install -g pnpm@10.17.1
 
 # 构建模式（默认 production，可在 compose 中通过 FRONTEND_BUILD_MODE 覆盖）
 ARG VITE_BUILD_MODE=production
@@ -15,7 +20,8 @@ ARG VITE_BUILD_MODE=production
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # 安装依赖（CI/镜像构建与 lockfile 一致，避免非确定性构建）
-RUN pnpm install --frozen-lockfile
+RUN pnpm config set registry ${NPM_REGISTRY} \
+    && pnpm install --frozen-lockfile
 
 # 复制源代码
 COPY . .

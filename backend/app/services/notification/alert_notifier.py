@@ -195,8 +195,8 @@ def dispatch_alert_notifications(
     """
     在预警记录已提交数据库之后调用。内部异常不影响调用方事务（调用方已 commit）。
 
-    - 邮件：ALERT_EMAIL_ENABLED 且用户有邮箱且 SMTP 配置完整（见 email_service）
-    - 飞书：FEISHU_ENABLE_PUSH 且配置 webhook（仅应由「预警已落库」路径调用本函数）
+    - 邮件：ALERT_EMAIL_ENABLED 且用户有邮箱且 SMTP 配置完整（见 email_service）；仿冒与恶意预警均可能发送
+    - 飞书：仅恶意性检测（task_type=malicious）等；仿冒检测（impersonation）预警不走飞书，仅邮件
     - 飞书幂等：依赖 alerts.feishu_notified，成功后再更新
     """
     # 邮件通道
@@ -212,8 +212,15 @@ def dispatch_alert_notifications(
     else:
         logger.info("ALERT_EMAIL_ENABLED=false，跳过邮件")
 
-    # 飞书通道
+    # 飞书通道（订阅预警：仅恶意性检测；仿冒检测仅邮件，收件人为用户资料邮箱）
     if not FEISHU_ENABLE_PUSH or not (FEISHU_WEBHOOK_URL or "").strip():
+        return
+    task_type = str(alert_data.get("task_type", "malicious") or "malicious")
+    if task_type == "impersonation":
+        logger.info(
+            "仿冒检测预警仅通过邮件推送，跳过飞书 alert_id=%s",
+            alert_data.get("alert_id") or getattr(alert_row, "alert_id", ""),
+        )
         return
     try:
         if getattr(alert_row, "feishu_notified", False):
@@ -226,7 +233,6 @@ def dispatch_alert_notifications(
     task_id = getattr(alert_row, "task_id", "")
     subscription_id = getattr(alert_row, "subscription_id", "")
     model_name = alert_data.get("model_name", "")
-    task_type = alert_data.get("task_type", "malicious")
     detected_count = int(alert_data.get("detected_count", 0))
     high_risk_count = int(alert_data.get("high_risk_count", 0))
     threshold = _safe_optional_int(alert_data.get("threshold"))

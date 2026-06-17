@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/dashboard/org-profile", tags=["organization-prof
 @router.get("/list")
 def list_organizations(
     page: int = Query(1, ge=1, description="页码"),
-    page_size: int = Query(20, ge=1, le=100, description="每页数量"),
+    page_size: int = Query(20, ge=1, le=200, description="每页数量"),
     region: Optional[str] = Query(None, description="地区筛选"),
     keyword: Optional[str] = Query(None, description="关键词搜索")
 ):
@@ -34,8 +34,8 @@ def list_organizations(
                 params["region"] = region
             
             if keyword:
-                where_clauses.append("(name LIKE :keyword OR description LIKE :keyword)")
-                params["keyword"] = f"%{keyword}%"
+                where_clauses.append("(name LIKE :keyword_like OR JSON_SEARCH(alias, 'one', :keyword_like) IS NOT NULL)")
+                params["keyword_like"] = f"%{keyword}%"
             
             where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
             
@@ -48,9 +48,15 @@ def list_organizations(
             # 查询数据
             results = conn.execute(
                 text(f"""
-                    SELECT id, name, alias, description, ioc_count, event_count, 
-                           update_time, region, origin, target_countries, 
-                           target_industries, previous_domains, vps_providers
+                          SELECT id, name, alias, description, ioc_count, event_count, 
+                              update_time,
+                              (
+                               SELECT MAX(event_date)
+                               FROM apt_events e
+                               WHERE e.organization_id = apt_organizations.id
+                              ) AS latest_event_date,
+                              region, origin, target_countries, 
+                              target_industries, previous_domains, vps_providers
                     FROM apt_organizations
                     WHERE {where_sql}
                     ORDER BY COALESCE(update_time, '1970-01-01') DESC, id DESC
@@ -89,6 +95,7 @@ def list_organizations(
                     'iocCount': org.get('ioc_count'),
                     'eventCount': org.get('event_count'),
                     'updateTime': org['update_time'].strftime('%Y-%m-%d') if org.get('update_time') and hasattr(org['update_time'], 'strftime') else (str(org['update_time']) if org.get('update_time') else None),
+                    'latestEventDate': org['latest_event_date'].strftime('%Y-%m-%d') if org.get('latest_event_date') and hasattr(org['latest_event_date'], 'strftime') else (str(org['latest_event_date']) if org.get('latest_event_date') else None),
                     'region': org.get('region'),
                     'origin': org.get('origin'),
                     'targetCountries': parse_json_field(org.get('target_countries')),

@@ -73,10 +73,7 @@ FROM _stg_apt_organizations;
 
 DROP TABLE IF EXISTS _stg_apt_organizations;
 
--- ============================================
--- APT 事件数据（CSV 导入并映射字段）
--- ============================================
-/*DROP TABLE IF EXISTS _stg_apt_events;
+DROP TABLE IF EXISTS _stg_apt_events;
 CREATE TABLE _stg_apt_events (
 	id VARCHAR(32),
 	event_date TEXT,
@@ -144,7 +141,7 @@ SELECT
 	SUM(CASE WHEN e.event_type = 'major' THEN 1 ELSE 0 END) AS major_count
 FROM apt_events e
 LEFT JOIN apt_organizations o ON e.organization_id = o.id
-GROUP BY e.event_date, COALESCE(NULLIF(o.region, ''), '未知');*/
+GROUP BY e.event_date, COALESCE(NULLIF(o.region, ''), '未知');
 
 -- ============================================
 -- 域名数据（CSV 导入）

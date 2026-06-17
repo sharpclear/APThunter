@@ -1,4 +1,7 @@
 import logging
+import os
+import subprocess
+import threading
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -130,6 +133,10 @@ def create_app() -> FastAPI:
 
     fastapi_app.include_router(domain_matches_router)
 
+    from app.api.domain_lookup import router as domain_lookup_router
+
+    fastapi_app.include_router(domain_lookup_router)
+
     @fastapi_app.on_event("startup")
     async def startup_event():
         """应用启动时初始化订阅调度器"""
@@ -142,6 +149,22 @@ def create_app() -> FastAPI:
             logger.info("订阅调度器初始化完成")
         except Exception as e:
             logger.exception(f"订阅调度器初始化失败: {e}")
+
+        def run_domain_bootstrap():
+            if os.getenv("AUTO_DOMAIN_BOOTSTRAP", "true").lower() not in {"1", "true", "yes"}:
+                logger.info("域名属性自动补全已关闭")
+                return
+            try:
+                logger.info("启动域名属性自动补全任务")
+                subprocess.run(
+                    ["python", "/app/scripts/domain_attributes_bootstrap.py"],
+                    check=True,
+                )
+                logger.info("域名属性自动补全任务完成")
+            except Exception as exc:
+                logger.exception("域名属性自动补全任务失败: %s", exc)
+
+        threading.Thread(target=run_domain_bootstrap, daemon=True).start()
 
     @fastapi_app.on_event("shutdown")
     async def shutdown_event():

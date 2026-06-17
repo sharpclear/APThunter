@@ -135,9 +135,23 @@ export interface DomainListItem {
 	hasSsl?: boolean
 }
 
+export interface DomainListQueryParams {
+	organizationId?: number
+	organizationName?: string
+	maliciousOnly?: boolean
+}
+
 // 获取所有域名列表
-export async function getDomainListApi() {
-	return useGet<DomainListItem[]>('/domain/list')
+export async function getDomainListApi(params?: DomainListQueryParams) {
+	const query = params
+		? {
+				organization_id: params.organizationId,
+				organization_name: params.organizationName,
+				malicious_only: params.maliciousOnly,
+			}
+		: undefined
+
+	return useGet<DomainListItem[]>('/domain/list', query)
 }
 
 // ==================== 实时查询接口 ====================

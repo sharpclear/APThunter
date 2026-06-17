@@ -16,6 +16,7 @@ export interface OrganizationProfile {
 	iocCount?: number
 	eventCount?: number
 	updateTime?: string
+	latestEventDate?: string
 	region?: string
 	origin?: string
 	targetCountries?: string[]

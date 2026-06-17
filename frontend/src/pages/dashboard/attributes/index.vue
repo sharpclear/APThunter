@@ -1,15 +1,18 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { GlobalOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import type { DomainAttributes, DnsInfo, WhoisInfo, CertificateInfo, DnsRecord, DomainListItem, LookupResult } from '~/api/dashboard/attributes'
 import { getDomainListApi, lookupDomainAllApi, queryDomainAttributesApi } from '~/api/dashboard/attributes'
+import { queryOrganizationsApi } from '~/api/dashboard/profile'
 
 defineOptions({ name: 'DashboardAttributes' })
 
 // 域名输入
 const domainInput = ref<string>('')
 const loading = ref(false)
+const route = useRoute()
 
 const queryErrors = ref<string[]>([])  // 查询错误信息
 
@@ -18,12 +21,33 @@ const domainList = ref<DomainListItem[]>([])
 const domainListLoading = ref(false)
 const currentPage = ref(1)
 const pageSize = 30
+const orgFilterName = ref<string>('')
+const orgFilterId = ref<number | null>(null)
 
 // 查询结果
 const domainData = ref<DomainAttributes | null>(null)
 const whoisInfo = ref<WhoisInfo | null>(null)
 const dnsInfo = ref<DnsInfo | null>(null)
 const certificateInfo = ref<CertificateInfo | null>(null)
+
+function resetDomainDetail() {
+  domainData.value = null
+  whoisInfo.value = null
+  dnsInfo.value = null
+  certificateInfo.value = null
+}
+
+function applyDomainDetail(data: DomainAttributes, errors: string[] = []) {
+  domainData.value = data
+  whoisInfo.value = data.whois || null
+  dnsInfo.value = data.dns || null
+  certificateInfo.value = data.certificate || null
+  queryErrors.value = errors
+}
+
+function extractErrorPayload(error: any) {
+  return error?.response?.data as { code?: number; msg?: string; data?: any } | undefined
+}
 
 const sortedDomainList = computed<DomainListItem[]>(() => {
   return [...domainList.value].sort((a, b) => {
@@ -76,60 +100,69 @@ async function handleQuery() {
   loading.value = true
   queryErrors.value = []
   try {
-    const response = await lookupDomainAllApi({ 
-      domain, 
+    const localResponse = await queryDomainAttributesApi({ domain })
+    if (localResponse.code === 200 && localResponse.data) {
+      applyDomainDetail(localResponse.data)
+      message.success('查询成功')
+      return
+    }
+
+    const response = await lookupDomainAllApi({
+      domain,
       save: true,
     })
-    
+
     if (response.code === 200 && response.data) {
       const result = response.data as LookupResult
-      
-      // 设置查询结果
-      domainData.value = {
+      const hasDetails = !!(result.whois || result.dns || result.certificate)
+      if (!hasDetails) {
+        resetDomainDetail()
+        message.error('未查询到域名详细信息')
+        return
+      }
+
+      applyDomainDetail({
         domain: result.domain,
         whois: result.whois,
         dns: result.dns,
         certificate: result.certificate,
-        queryTime: result.queryTime
-      }
-      whoisInfo.value = result.whois || null
-      dnsInfo.value = result.dns || null
-      certificateInfo.value = result.certificate || null
-      queryErrors.value = result.errors || []
-      
-      // 显示成功消息
+        queryTime: result.queryTime,
+      }, result.errors || [])
+
       if (result.errors && result.errors.length > 0) {
         message.warning(`查询完成，但部分信息获取失败: ${result.errors.join(', ')}`)
-      } else {
+      }
+      else {
         message.success('查询成功')
       }
-      
-      // 如果保存了，重新加载域名列表
+
       if (result.saved) {
         await loadDomainList()
       }
     }
     else if (response.code === 404) {
-      domainData.value = null
-      whoisInfo.value = null
-      dnsInfo.value = null
-      certificateInfo.value = null
+      resetDomainDetail()
       message.error('所有查询均失败，请检查域名是否有效')
     }
     else {
-      domainData.value = null
-      whoisInfo.value = null
-      dnsInfo.value = null
-      certificateInfo.value = null
+      resetDomainDetail()
       message.error(response.msg || '查询失败')
     }
   }
   catch (error: any) {
-    domainData.value = null
-    whoisInfo.value = null
-    dnsInfo.value = null
-    certificateInfo.value = null
-    message.error('查询失败: ' + (error.message || '网络错误'))
+    const payload = extractErrorPayload(error)
+    if (payload?.code === 404) {
+      resetDomainDetail()
+      message.error(payload.msg || '所有查询均失败，请检查域名是否有效')
+    }
+    else if (payload?.msg) {
+      resetDomainDetail()
+      message.error(payload.msg)
+    }
+    else {
+      resetDomainDetail()
+      message.error('查询失败: ' + (error.message || '网络错误'))
+    }
   }
   finally {
     loading.value = false
@@ -137,10 +170,7 @@ async function handleQuery() {
 }
 
 function goBackToList() {
-  domainData.value = null
-  whoisInfo.value = null
-  dnsInfo.value = null
-  certificateInfo.value = null
+  resetDomainDetail()
   queryErrors.value = []
 }
 
@@ -151,33 +181,44 @@ async function handleDatabaseQuery(domain: string) {
     const response = await queryDomainAttributesApi({ domain })
 
     if (response.code === 200 && response.data) {
-      domainData.value = response.data
-      whoisInfo.value = response.data.whois || null
-      dnsInfo.value = response.data.dns || null
-      certificateInfo.value = response.data.certificate || null
+      applyDomainDetail(response.data)
       message.success('查询成功')
     }
     else if (response.code === 404) {
-      domainData.value = null
-      whoisInfo.value = null
-      dnsInfo.value = null
-      certificateInfo.value = null
-      message.warning(response.msg || '未找到该域名的相关信息')
+      resetDomainDetail()
+      Modal.confirm({
+        title: '未找到本地域名信息',
+        content: response.msg || `域名 ${domain} 暂无本地 WHOIS/DNS/SSL 信息，是否发起实时查询？`,
+        okText: '实时查询',
+        cancelText: '取消',
+        onOk: () => handleQuery(),
+      })
     }
     else {
-      domainData.value = null
-      whoisInfo.value = null
-      dnsInfo.value = null
-      certificateInfo.value = null
+      resetDomainDetail()
       message.error(response.msg || '查询失败')
     }
   }
   catch (error: any) {
-    domainData.value = null
-    whoisInfo.value = null
-    dnsInfo.value = null
-    certificateInfo.value = null
-    message.error('查询失败: ' + (error.message || '网络错误'))
+    const payload = extractErrorPayload(error)
+    if (payload?.code === 404) {
+      resetDomainDetail()
+      Modal.confirm({
+        title: '未找到本地域名信息',
+        content: payload.msg || `域名 ${domain} 暂无本地 WHOIS/DNS/SSL 信息，是否发起实时查询？`,
+        okText: '实时查询',
+        cancelText: '取消',
+        onOk: () => handleQuery(),
+      })
+    }
+    else if (payload?.msg) {
+      resetDomainDetail()
+      message.error(payload.msg)
+    }
+    else {
+      resetDomainDetail()
+      message.error('查询失败: ' + (error.message || '网络错误'))
+    }
   }
   finally {
     loading.value = false
@@ -274,7 +315,10 @@ function getDaysRemaining(notAfter?: string): number {
 async function loadDomainList() {
   domainListLoading.value = true
   try {
-    const response = await getDomainListApi()
+    const response = await getDomainListApi({
+      organizationId: orgFilterId.value ?? undefined,
+      organizationName: orgFilterName.value?.trim() || undefined,
+    })
     if (response.code === 200 && response.data) {
       domainList.value = response.data
       currentPage.value = 1
@@ -286,6 +330,65 @@ async function loadDomainList() {
   finally {
     domainListLoading.value = false
   }
+}
+
+async function isValidOrganizationName(name: string): Promise<boolean> {
+  const keyword = name.trim()
+  if (!keyword)
+    return true
+
+  try {
+    const response = await queryOrganizationsApi({
+      keyword,
+      page: 1,
+      pageSize: 50,
+    })
+
+    const list = response.data?.list || []
+    return list.some(item => item.name === keyword)
+  }
+  catch (error) {
+    console.error('校验组织名称失败:', error)
+    return false
+  }
+}
+
+async function applyOrgFilter() {
+  domainData.value = null
+  const keyword = orgFilterName.value.trim()
+
+  if (keyword) {
+    const valid = await isValidOrganizationName(keyword)
+    if (!valid) {
+      message.error('无效的组织名')
+      return
+    }
+    orgFilterId.value = null
+  }
+
+  loadDomainList()
+}
+
+function clearOrgFilter() {
+  orgFilterId.value = null
+  orgFilterName.value = ''
+  applyOrgFilter()
+}
+
+function syncOrgFilterFromRoute() {
+  const queryOrgId = route.query.orgId
+  const queryOrgName = route.query.orgName
+
+  if (typeof queryOrgId === 'string' && queryOrgId.trim()) {
+    const parsed = Number(queryOrgId)
+    orgFilterId.value = Number.isNaN(parsed) ? null : parsed
+  }
+  else {
+    orgFilterId.value = null
+  }
+
+  if (typeof queryOrgName === 'string')
+    orgFilterName.value = queryOrgName
 }
 
 // 点击域名项进行查询
@@ -309,8 +412,17 @@ function handleDomainClick(item: DomainListItem) {
 
 // 页面加载时获取域名列表
 onMounted(() => {
+  syncOrgFilterFromRoute()
   loadDomainList()
 })
+
+watch(
+  () => route.query,
+  () => {
+    syncOrgFilterFromRoute()
+    loadDomainList()
+  },
+)
 </script>
 
 <template>
@@ -363,6 +475,23 @@ onMounted(() => {
       :style="{ marginBottom: '24px' }"
       :loading="domainListLoading"
     >
+      <a-space :size="12" style="margin-bottom: 16px; width: 100%;">
+        <a-input
+          v-model:value="orgFilterName"
+          placeholder="按组织名称筛选"
+          style="max-width: 320px;"
+          @press-enter="applyOrgFilter"
+        />
+        <a-button type="primary" @click="applyOrgFilter">
+          筛选
+        </a-button>
+        <a-button @click="clearOrgFilter">
+          清除
+        </a-button>
+        <a-tag v-if="orgFilterName" color="blue">
+          当前组织：{{ orgFilterName }}
+        </a-tag>
+      </a-space>
       <a-list
         :data-source="pagedDomainList"
         :grid="{ gutter: 16, xs: 1, sm: 2, md: 3, lg: 4, xl: 4, xxl: 6 }"

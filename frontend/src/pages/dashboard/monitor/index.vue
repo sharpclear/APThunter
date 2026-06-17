@@ -459,9 +459,10 @@ async function loadActiveOrganizationsAfter2025() {
 
       const list = response.data.list
       count += list.filter((org) => {
-        if (!org.updateTime)
+        const dateSource = org.latestEventDate || org.updateTime
+        if (!dateSource)
           return false
-        const updateDate = new Date(org.updateTime)
+        const updateDate = new Date(dateSource)
         return !Number.isNaN(updateDate.getTime()) && updateDate > threshold
       }).length
 
@@ -495,6 +496,13 @@ function goToOrganizationProfile() {
   router.push('/dashboard/profile')
 }
 
+function goToActiveOrganizations() {
+  router.push({
+    path: '/dashboard/profile',
+    query: { activeOnly: '1' },
+  })
+}
+
 // 跳转到时空分布页面的APT事件时间轴
 function goToAptTimeline() {
   const target = document.querySelector('#apt-event-timeline')
@@ -508,21 +516,33 @@ function goToDomainAttributes() {
   router.push('/dashboard/attributes')
 }
 
-// 加载地区分布数据
+// 加载攻击来源Top10
 async function loadRegionDistribution() {
   try {
-    const response = await fetch('/api/dashboard/data-display/region-distribution')
+    const response = await fetch('/api/dashboard/data-display/attack-sources?limit=10')
     if (response.ok) {
       const result = await response.json()
-      if (result.code === 200 && result.data) {
-        attackSourceTop10.value = result.data.slice(0, 10).map((item: any) => ({
+      if (result.code === 200 && Array.isArray(result.data) && result.data.length > 0) {
+        attackSourceTop10.value = result.data.map((item: any) => ({
+          country: item.country || '未知',
+          count: item.count || 0,
+        }))
+        return
+      }
+    }
+
+    const fallbackResponse = await fetch('/api/dashboard/data-display/region-distribution')
+    if (fallbackResponse.ok) {
+      const fallbackResult = await fallbackResponse.json()
+      if (fallbackResult.code === 200 && fallbackResult.data) {
+        attackSourceTop10.value = fallbackResult.data.slice(0, 10).map((item: any) => ({
           country: item.region || '未知',
-          count: item.count || 0
+          count: item.count || 0,
         }))
       }
     }
   } catch (error) {
-    console.error('加载地区分布失败:', error)
+    console.error('加载攻击来源失败:', error)
   }
 }
 
@@ -837,7 +857,7 @@ onMounted(async () => {
         </a-card>
       </a-col>
       <a-col :xs="24" :sm="12" :md="6" :lg="6" :xl="6">
-        <a-card :bordered="false" class="stat-card">
+        <a-card :bordered="false" class="stat-card clickable-stat-card" @click="goToActiveOrganizations">
           <a-statistic
             title="活跃组织数量"
             :value="convertNumber(stats.activeOrganizations)"
@@ -865,7 +885,7 @@ onMounted(async () => {
       <a-col :xs="24" :sm="12" :md="6" :lg="6" :xl="6">
         <a-card :bordered="false" class="stat-card clickable-stat-card" @click="goToDomainAttributes">
           <a-statistic
-            title="域名总数"
+            title="恶意域名总数"
             :value="convertNumber(stats.dnsAnomalyDetection)"
             :value-style="{ color: '#13c2c2' }"
           >

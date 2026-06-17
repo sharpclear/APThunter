@@ -20,7 +20,9 @@ def get_summary():
             # 获取基础统计
             org_count = conn.execute(text("SELECT COUNT(*) FROM apt_organizations")).scalar() or 0
             event_count = conn.execute(text("SELECT COUNT(*) FROM apt_events")).scalar() or 0
-            domain_count = conn.execute(text("SELECT COUNT(*) FROM domains")).scalar() or 0
+            domain_count = conn.execute(
+                text("SELECT COUNT(*) FROM domains WHERE is_malicious = 1")
+            ).scalar() or 0
             
             # 获取活跃威胁数（最近7天有事件的组织数）
             active_threats = conn.execute(
@@ -44,7 +46,7 @@ def get_summary():
                 "totalOrganizations": org_count,
                 "totalEvents": event_count,
                 "totalDomains": domain_count,
-                "totalIocs": domain_count,  # 暂时用域名数代替IOC数
+                "totalIocs": domain_count,  # 暂时用恶意域名数代替IOC数
                 "activeThreats": active_threats,
                 "newThreatsToday": new_threats_today
             }

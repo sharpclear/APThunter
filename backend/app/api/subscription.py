@@ -1101,6 +1101,11 @@ def execute_subscription(subscription_id: str):
                 high_risk_domains=high_risk_domains,
                 match_results_by_domain=match_results_by_domain,
                 phishing_matches=phishing_alert_items,
+                history_similarity_records=(
+                    results_history_similarity_subscription
+                    if task.task_type == "history_similarity"
+                    else []
+                ),
             )
             try:
                 dispatch_alert_notifications(

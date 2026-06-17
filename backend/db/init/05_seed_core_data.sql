@@ -101,7 +101,7 @@ INSERT INTO models (
   model_type, model_category, is_public, is_official, created_by, status
 )
 SELECT
-  '官方历史高度相似检测模型',
+  '历史高度相似检测模型',
   'v1.0',
   '基于历史恶意域名样本的字符相似度与重排序特征筛选模型',
   'dataset/history_data/训练黑数据.xlsx',
@@ -116,7 +116,7 @@ SELECT
 WHERE NOT EXISTS (
   SELECT 1
   FROM models
-  WHERE name = '官方历史高度相似检测模型'
+  WHERE name = '历史高度相似检测模型'
     AND version = 'v1.0'
     AND model_type = 'official'
 );

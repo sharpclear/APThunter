@@ -196,7 +196,7 @@ def dispatch_alert_notifications(
     在预警记录已提交数据库之后调用。内部异常不影响调用方事务（调用方已 commit）。
 
     - 邮件：ALERT_EMAIL_ENABLED 且用户有邮箱且 SMTP 配置完整（见 email_service）；仿冒与恶意预警均可能发送
-    - 飞书：仅恶意性检测（task_type=malicious）等；仿冒检测（impersonation）预警不走飞书，仅邮件
+    - 飞书：恶意性检测和历史高度相似检测推送；仿冒检测（impersonation）预警不走飞书，仅邮件
     - 飞书幂等：依赖 alerts.feishu_notified，成功后再更新
     """
     # 邮件通道
@@ -212,7 +212,7 @@ def dispatch_alert_notifications(
     else:
         logger.info("ALERT_EMAIL_ENABLED=false，跳过邮件")
 
-    # 飞书通道（订阅预警：仅恶意性检测；仿冒检测仅邮件，收件人为用户资料邮箱）
+    # 飞书通道（订阅预警：恶意性/历史相似检测推送；仿冒检测仅邮件，收件人为用户资料邮箱）
     if not FEISHU_ENABLE_PUSH or not (FEISHU_WEBHOOK_URL or "").strip():
         return
     task_type = str(alert_data.get("task_type", "malicious") or "malicious")
@@ -239,6 +239,7 @@ def dispatch_alert_notifications(
     created_at = alert_data.get("created_at", "")
     domains = alert_data.get("high_risk_domains") or []
     phishing_matches = alert_data.get("phishing_matches") or []
+    history_similarity_records = alert_data.get("history_similarity_records") or []
 
     detail = ""
     if APP_PUBLIC_BASE_URL:
@@ -250,14 +251,15 @@ def dispatch_alert_notifications(
     threshold_txt = f"自定义阈值 {threshold}" if threshold is not None else "默认阈值策略"
     risk_summary = f"{ratio_txt}；{threshold_txt}。" if ratio_txt else f"{threshold_txt}。"
     suspected_association_text = "暂无明显疑似关联组织。"
-    try:
-        in_memory_matches = alert_data.get("match_results_by_domain")
-        if isinstance(in_memory_matches, Mapping) and in_memory_matches:
-            suspected_association_text = _build_suspected_association_text_from_results(in_memory_matches)
-        else:
-            suspected_association_text = _load_suspected_association_text_from_minio(db, str(alert_id))
-    except Exception:
-        logger.exception("构建疑似关联组织推送文案失败，将使用默认文案")
+    if task_type != "history_similarity":
+        try:
+            in_memory_matches = alert_data.get("match_results_by_domain")
+            if isinstance(in_memory_matches, Mapping) and in_memory_matches:
+                suspected_association_text = _build_suspected_association_text_from_results(in_memory_matches)
+            else:
+                suspected_association_text = _load_suspected_association_text_from_minio(db, str(alert_id))
+        except Exception:
+            logger.exception("构建疑似关联组织推送文案失败，将使用默认文案")
 
     ok = False
     try:
@@ -276,6 +278,7 @@ def dispatch_alert_notifications(
             risk_summary=risk_summary,
             suspected_association_text=suspected_association_text,
             phishing_matches=phishing_matches if isinstance(phishing_matches, list) else [],
+            history_similarity_records=history_similarity_records if isinstance(history_similarity_records, list) else [],
         )
     except Exception:
         logger.exception("飞书预警推送异常（已吞掉，不影响主流程）")
@@ -305,6 +308,7 @@ def build_alert_data_dict(
     high_risk_domains: list,
     match_results_by_domain: Optional[dict] = None,
     phishing_matches: Optional[list] = None,
+    history_similarity_records: Optional[list] = None,
 ) -> dict:
     return {
         "alert_id": alert_id,
@@ -317,4 +321,5 @@ def build_alert_data_dict(
         "high_risk_domains": high_risk_domains,
         "match_results_by_domain": match_results_by_domain or {},
         "phishing_matches": phishing_matches or [],
+        "history_similarity_records": history_similarity_records or [],
     }

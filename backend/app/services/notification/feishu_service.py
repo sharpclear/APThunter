@@ -229,6 +229,7 @@ def send_alert_notification(
     risk_summary: str,
     suspected_association_text: Optional[str] = None,
     phishing_matches: Optional[List[Dict[str, Any]]] = None,
+    history_similarity_records: Optional[List[Dict[str, Any]]] = None,
 ) -> bool:
     """
     仅用于「已确认创建预警记录」后的展示型推送，不在此函数内做任何预警判定。
@@ -248,6 +249,17 @@ def send_alert_notification(
     ]
     if task_type == "impersonation":
         return _send_impersonation_alert_posts(title, lines, phishing_matches or [])
+    if task_type == "history_similarity":
+        return send_post(
+            title,
+            lines
+            + _build_history_similarity_alert_lines(
+                detected_count=detected_count,
+                high_risk_count=high_risk_count,
+                records=history_similarity_records or [],
+                fallback_domains=high_risk_domains,
+            ),
+        )
 
     if suspected_association_text and suspected_association_text.strip():
         lines.append(
@@ -274,6 +286,74 @@ def send_alert_notification(
 
 
     return send_post(title, lines)
+
+
+def _format_similarity_score(value: Any) -> str:
+    try:
+        return f"{float(value):.4f}"
+    except (TypeError, ValueError):
+        return "未知"
+
+
+def _build_history_similarity_alert_lines(
+    *,
+    detected_count: int,
+    high_risk_count: int,
+    records: List[Dict[str, Any]],
+    fallback_domains: List[str],
+) -> List[List[Dict[str, Any]]]:
+    normalized_records: List[Dict[str, Any]] = []
+    seen = set()
+    for item in records or []:
+        if not isinstance(item, dict):
+            continue
+        domain = _safe_text(item.get("domain") or item.get("域名"))
+        if not domain:
+            continue
+        domain_key = domain.lower()
+        if domain_key in seen:
+            continue
+        seen.add(domain_key)
+        raw = item.get("raw") if isinstance(item.get("raw"), dict) else {}
+        matched_positive = (
+            item.get("matched_positive")
+            or item.get("匹配历史恶意域名")
+            or raw.get("匹配历史恶意域名")
+            or ""
+        )
+        normalized_records.append(
+            {
+                "domain": domain,
+                "score": item.get("history_similarity_score", item.get("score")),
+                "matched_positive": _safe_text(matched_positive),
+            }
+        )
+
+    if not normalized_records:
+        for domain in fallback_domains or []:
+            domain_text = _safe_text(domain)
+            if domain_text:
+                normalized_records.append(
+                    {
+                        "domain": domain_text,
+                        "score": None,
+                        "matched_positive": "",
+                    }
+                )
+
+    detail_lines = [
+        f"检测结果：命中历史高度相似域名 {high_risk_count} 个 / 检测总数 {detected_count} 个",
+        "检测明细：",
+    ]
+    for index, item in enumerate(normalized_records, start=1):
+        matched_positive = item.get("matched_positive") or "未知"
+        detail_lines.append(
+            f"{index}. 域名：{item.get('domain', '')}\n"
+            f"   评分：{_format_similarity_score(item.get('score'))}\n"
+            f"   匹配历史恶意域名：{matched_positive}"
+        )
+
+    return [[{"tag": "text", "text": "\n".join(detail_lines) + "\n"}]]
 
 
 def _safe_text(value: Any, default: str = "") -> str:

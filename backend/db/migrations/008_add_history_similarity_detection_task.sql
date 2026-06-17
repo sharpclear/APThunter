@@ -18,7 +18,7 @@ INSERT INTO models (
   model_type, model_category, is_public, is_official, created_by, status
 )
 SELECT
-  '官方历史高度相似检测模型',
+  '历史高度相似检测模型',
   'v1.0',
   '基于历史恶意域名样本的字符相似度与重排序特征筛选模型',
   'dataset/history_data/训练黑数据.xlsx',
@@ -39,6 +39,7 @@ WHERE NOT EXISTS (
 
 UPDATE models
 SET
+  name = '历史高度相似检测模型',
   model_path = 'dataset/history_data/训练黑数据.xlsx',
   description = '基于历史恶意域名样本的字符相似度与重排序特征筛选模型'
 WHERE model_category = 'history_similarity'

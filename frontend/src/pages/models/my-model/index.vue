@@ -6,10 +6,11 @@ import { useUserId } from '~/composables/user-id'
 import { getApiBase } from '~/utils/api-public'
 
 type SourceType = 'custom' | 'official' | 'market'
+type ModelDisplayType = '恶意性检测' | '仿冒域名检测' | 'DGA域名检测' | '历史高度相似检测'
 interface ModelItem {
   id: number
   name: string
-  type: '恶意性检测' | '仿冒域名检测' | null
+  type: ModelDisplayType | null
   description: string
   source: SourceType
   createTime: string
@@ -97,7 +98,7 @@ async function fetchModels() {
 
 // 工具栏：搜索与筛选
 const keyword = ref('')
-const filterType = ref<'全部' | '恶意性检测' | '仿冒域名检测'>('全部')
+const filterType = ref<'全部' | ModelDisplayType>('全部')
 const filterSource = ref<'全部' | '官方' | '自定义' | '市场获取'>('全部')
 
 // 选中与批量
@@ -350,6 +351,8 @@ onMounted(() => {
               { label: '全部类型', value: '全部' },
               { label: '恶意性检测', value: '恶意性检测' },
               { label: '仿冒域名检测', value: '仿冒域名检测' },
+              { label: 'DGA域名检测', value: 'DGA域名检测' },
+              { label: '历史高度相似检测', value: '历史高度相似检测' },
             ]"
           />
           <a-select

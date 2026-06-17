@@ -113,6 +113,10 @@ from phishing_detector import (
     read_official_domains_from_file,
     predict_from_domains as phishing_predict_from_domains,
 )
+from history_similarity_detection import (
+    alert_rows_to_score_records as history_alert_rows_to_score_records,
+    predict_from_domains as history_similarity_predict_from_domains,
+)
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -144,7 +148,17 @@ class Alert(Base):
     user_id = Column(BigInteger, ForeignKey("users.id"), nullable=False, index=True)
     model_id = Column(BigInteger, ForeignKey("models.id"), nullable=False, index=True)
     model_name = Column(String(255), nullable=False)
-    task_type = Column(SqlEnum("malicious", "impersonation", name="task_type_enum"), nullable=False)
+    task_type = Column(
+        SqlEnum(
+            "malicious",
+            "impersonation",
+            "malicious_ip",
+            "dga",
+            "history_similarity",
+            name="task_type_enum",
+        ),
+        nullable=False,
+    )
     detected_count = Column(Integer, nullable=False, server_default=text("0"))
     high_risk_count = Column(Integer, nullable=False, server_default=text("0"))
     threshold = Column(Integer, nullable=True)
@@ -430,6 +444,26 @@ def _clean_optional_text(value) -> str:
     return "" if text_value.lower() == "nan" else text_value
 
 
+def _model_category_to_subscription_type(model_category: Optional[str]) -> str:
+    if model_category == "impersonation":
+        return "phishing"
+    if model_category == "history_similarity":
+        return "history_similarity"
+    if model_category == "dga":
+        return "dga"
+    return "malicious"
+
+
+def _task_type_to_subscription_type(task_type: Optional[str]) -> str:
+    if task_type == "impersonation":
+        return "phishing"
+    if task_type == "history_similarity":
+        return "history_similarity"
+    if task_type == "dga":
+        return "dga"
+    return "malicious"
+
+
 def _extract_impersonation_alert_items(rows) -> List[dict]:
     """
     从仿冒检测结果 DataFrame 提取飞书/邮件附件预警明细。
@@ -502,9 +536,9 @@ def _build_alert_attachment_excel(
     """
     import pandas as pd
 
-    columns = ["疑似仿冒域名", "目标域名", "单位名称", "风险等级", "最终风险分", "LLM研判标签", "LLM研判分数", "研判原因", "LLM处置结果", "命中原因"]
     rows = []
     if task_type == "impersonation":
+        columns = ["疑似仿冒域名", "目标域名", "单位名称", "风险等级", "最终风险分", "LLM研判标签", "LLM研判分数", "研判原因", "LLM处置结果", "命中原因"]
         if phishing_alert_items:
             for item in phishing_alert_items:
                 rows.append(
@@ -521,19 +555,25 @@ def _build_alert_attachment_excel(
                         "命中原因": item.get("hit_reason", ""),
                     }
                 )
-    else:
+    elif task_type == "history_similarity":
+        columns = ["高风险域名", "风险等级", "最终风险分", "命中原因"]
         for domain in high_risk_domains:
             rows.append(
                 {
-                    "疑似仿冒域名": domain,
-                    "目标域名": "",
-                    "单位名称": "",
+                    "高风险域名": domain,
                     "风险等级": "",
                     "最终风险分": "",
-                    "LLM研判标签": "",
-                    "LLM研判分数": "",
-                    "研判原因": "",
-                    "LLM处置结果": "",
+                    "命中原因": "与历史恶意域名高度相似",
+                }
+            )
+    else:
+        columns = ["高风险域名", "风险等级", "最终风险分", "命中原因"]
+        for domain in high_risk_domains:
+            rows.append(
+                {
+                    "高风险域名": domain,
+                    "风险等级": "",
+                    "最终风险分": "",
                     "命中原因": "",
                 }
             )
@@ -629,6 +669,7 @@ def execute_subscription(subscription_id: str):
         task_id = f"T{int(beijing_now().timestamp())}"
         # 仅恶意订阅：逐条预测结果（含恶意概率），供预警按阈值筛选
         results_malicious_subscription = None
+        results_history_similarity_subscription = None
 
         # 根据模型类型执行不同的检测
         if model.model_category == "impersonation":
@@ -694,6 +735,47 @@ def execute_subscription(subscription_id: str):
             db.add(task)
             db.flush()
             
+        elif model.model_category == "history_similarity":
+            domains, missing_dates = _collect_daily_domains_for_subscription(date_range)
+            if not domains:
+                logger.warning(f"订阅 {subscription_id} 在日期范围内没有可用的域名数据，缺失日期: {missing_dates}")
+                subscription.next_run_at = beijing_datetime_to_naive(_calculate_next_run_at(subscription.frequency))
+                db.commit()
+                return
+
+            source_label = f"subscription_{subscription_id}"
+            min_score = float(subscription.threshold) / 100.0 if subscription.threshold is not None else 0.55
+            excel_content, statistics, history_meta, history_alert_rows = history_similarity_predict_from_domains(
+                domains,
+                source_label,
+                model.model_path,
+                min_score=min_score,
+                top_k=10,
+                suspicious_only=True,
+            )
+            results_history_similarity_subscription = history_alert_rows_to_score_records(history_alert_rows)
+
+            task = Task(
+                task_id=task_id,
+                task_type="history_similarity",
+                model_id=model.id,
+                file_id=None,
+                extra={
+                    "dataSource": "newDomain",
+                    "dateRange": date_range,
+                    "subscription_id": subscription_id,
+                    "min_score": min_score,
+                    "min_score_percent": int(round(min_score * 100)),
+                    "top_k": 10,
+                    "history_similarity_detection": history_meta,
+                    "history_similarity_alert_rows": results_history_similarity_subscription,
+                },
+                status="processing",
+                created_by=subscription.user_id,
+            )
+            db.add(task)
+            db.flush()
+
         else:
             # 恶意性检测
             domains, missing_dates = _collect_daily_domains_for_subscription(date_range)
@@ -791,6 +873,19 @@ def execute_subscription(subscription_id: str):
                         seen_phishing_domains.add(domain_key)
                         high_risk_domains.append(domain)
                 high_risk_count = len(high_risk_domains)
+            elif model.model_category == "history_similarity":
+                high_risk_domains = []
+                seen = set()
+                for item in results_history_similarity_subscription or []:
+                    d = item.get("domain") or item.get("域名")
+                    if not d:
+                        continue
+                    d = str(d).strip()
+                    d_key = d.lower()
+                    if d and d_key not in seen:
+                        seen.add(d_key)
+                        high_risk_domains.append(d)
+                high_risk_count = len(high_risk_domains)
             else:
                 # 恶意订阅预警：
                 # - 默认策略：model.predict 判为恶意的结果全部预警
@@ -825,7 +920,7 @@ def execute_subscription(subscription_id: str):
         # 计算总数
         total_count = statistics.get("total", 0) or statistics.get("总域名数", 0) or statistics.get("检测域名总数", 0) or statistics.get("总数量", 0)
         
-        # 仿冒：原逻辑；恶意订阅：仅当存在「predict 恶意且恶意概率 > 阈值/100」的样本时触发预警
+        # 仿冒：原逻辑；恶意/历史相似：存在高风险结果时触发预警
         if model.model_category == "impersonation":
             trigger_alert = high_risk_count > 0 and len(high_risk_domains) > 0
         else:
@@ -874,13 +969,19 @@ def execute_subscription(subscription_id: str):
                     logger.exception("组织匹配失败，已按空匹配继续 domain=%s alert_id=%s", domain_name, alert_id)
                     match_results_by_domain[domain_name.lower()] = {"domain_name": domain_name}
 
+            risk_score_records = (
+                results_history_similarity_subscription
+                if task.task_type == "history_similarity"
+                else results_malicious_subscription
+            )
+
             alert_result_json = build_alert_result_json(
                 alert_row=alert,
                 subscription_row=subscription,
                 task_row=task,
                 high_risk_domains=high_risk_domains,
                 match_results=match_results_by_domain,
-                results_malicious_subscription=results_malicious_subscription,
+                results_malicious_subscription=risk_score_records,
                 phishing_matches=phishing_alert_items,
                 detected_count=total_count,
                 high_risk_count=high_risk_count,
@@ -1317,7 +1418,7 @@ async def list_subscriptions(
                 "id": subscription.subscription_id,
                 "modelId": subscription.model_id,
                 "modelName": model.name,
-                "type": "phishing" if model.model_category == "impersonation" else "malicious",
+                "type": _model_category_to_subscription_type(model.model_category),
                 "frequency": subscription.frequency,
                 "createdAt": subscription.created_at.isoformat() if subscription.created_at else "",
                 "nextRunAt": subscription.next_run_at.isoformat() if subscription.next_run_at else "",
@@ -1510,7 +1611,7 @@ async def list_alerts(
                 "id": alert.alert_id,
                 "time": alert.created_at.isoformat() if alert.created_at else "",
                 "modelName": alert.model_name,
-                "type": "phishing" if alert.task_type == "impersonation" else "malicious",
+                "type": _task_type_to_subscription_type(alert.task_type),
                 "detectedCount": alert.detected_count,
                 # 兼容旧前端：继续返回字符串列表。
                 "highRiskDomains": high_risk_domains,
@@ -1738,7 +1839,7 @@ async def get_subscribable_models(
         models.append({
             "id": row["id"],
             "name": row["name"],
-            "type": "phishing" if model_category == "impersonation" else "malicious",
+            "type": _model_category_to_subscription_type(model_category),
             "description": row["description"] or "",
         })
     

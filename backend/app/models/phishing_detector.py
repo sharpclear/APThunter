@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from phishing_opus_llm_judge import KEEP_RECOMMENDATIONS, MODEL_NAME as LLM_MODEL_NAME, build_candidate_items, judge_batch
+from phishing_deepseek_llm_judge import KEEP_RECOMMENDATIONS, MODEL_NAME as LLM_MODEL_NAME, build_candidate_items, judge_batch
 
 
 # =========================================================
@@ -1830,9 +1830,9 @@ def _judge_candidates_with_llm(results: List[MatchResult]) -> Tuple[List[MatchRe
     if not results:
         return [], {"status": "no_candidates", "judged_count": 0, "candidate_count": 0, "failed_batches": 0}
 
-    api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
     if not api_key:
-        raise RuntimeError("仿冒检测LLM研判需要配置 ANTHROPIC_API_KEY，未研判结果不会输出")
+        raise RuntimeError("仿冒检测LLM研判需要配置 DEEPSEEK_API_KEY，未研判结果不会输出")
 
     candidate_items = build_candidate_items([_result_to_llm_candidate(result) for result in results])
     batches = [
@@ -1889,7 +1889,7 @@ def _judge_candidates_with_llm(results: List[MatchResult]) -> Tuple[List[MatchRe
     status = "completed" if not errors else ("failed" if not rows else "partial_failed")
     return final_results, {
         "status": status,
-        "model": os.getenv("ANTHROPIC_MODEL", LLM_MODEL_NAME),
+        "model": os.getenv("DEEPSEEK_MODEL", LLM_MODEL_NAME),
         "judged_count": len(rows),
         "candidate_count": len(results),
         "batch_size": LLM_BATCH_SIZE,
@@ -2004,6 +2004,43 @@ def _coerce_official_domains(official_domains) -> List[Tuple[str, str]]:
         if domain:
             coerced.append((company, domain))
     return coerced
+
+
+def _build_official_domain_dataframe(official_domains) -> pd.DataFrame:
+    rows = []
+    seen = set()
+    for item in official_domains or []:
+        company = ""
+        domain = ""
+        confidence = ""
+        source = ""
+        reason = ""
+        if isinstance(item, dict):
+            company = item.get("单位名称") or item.get("公司名称") or item.get("company") or item.get("organization") or ""
+            domain = item.get("官方域名") or item.get("域名") or item.get("domain") or item.get("目标域名") or item.get("target_domain") or ""
+            confidence = item.get("confidence") if item.get("confidence") is not None else ""
+            source = item.get("source") or ""
+            reason = item.get("reason") or item.get("evidence") or ""
+        elif isinstance(item, (list, tuple)):
+            if len(item) >= 2:
+                company, domain = item[0], item[1]
+            elif len(item) == 1:
+                domain = item[0]
+        else:
+            domain = item
+
+        normalized_domain = normalize_host(str(domain or ""))
+        if not normalized_domain or normalized_domain in seen:
+            continue
+        seen.add(normalized_domain)
+        rows.append({
+            "单位名称": str(company or "").strip(),
+            "官方域名": normalized_domain,
+            "置信度": confidence,
+            "来源": source,
+            "说明": str(reason or "").strip(),
+        })
+    return pd.DataFrame(rows, columns=["单位名称", "官方域名", "置信度", "来源", "说明"])
 
 
 def _read_domains_from_table(file_content: bytes, filename: str) -> pd.DataFrame:
@@ -2165,8 +2202,9 @@ def _build_result_dataframe(results: List[MatchResult]) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=columns)
 
 
-def _build_result_excel(results: List[MatchResult], statistics: dict) -> bytes:
+def _build_result_excel(results: List[MatchResult], statistics: dict, official_domains) -> bytes:
     df = _build_result_dataframe(results)
+    official_df = _build_official_domain_dataframe(official_domains)
     excel_buffer = io.BytesIO()
     with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="检测结果", index=False)
@@ -2184,7 +2222,7 @@ def _build_result_excel(results: List[MatchResult], statistics: dict) -> bytes:
             ],
         })
         stats_df.to_excel(writer, sheet_name="统计信息", index=False)
-        df.to_excel(writer, sheet_name="钓鱼域名列表", index=False)
+        official_df.to_excel(writer, sheet_name="官方域名列表", index=False)
     return excel_buffer.getvalue()
 
 
@@ -2203,7 +2241,7 @@ def predict_from_domains(
     similarity_threshold: Optional[float] = None,
 ) -> Tuple[bytes, dict]:
     results, statistics = _run_detection(official_domains, detection_domains, similarity_threshold)
-    return _build_result_excel(results, statistics), statistics
+    return _build_result_excel(results, statistics, official_domains), statistics
 
 
 def predict_from_file(

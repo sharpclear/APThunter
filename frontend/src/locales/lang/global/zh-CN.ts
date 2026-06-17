@@ -92,6 +92,7 @@ export default {
   'menu.detection.malicious-domain-detection': '恶意域名检测',
   'menu.detection.impersonation-domain-detection': '仿冒域名检测',
   'menu.detection.dga-domain-detection': 'DGA域名检测',
+  'menu.detection.history-similarity-detection': '历史高度相似',
   'menu.detection.malicious-ip-detection': '恶意IP检测',
   'menu.detection.step-detection': '分步表单',
   'menu.detection.step-detection.info': '分步表单（填写转账信息）',

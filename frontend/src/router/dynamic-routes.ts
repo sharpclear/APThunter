@@ -86,6 +86,15 @@ export default [
             },
           },
           {
+            path: '/detection/history-similarity-detection',
+            name: 'HistorySimilarityDetection',
+            component: () => import('~/pages/detection/history-similarity-detection/index.vue'),
+            meta: {
+              title: '历史高度相似',
+              locale: 'menu.detection.history-similarity-detection',
+            },
+          },
+          {
             path: '/detection/malicious-ip-detection',
             name: 'MaliciousIpDetection',
             component: () => import('~/pages/detection/malicious-ip-detection/index.vue'),

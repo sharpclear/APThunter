@@ -19,6 +19,7 @@ ALLOWED_LABELS = {
     "unlikely_impersonation",
     "uncertain",
 }
+KEEP_RECOMMENDATIONS = {"保留高危告警", "保留人工复核"}
 
 SYSTEM_PROMPT = """你是一个网络安全分析助手，任务是对疑似仿冒/钓鱼域名候选进行二次研判。
 
@@ -39,11 +40,18 @@ SYSTEM_PROMPT = """你是一个网络安全分析助手，任务是对疑似仿�
 - 只输出合法 JSON。
 - JSON 顶层格式必须是 {"results": [...]}。
 - results 中每个对象必须包含：
-  domain, official_domain, impersonation_likelihood, label, reason, key_features
+  domain, official_domain, impersonation_likelihood, label, reason, key_features, disposition
 - impersonation_likelihood 是 0 到 1 的小数。
 - label 只能是 likely_impersonation、suspicious_impersonation、unlikely_impersonation、uncertain。
 - reason 不超过 50 个中文字符。
 - key_features 是字符串数组，元素可包括 brand_token、confusable_brand、login_context、mail_context、auth_context、suffix_change、suspicious_tld、hyphen_or_digit、long_sld、short_token_risk、generic_word_only、insufficient_evidence。
+- disposition 只能是：保留高危告警、保留人工复核、降低优先级、建议剔除。
+
+处置口径：
+- 强烈疑似仿冒/钓鱼，disposition 输出“保留高危告警”。
+- 有明显仿冒/钓鱼倾向但证据不够强，disposition 输出“保留人工复核”。
+- 仅凭现有证据难以判断，disposition 输出“降低优先级”。
+- 无明显仿冒特征，disposition 输出“建议剔除”。
 
 打分标准：
 - 0.80 - 1.00：likely_impersonation，强烈疑似仿冒/钓鱼
@@ -91,7 +99,7 @@ def judge_batch(
     max_tokens: int,
 ) -> list[dict[str, Any]]:
     payload = {
-        "model": MODEL_NAME,
+        "model": os.getenv("DEEPSEEK_MODEL", MODEL_NAME),
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": build_user_prompt(candidate_items, batch_index)},
@@ -113,7 +121,7 @@ def judge_batch(
             response.raise_for_status()
             data = response.json()
             content = data["choices"][0]["message"]["content"]
-            parsed = json.loads(content)
+            parsed = parse_json_object(content)
             results = parsed.get("results", [])
             if not isinstance(results, list):
                 raise ValueError("DeepSeek JSON response field 'results' must be a list.")
@@ -153,9 +161,43 @@ def normalize_llm_results(
                 "label": label,
                 "reason": str(result.get("reason", ""))[:100],
                 "key_features": key_features_text,
+                "disposition": normalize_disposition(result.get("disposition"), label),
             }
         )
     return normalized_rows
+
+
+def parse_json_object(text: str) -> dict[str, Any]:
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            raise
+        parsed = json.loads(text[start:end + 1])
+    if not isinstance(parsed, dict):
+        raise ValueError("DeepSeek response must be a JSON object.")
+    return parsed
+
+
+def normalize_disposition(value: Any, label: str) -> str:
+    text = str(value or "").strip()
+    if text in {"保留高危告警", "高危告警"}:
+        return "保留高危告警"
+    if text in {"保留人工复核", "人工复核"}:
+        return "保留人工复核"
+    if text in {"降低优先级", "降级"}:
+        return "降低优先级"
+    if text in {"建议剔除", "剔除"}:
+        return "建议剔除"
+    if label == "likely_impersonation":
+        return "保留高危告警"
+    if label == "suspicious_impersonation":
+        return "保留人工复核"
+    if label == "unlikely_impersonation":
+        return "建议剔除"
+    return "降低优先级"
 
 
 def safe_float(value: Any) -> float:

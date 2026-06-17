@@ -233,7 +233,12 @@ def send_alert_notification(
     """
     仅用于「已确认创建预警记录」后的展示型推送，不在此函数内做任何预警判定。
     """
-    type_label = "恶意性检测" if task_type == "malicious" else "仿冒域名检测"
+    if task_type == "impersonation":
+        type_label = "仿冒域名检测"
+    elif task_type == "history_similarity":
+        type_label = "历史高度相似检测"
+    else:
+        type_label = "恶意性检测"
 
     title = f"【域名检测预警】{model_name}"
 

@@ -31,12 +31,32 @@ interface PhishingResultItem {
   关键特征?: string
 }
 
+interface OfficialDomainItem {
+  单位名称?: string
+  官方域名: string
+  置信度?: string | number
+  来源?: string
+  说明?: string
+}
+
 interface DgaResultItem {
   域名: string
   规范化域名?: string
   SLD?: string
   DGA_score?: number
   模型候选?: string
+  预测标签?: number
+  预测结果?: string
+}
+
+interface HistorySimilarityResultItem {
+  域名: string
+  规范化域名?: string
+  匹配历史恶意域名?: string
+  综合相似度?: number
+  'TF-IDF相似度'?: number
+  重排序相似度?: number
+  命中原因?: string
   预测标签?: number
   预测结果?: string
 }
@@ -67,8 +87,17 @@ interface DgaStatistics {
   DGA域名占比?: string
 }
 
-type ResultItem = MaliciousResultItem | PhishingResultItem | DgaResultItem
-type Statistics = MaliciousStatistics | PhishingStatistics | DgaStatistics
+interface HistorySimilarityStatistics {
+  总域名数?: string | number
+  历史相似域名数?: string | number
+  正常域名数?: string | number
+  历史相似域名占比?: string
+  历史匹配对数?: string | number
+  最低相似度阈值?: string | number
+}
+
+type ResultItem = MaliciousResultItem | PhishingResultItem | DgaResultItem | HistorySimilarityResultItem
+type Statistics = MaliciousStatistics | PhishingStatistics | DgaStatistics | HistorySimilarityStatistics
 
 interface ResultData {
   task_id: string
@@ -77,15 +106,56 @@ interface ResultData {
   results: ResultItem[]
   malicious_domains?: ResultItem[]
   phishing_domains?: ResultItem[]
+  official_domains?: OfficialDomainItem[]
   dga_domains?: ResultItem[]
+  history_similarity_domains?: ResultItem[]
   result_filename: string
   total_count: number
   malicious_count?: number
   phishing_count?: number
   dga_count?: number
+  history_similarity_count?: number
   attribution_enabled?: boolean
   attribution_results?: any[]
 }
+
+const officialDomainColumns = [
+  {
+    title: '官方域名',
+    dataIndex: '官方域名',
+    key: 'official_domain',
+    width: '30%',
+    ellipsis: true,
+  },
+  {
+    title: '单位名称',
+    dataIndex: '单位名称',
+    key: 'organization',
+    width: '24%',
+    ellipsis: true,
+  },
+  {
+    title: '置信度',
+    dataIndex: '置信度',
+    key: 'confidence',
+    width: '12%',
+    align: 'center' as const,
+  },
+  {
+    title: '来源',
+    dataIndex: '来源',
+    key: 'source',
+    width: '12%',
+    align: 'center' as const,
+  },
+  {
+    title: '说明',
+    dataIndex: '说明',
+    key: 'reason',
+    width: '22%',
+    ellipsis: true,
+  },
+]
 
 const route = useRoute()
 const router = useRouter()
@@ -168,8 +238,121 @@ function displayLlmScore(item: Partial<PhishingResultItem>) {
   return item.LLM研判分数 || '未知'
 }
 
+function riskStatTitle(taskType?: string) {
+  if (taskType === 'impersonation')
+    return '仿冒域名'
+  if (taskType === 'dga')
+    return 'DGA域名'
+  if (taskType === 'history_similarity')
+    return '历史相似域名'
+  return '恶意域名'
+}
+
+function riskStatValue(data: ResultData) {
+  if (data.task_type === 'impersonation')
+    return data.statistics['钓鱼域名数']
+  if (data.task_type === 'dga')
+    return data.statistics['DGA域名数']
+  if (data.task_type === 'history_similarity')
+    return data.statistics['历史相似域名数']
+  return data.statistics['恶意域名数']
+}
+
+function riskRateTitle(taskType?: string) {
+  if (taskType === 'impersonation')
+    return '仿冒域名占比'
+  if (taskType === 'dga')
+    return 'DGA域名占比'
+  if (taskType === 'history_similarity')
+    return '历史相似域名占比'
+  return '恶意域名占比'
+}
+
+function riskRateValue(data: ResultData) {
+  if (data.task_type === 'impersonation')
+    return data.statistics['钓鱼域名占比'] || '0%'
+  if (data.task_type === 'dga')
+    return data.statistics['DGA域名占比'] || '0%'
+  if (data.task_type === 'history_similarity')
+    return data.statistics['历史相似域名占比'] || '0%'
+  return data.statistics['恶意域名占比'] || '0%'
+}
+
+function hasRiskDomains(data: ResultData) {
+  return (data.task_type === 'malicious' && !!data.malicious_domains?.length)
+    || (data.task_type === 'impersonation' && !!data.phishing_domains?.length)
+    || (data.task_type === 'dga' && !!data.dga_domains?.length)
+    || (data.task_type === 'history_similarity' && !!data.history_similarity_domains?.length)
+}
+
+function riskListTitle(taskType?: string) {
+  if (taskType === 'impersonation')
+    return '仿冒域名列表'
+  if (taskType === 'dga')
+    return 'DGA域名列表'
+  if (taskType === 'history_similarity')
+    return '历史相似域名列表'
+  return '恶意域名列表'
+}
+
+function riskListData(data: ResultData) {
+  if (data.task_type === 'impersonation')
+    return data.phishing_domains
+  if (data.task_type === 'dga')
+    return data.dga_domains
+  if (data.task_type === 'history_similarity')
+    return data.history_similarity_domains
+  return data.malicious_domains
+}
+
+function displaySimilarityScore(item: Partial<HistorySimilarityResultItem>) {
+  const score = Number(item.综合相似度)
+  if (Number.isNaN(score))
+    return '未知'
+  return score.toFixed(4)
+}
+
 // 计算列配置
 const resultColumns = computed(() => {
+  if (resultData.value?.task_type === 'history_similarity') {
+    return [
+      {
+        title: '域名',
+        dataIndex: '域名',
+        key: 'domain',
+        width: '22%',
+        ellipsis: true,
+      },
+      {
+        title: '匹配历史恶意域名',
+        dataIndex: '匹配历史恶意域名',
+        key: 'matched_positive',
+        width: '22%',
+        ellipsis: true,
+      },
+      {
+        title: '综合相似度',
+        dataIndex: '综合相似度',
+        key: 'similarity_score',
+        width: '12%',
+        align: 'center' as const,
+      },
+      {
+        title: '预测结果',
+        dataIndex: '预测结果',
+        key: 'result',
+        width: '14%',
+        align: 'center' as const,
+      },
+      {
+        title: '命中原因',
+        dataIndex: '命中原因',
+        key: 'reason',
+        width: '30%',
+        ellipsis: true,
+      },
+    ]
+  }
   if (resultData.value?.task_type === 'dga') {
     return [
       {
@@ -407,12 +590,8 @@ onMounted(() => {
             <a-col :xs="24" :sm="12" :md="6">
               <a-card>
                 <a-statistic
-                  :title="resultData.task_type === 'impersonation' ? '仿冒域名' : (resultData.task_type === 'dga' ? 'DGA域名' : '恶意域名')"
-                  :value="resultData.task_type === 'impersonation'
-                    ? resultData.statistics['钓鱼域名数']
-                    : resultData.task_type === 'dga'
-                      ? resultData.statistics['DGA域名数']
-                    : resultData.statistics['恶意域名数']"
+                  :title="riskStatTitle(resultData.task_type)"
+                  :value="riskStatValue(resultData)"
                   :value-style="{ color: '#cf1322', fontSize: '28px' }"
                 />
               </a-card>
@@ -431,12 +610,8 @@ onMounted(() => {
             <a-col :xs="24" :sm="12" :md="6">
               <a-card>
                 <a-statistic
-                  :title="resultData.task_type === 'impersonation' ? '仿冒域名占比' : (resultData.task_type === 'dga' ? 'DGA域名占比' : '恶意域名占比')"
-                  :value="resultData.task_type === 'impersonation'
-                    ? resultData.statistics['钓鱼域名占比'] || '0%'
-                    : resultData.task_type === 'dga'
-                      ? resultData.statistics['DGA域名占比'] || '0%'
-                    : resultData.statistics['恶意域名占比'] || '0%'"
+                  :title="riskRateTitle(resultData.task_type)"
+                  :value="riskRateValue(resultData)"
                   :value-style="{ fontSize: '28px' }"
                 />
               </a-card>
@@ -460,8 +635,23 @@ onMounted(() => {
             </a-list>
           </a-card>
 
+          <a-card
+            v-if="resultData.task_type === 'impersonation' && resultData.official_domains && resultData.official_domains.length > 0"
+            title="本次使用的官方域名列表"
+            style="margin-bottom: 24px;"
+          >
+            <a-table
+              :data-source="resultData.official_domains"
+              :columns="officialDomainColumns"
+              :pagination="{ pageSize: 10, showSizeChanger: true }"
+              row-key="官方域名"
+              size="middle"
+              bordered
+            />
+          </a-card>
+
           <!-- 结果表格 -->
-          <a-card v-else title="检测结果详情" style="margin-bottom: 24px;">
+          <a-card v-if="resultData.task_type !== 'malicious'" title="检测结果详情" style="margin-bottom: 24px;">
             <a-table
               :data-source="resultData.results"
               :columns="resultColumns"
@@ -479,7 +669,7 @@ onMounted(() => {
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'result'">
-                  <a-tag :color="record['预测结果'] === '恶意' || record['预测结果'] === 'DGA-like' ? 'red' : 'green'">
+                  <a-tag :color="record['预测结果'] === '恶意' || record['预测结果'] === 'DGA-like' || record['预测结果'] === '历史高度相似' ? 'red' : 'green'">
                     {{ record['预测结果'] }}
                   </a-tag>
                 </template>
@@ -500,14 +690,12 @@ onMounted(() => {
 
           <!-- 恶意/钓鱼域名列表（如果有） -->
           <a-card
-            v-if="(resultData.task_type === 'malicious' && resultData.malicious_domains && resultData.malicious_domains.length > 0) ||
-                  (resultData.task_type === 'impersonation' && resultData.phishing_domains && resultData.phishing_domains.length > 0) ||
-                  (resultData.task_type === 'dga' && resultData.dga_domains && resultData.dga_domains.length > 0)"
-            :title="resultData.task_type === 'impersonation' ? '仿冒域名列表' : (resultData.task_type === 'dga' ? 'DGA域名列表' : '恶意域名列表')"
+            v-if="hasRiskDomains(resultData)"
+            :title="riskListTitle(resultData.task_type)"
             style="margin-bottom: 24px;"
           >
             <a-list
-              :data-source="resultData.task_type === 'impersonation' ? resultData.phishing_domains : (resultData.task_type === 'dga' ? resultData.dga_domains : resultData.malicious_domains)"
+              :data-source="riskListData(resultData)"
               :pagination="{ pageSize: 20, showSizeChanger: true }"
               size="large"
               bordered
@@ -534,6 +722,14 @@ onMounted(() => {
                     <template v-else-if="resultData.task_type === 'dga'" #description>
                       <a-tag color="red">DGA-like</a-tag>
                       <span>DGA_score: {{ item.DGA_score }}</span>
+                    </template>
+                    <template v-else-if="resultData.task_type === 'history_similarity'" #description>
+                      <a-tag color="red">历史高度相似</a-tag>
+                      <span>综合相似度: {{ displaySimilarityScore(item) }}</span>
+                      <span> | 匹配历史恶意域名: {{ item.匹配历史恶意域名 || '未知' }}</span>
+                      <div v-if="item.命中原因" style="margin-top: 4px; color: #667085;">
+                        命中原因: {{ item.命中原因 }}
+                      </div>
                     </template>
                     <template v-else #description>
                       <a-tag color="red">恶意域名</a-tag>

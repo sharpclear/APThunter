@@ -126,7 +126,16 @@ def send_alert_email(user_email: str, alert_data: dict, domains_attachment_conte
 
     try:
         all_domains = alert_data.get("high_risk_domains", [])
-        domain_type = "恶意域名" if alert_data.get("task_type") == "malicious" else "仿冒域名"
+        task_type = alert_data.get("task_type")
+        if task_type == "impersonation":
+            domain_type = "仿冒域名"
+            task_type_text = "仿冒域名检测"
+        elif task_type == "history_similarity":
+            domain_type = "历史高度相似域名"
+            task_type_text = "历史高度相似检测"
+        else:
+            domain_type = "恶意域名"
+            task_type_text = "恶意性检测"
 
         preview_domains = all_domains[:20]
         body = f"""您好，
@@ -134,7 +143,7 @@ def send_alert_email(user_email: str, alert_data: dict, domains_attachment_conte
 检测到{domain_type}预警，详情如下：
 
 模型名称：{alert_data.get('model_name', '未知')}
-任务类型：{'恶意性检测' if alert_data.get('task_type') == 'malicious' else '仿冒域名检测'}
+任务类型：{task_type_text}
 检测域名总数：{alert_data.get('detected_count', 0)}
 {domain_type}数量：{alert_data.get('high_risk_count', 0)}
 检测时间：{alert_data.get('created_at', '')}
@@ -159,7 +168,12 @@ def send_alert_email(user_email: str, alert_data: dict, domains_attachment_conte
         )
 
         if domains_attachment_content:
-            task_type_label = "malicious" if alert_data.get("task_type") == "malicious" else "phishing"
+            if task_type == "impersonation":
+                task_type_label = "phishing"
+            elif task_type == "history_similarity":
+                task_type_label = "history_similarity"
+            else:
+                task_type_label = "malicious"
             timestamp = beijing_now().strftime("%Y%m%d_%H%M%S")
             filename = f"{task_type_label}_domains_{timestamp}.xlsx"
             _attach_bytes(

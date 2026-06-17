@@ -5,10 +5,12 @@ import { useAuthorization } from '~/composables/authorization'
 import { useUserId } from '~/composables/user-id'
 import { getApiBase } from '~/utils/api-public'
 
+type ModelDisplayType = '恶意性检测' | '仿冒域名检测' | 'DGA域名检测' | '历史高度相似检测'
+
 interface MyModel {
   id: number
   name: string
-  type: '恶意性检测' | '仿冒域名检测' | null
+  type: ModelDisplayType | null
   description: string
   createTime: string
   source: 'custom' | 'official' | 'market'
@@ -20,7 +22,7 @@ interface MarketModel {
   id: number
   name: string
   creator: string
-  type: '恶意性检测' | '仿冒域名检测' | null
+  type: ModelDisplayType | null
   description: string
   isAdded: boolean
   createTime: string
@@ -145,6 +147,12 @@ async function fetchMarketModels() {
     else if (filterCategory.value === '仿冒域名检测') {
       url.searchParams.set('category', 'impersonation')
     }
+    else if (filterCategory.value === 'DGA域名检测') {
+      url.searchParams.set('category', 'dga')
+    }
+    else if (filterCategory.value === '历史高度相似检测') {
+      url.searchParams.set('category', 'history_similarity')
+    }
     // 其他类型不设置category，后端会返回所有类型
     
     const resp = await fetch(url.toString(), {
@@ -262,7 +270,7 @@ async function revokePublic(model: MyModel) {
 // 市场筛选/搜索/排序
 const searchKeyword = ref('')
 const sortKey = ref<'latest' | 'nameAsc' | 'nameDesc'>('latest')
-const filterCategory = ref<'全部' | '恶意性检测' | '仿冒域名检测' | '其他'>('全部')
+const filterCategory = ref<'全部' | ModelDisplayType | '其他'>('全部')
 
 const filteredMarket = computed(() => {
   let data = [...marketModels.value]
@@ -276,8 +284,14 @@ const filteredMarket = computed(() => {
       else if (filterCategory.value === '仿冒域名检测') {
         return m.type === '仿冒域名检测'
       }
+      else if (filterCategory.value === 'DGA域名检测') {
+        return m.type === 'DGA域名检测'
+      }
+      else if (filterCategory.value === '历史高度相似检测') {
+        return m.type === '历史高度相似检测'
+      }
       else if (filterCategory.value === '其他') {
-        return m.type === null || (m.type !== '恶意性检测' && m.type !== '仿冒域名检测')
+        return m.type === null || !['恶意性检测', '仿冒域名检测', 'DGA域名检测', '历史高度相似检测'].includes(m.type)
       }
       return true
     })
@@ -419,7 +433,7 @@ onMounted(() => {
   fetchMarketModels()
 })
 
-function mapTypeLabel(t: '恶意性检测' | '仿冒域名检测' | null) {
+function mapTypeLabel(t: ModelDisplayType | null) {
   return t || '未知类型'
 }
 </script>
@@ -442,6 +456,12 @@ function mapTypeLabel(t: '恶意性检测' | '仿冒域名检测' | null) {
               </a-radio-button>
               <a-radio-button value="仿冒域名检测">
                 仿冒域名检测
+              </a-radio-button>
+              <a-radio-button value="DGA域名检测">
+                DGA域名检测
+              </a-radio-button>
+              <a-radio-button value="历史高度相似检测">
+                历史高度相似检测
               </a-radio-button>
               <a-radio-button value="其他">
                 其他

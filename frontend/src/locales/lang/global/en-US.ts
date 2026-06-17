@@ -90,6 +90,7 @@ export default {
   'menu.detection.malicious-domain-detection': 'Malicious Domain Detection',
   'menu.detection.impersonation-domain-detection': 'Impersonation Domain Detection',
   'menu.detection.dga-domain-detection': 'DGA Domain Detection',
+  'menu.detection.history-similarity-detection': 'Historical Similarity Detection',
   'menu.detection.malicious-ip-detection': 'Malicious IP Detection',
   'menu.detection.step-detection': 'Step detection',
   'menu.detection.step-detection.info': 'Step detection(write transfer indetectionation)',

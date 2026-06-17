@@ -19,7 +19,7 @@ WHERE NOT EXISTS (
   SELECT 1 FROM users WHERE username = 'admin'
 );
 
--- 2) 创建官方模型（恶意检测 + 仿冒检测 + DGA检测）
+-- 2) 创建官方模型（恶意检测 + 仿冒检测 + DGA检测 + 历史高度相似检测）
 -- 注意：malicious 模型需要确保 model_path 指向的文件在容器内可读取，否则执行恶意检测时会报模型文件不存在。
 INSERT INTO models (
   name, version, description, model_path, file_size, accuracy_metrics,
@@ -92,6 +92,31 @@ WHERE NOT EXISTS (
   SELECT 1
   FROM models
   WHERE name = '官方DGA域名检测模型'
+    AND version = 'v1.0'
+    AND model_type = 'official'
+);
+
+INSERT INTO models (
+  name, version, description, model_path, file_size, accuracy_metrics,
+  model_type, model_category, is_public, is_official, created_by, status
+)
+SELECT
+  '官方历史高度相似检测模型',
+  'v1.0',
+  '基于历史恶意域名样本的字符相似度与重排序特征筛选模型',
+  'dataset/history_data/训练黑数据.xlsx',
+  NULL,
+  JSON_OBJECT('note', '官方历史恶意域名相似性种子模型', 'default_min_score', 0.55),
+  'official',
+  'history_similarity',
+  1,
+  1,
+  'system',
+  'active'
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM models
+  WHERE name = '官方历史高度相似检测模型'
     AND version = 'v1.0'
     AND model_type = 'official'
 );

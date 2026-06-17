@@ -74,6 +74,8 @@ def map_model_category_to_type(category: Optional[str]) -> Optional[str]:
         return "仿冒域名检测"
     elif category == "dga":
         return "DGA域名检测"
+    elif category == "history_similarity":
+        return "历史高度相似检测"
     return None
 
 
@@ -99,7 +101,7 @@ async def get_available_models(
     """
     user_id = get_current_user_id(request, authorization)
     username = None
-    category_filter = category if category in {"malicious", "impersonation", "dga"} else None
+    category_filter = category if category in {"malicious", "impersonation", "dga", "history_similarity"} else None
     
     # 如果有有效的用户ID，获取用户名
     if user_id:
@@ -488,7 +490,7 @@ async def get_market_models(
     """
     获取模型市场公共列表
     返回所有已公开的模型（is_public=1）
-    如果指定category，只返回该类型的模型（malicious/impersonation）
+    如果指定category，只返回该类型的模型（malicious/impersonation/dga/history_similarity）
     """
     user_id = get_current_user_id(request, authorization)
     
@@ -498,7 +500,7 @@ async def get_market_models(
     
     # 如果指定了category，只返回该类型的模型
     # 如果不指定category，返回所有类型的公开模型
-    if category and category in ["malicious", "impersonation"]:
+    if category and category in ["malicious", "impersonation", "dga", "history_similarity"]:
         conditions.append("m.model_category = :category")
         params["category"] = category
     # 移除默认限制，允许显示所有类型的公开模型

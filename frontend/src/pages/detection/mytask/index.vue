@@ -9,7 +9,7 @@ import TaskResultModal from './task-result-modal.vue'
 interface TaskItem {
   id: string
   createdAt: string
-  taskType: '恶意域名检测' | '恶意性检测' | '仿冒域名检测' | '恶意IP检测' | string
+  taskType: '恶意域名检测' | '恶意性检测' | '仿冒域名检测' | 'DGA域名检测' | '历史高度相似检测' | '恶意IP检测' | string
   model: string
   dataSource: {
     type: '上传文件' | '新注册域名' | '手动输入域名'
@@ -301,6 +301,12 @@ function handleModalDownload(taskId: string) {
             </a-select-option>
             <a-select-option value="仿冒域名检测">
               仿冒域名检测
+            </a-select-option>
+            <a-select-option value="DGA域名检测">
+              DGA域名检测
+            </a-select-option>
+            <a-select-option value="历史高度相似检测">
+              历史高度相似检测
             </a-select-option>
             <a-select-option value="恶意IP检测">
               恶意IP检测

@@ -7,10 +7,12 @@ import { getApiBase } from '~/utils/api-public'
 
 defineOptions({ name: 'DetectionAlert' })
 
+type SubscriptionModelType = 'malicious' | 'phishing' | 'history_similarity' | 'dga'
+
 interface ModelItem {
   id: number
   name: string
-  type: 'malicious' | 'phishing'
+  type: SubscriptionModelType
   description: string
 }
 
@@ -18,7 +20,7 @@ interface SubscriptionItem {
   id: string
   modelId: number
   modelName: string
-  type: 'malicious' | 'phishing'
+  type: SubscriptionModelType
   frequency: 'daily' | 'weekly' | 'monthly'
   createdAt: string
   nextRunAt: string
@@ -31,7 +33,7 @@ interface AlertRecord {
   id: string
   time: string
   modelName: string
-  type: 'malicious' | 'phishing'
+  type: SubscriptionModelType
   detectedCount: number
   highRiskDomains: string[]
   status: '已处理' | '未处理'
@@ -76,10 +78,42 @@ const formState = reactive<{
 )
 
 const isPhishingModel = computed(() => selectedModel.value?.type === 'phishing')
-const defaultThresholdPolicyText = computed(() => {
-  if (isPhishingModel.value)
+function modelTypeLabel(type?: SubscriptionModelType | '') {
+  if (type === 'phishing')
+    return '仿冒域名检测'
+  if (type === 'history_similarity')
+    return '历史高度相似检测'
+  if (type === 'dga')
+    return 'DGA域名检测'
+  return '恶意性检测'
+}
+
+function modelTypeTagColor(type?: SubscriptionModelType | '') {
+  if (type === 'phishing')
+    return 'purple'
+  if (type === 'history_similarity')
+    return 'volcano'
+  if (type === 'dga')
+    return 'geekblue'
+  return 'processing'
+}
+
+function defaultThresholdValue(type?: SubscriptionModelType | '') {
+  return type === 'history_similarity' ? 55 : 60
+}
+
+function defaultThresholdPolicyTextByType(type?: SubscriptionModelType | '') {
+  if (type === 'phishing')
     return '默认使用普通仿冒检测任务的自适应相似度阈值。'
+  if (type === 'history_similarity')
+    return '默认使用综合相似度 55 作为预警阈值。'
+  if (type === 'dga')
+    return '默认将模型判定为DGA-like的结果作为预警对象。'
   return '默认将模型判定为恶意的结果全部作为预警对象。'
+}
+
+const defaultThresholdPolicyText = computed(() => {
+  return defaultThresholdPolicyTextByType(selectedModel.value?.type)
 })
 
 const subscriptions = ref<SubscriptionItem[]>([])
@@ -219,17 +253,17 @@ async function loadData() {
 
 onMounted(loadData)
 
-function resetForm() {
+function resetForm(type: SubscriptionModelType | '' = selectedModel.value?.type || '') {
   formState.frequency = ''
   formState.range = 'week'
   formState.useCustomThreshold = false
-  formState.threshold = 60
+  formState.threshold = defaultThresholdValue(type)
   formState.officialFile = null
 }
 
 function handleSelectModel(m: ModelItem) {
   selectedModelId.value = m.id
-  resetForm()
+  resetForm(m.type)
 }
 
 function beforeUpload(file: File) {
@@ -339,7 +373,7 @@ async function cancelSubscription(record: SubscriptionItem) {
 const editVisible = ref(false)
 const editState = reactive<{
   id: string | null
-  type: 'malicious' | 'phishing' | ''
+  type: SubscriptionModelType | ''
   frequency: 'daily' | 'weekly' | 'monthly' | ''
   useCustomThreshold: boolean
   threshold: number
@@ -347,9 +381,7 @@ const editState = reactive<{
   { id: null, type: '', frequency: '', useCustomThreshold: false, threshold: 60 },
 )
 const editDefaultThresholdPolicyText = computed(() => {
-  if (editState.type === 'phishing')
-    return '默认使用普通仿冒检测任务的自适应相似度阈值。'
-  return '默认将模型判定为恶意的结果全部作为预警对象。'
+  return defaultThresholdPolicyTextByType(editState.type)
 })
 
 function openEdit(record: SubscriptionItem) {
@@ -357,7 +389,7 @@ function openEdit(record: SubscriptionItem) {
   editState.type = record.type
   editState.frequency = record.frequency
   editState.useCustomThreshold = record.threshold !== null && record.threshold !== undefined
-  editState.threshold = record.threshold ?? 60
+  editState.threshold = record.threshold ?? defaultThresholdValue(record.type)
   editVisible.value = true
 }
 
@@ -468,8 +500,8 @@ async function updateAlertStatus(alertId: string, status: 'pending' | 'processed
                 <a-list-item class="ant-list-item">
                   <a-list-item-meta :title="item.name" :description="item.description" />
                   <template #actions>
-                    <a-tag :color="item.type === 'malicious' ? 'processing' : 'purple'">
-                      {{ item.type === 'malicious' ? '恶意性检测' : '仿冒域名检测' }}
+                    <a-tag :color="modelTypeTagColor(item.type)">
+                      {{ modelTypeLabel(item.type) }}
                     </a-tag>
                     <a-button type="link" @click="handleSelectModel(item)">
                       选择
@@ -546,7 +578,7 @@ async function updateAlertStatus(alertId: string, status: 'pending' | 'processed
                 <a-button type="primary" :loading="subLoading" :disabled="!selectedModel" @click="handleSubscribe">
                   订阅
                 </a-button>
-                <a-button :disabled="!selectedModel" @click="resetForm">
+                <a-button :disabled="!selectedModel" @click="() => resetForm()">
                   重置
                 </a-button>
               </a-space>
@@ -569,8 +601,8 @@ async function updateAlertStatus(alertId: string, status: 'pending' | 'processed
             <a-table-column key="modelName" title="模型" data-index="modelName" />
             <a-table-column key="type" title="类型" width="140">
               <template #default="{ record }">
-                <a-tag :color="record.type === 'malicious' ? 'processing' : 'purple'">
-                  {{ record.type === 'malicious' ? '恶意性检测' : '仿冒域名检测' }}
+                <a-tag :color="modelTypeTagColor(record.type)">
+                  {{ modelTypeLabel(record.type) }}
                 </a-tag>
               </template>
             </a-table-column>
@@ -619,8 +651,8 @@ async function updateAlertStatus(alertId: string, status: 'pending' | 'processed
             <a-table-column key="modelName" title="模型" data-index="modelName" />
             <a-table-column key="type" title="类型" width="140">
               <template #default="{ record }">
-                <a-tag :color="record.type === 'malicious' ? 'processing' : 'purple'">
-                  {{ record.type === 'malicious' ? '恶意性检测' : '仿冒域名检测' }}
+                <a-tag :color="modelTypeTagColor(record.type)">
+                  {{ modelTypeLabel(record.type) }}
                 </a-tag>
               </template>
             </a-table-column>

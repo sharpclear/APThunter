@@ -13,7 +13,14 @@ class AlertFile(Base):
     user_id = Column(BigInteger, nullable=False, index=True)
     model_id = Column(BigInteger, nullable=False, index=True)
     task_type = Column(
-        SqlEnum("malicious", "impersonation", name="alert_files_task_type_enum"),
+        SqlEnum(
+            "malicious",
+            "impersonation",
+            "malicious_ip",
+            "dga",
+            "history_similarity",
+            name="alert_files_task_type_enum",
+        ),
         nullable=False,
     )
     frequency = Column(

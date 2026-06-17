@@ -26,5 +26,6 @@ class Model(Base):
     )
     created_at = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
     model_category = Column(
-        SqlEnum("malicious", "impersonation", "dga", name="model_category_enum"), nullable=True
+        SqlEnum("malicious", "impersonation", "dga", "history_similarity", name="model_category_enum"),
+        nullable=True,
     )

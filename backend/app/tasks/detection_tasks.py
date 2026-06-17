@@ -3,6 +3,7 @@ import logging
 from app.celery_app import celery_app
 from app.services.task_executor import (
     execute_dga_task,
+    execute_history_similarity_task,
     execute_impersonation_task,
     execute_malicious_task,
 )
@@ -41,6 +42,23 @@ def execute_dga_task_job(self, task_id: str):
         return {"ok": True, "task_id": task_id}
     except Exception as exc:
         logger.exception("Celery dga task failed: %s", exc)
+        raise
+
+
+@celery_app.task(
+    name="tasks.execute_history_similarity_task",
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_kwargs={"max_retries": 3, "countdown": 5},
+    retry_backoff=True,
+    retry_jitter=True,
+)
+def execute_history_similarity_task_job(self, task_id: str):
+    try:
+        execute_history_similarity_task(task_id)
+        return {"ok": True, "task_id": task_id}
+    except Exception as exc:
+        logger.exception("Celery history similarity task failed: %s", exc)
         raise
 
 

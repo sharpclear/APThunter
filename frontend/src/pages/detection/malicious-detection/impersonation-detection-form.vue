@@ -183,8 +183,8 @@ async function handleImpersonationSubmit() {
       throw new Error(`提交失败: ${resp.status} ${errorText}`)
     }
     const json = await resp.json()
-    if (json.officialDomainStatus === 'pending')
-      message.success(`任务参数已保存，等待官方域名检索能力接入。task: ${json.task_id || ''}`)
+    if (json.officialDomainStatus === 'resolved')
+      message.success(`仿冒域名检测任务已提交，DeepSeek 已解析 ${json.officialDomainCount || 0} 个官方域名。task: ${json.task_id || ''}`)
     else if (json.officialDomainStatus === 'file_uploaded')
       message.success(`仿冒域名检测任务已提交，已使用上传的官方域名文件。task: ${json.task_id || ''}`)
     else
@@ -317,7 +317,7 @@ async function handleImpersonationSubmit() {
         <div class="side-panel">
           <a-card title="填写说明" class="guide-card" :bordered="false">
             <ul class="guide-list">
-              <li><span class="dot">1</span><span>事件名或单位名将用于检索相关官方域名；检索能力未接入时可上传文件。</span></li>
+              <li><span class="dot">1</span><span>事件名或单位名将通过 DeepSeek 解析相关官方域名；也可上传文件作为备用来源。</span></li>
               <li><span class="dot">2</span><span>待检测域名来自所选时间窗内的新注册域名。</span></li>
               <li><span class="dot">3</span><span>日期范围最多 30 天，避免任务过大。</span></li>
             </ul>

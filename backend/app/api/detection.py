@@ -22,8 +22,18 @@ from app.entities import Task, Model, StoredFile
 from app.infra.minio_client import minio_client
 from app.db.session import SessionLocal, engine
 from app.core.config import MINIO_BUCKET, IMPERSONATION_MODEL_NAME
-from app.services.official_domain_resolver import resolve_official_domains
-from app.services.task_dispatcher import dispatch_dga_task, dispatch_impersonation_task, dispatch_malicious_task
+from app.services.official_domain_resolver import (
+    OfficialDomainResolverConfigError,
+    OfficialDomainResolutionError,
+    resolve_official_domains,
+)
+from app.services.task_dispatcher import (
+    dispatch_dga_task,
+    dispatch_history_similarity_task,
+    dispatch_impersonation_task,
+    dispatch_malicious_task,
+)
+from phishing_detector import read_official_domains_from_file
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -44,6 +54,7 @@ TASK_TYPE_LABEL_MAP = {
     "impersonation": "仿冒域名检测",
     "malicious_ip": "恶意IP检测",
     "dga": "DGA域名检测",
+    "history_similarity": "历史高度相似检测",
 }
 DATA_SOURCE_LABEL_MAP = {
     "upload": "上传文件",
@@ -127,6 +138,18 @@ def _get_dga_model_record(db):
         db.query(Model)
         .filter(
             Model.model_category == "dga",
+            Model.status == "active",
+        )
+        .order_by(Model.model_type.asc(), Model.id.asc())
+        .first()
+    )
+
+
+def _get_history_similarity_model_record(db):
+    return (
+        db.query(Model)
+        .filter(
+            Model.model_category == "history_similarity",
             Model.status == "active",
         )
         .order_by(Model.model_type.asc(), Model.id.asc())
@@ -247,6 +270,131 @@ def _attach_attribution_fields(rows: list, attribution_index: dict) -> list:
             item["组织关联详情"] = match
         enriched_rows.append(item)
     return enriched_rows
+
+
+def _history_similarity_cell_text(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float) and not math.isfinite(value):
+        return ""
+    text_value = str(value).strip()
+    return "" if text_value.lower() in {"nan", "none", "nat"} else text_value
+
+
+def _history_similarity_row_domain(row: dict) -> str:
+    for key in ("域名", "规范化域名", "domain", "domain_name"):
+        domain = _history_similarity_cell_text(row.get(key)).lower()
+        if domain:
+            return domain
+    return ""
+
+
+def _history_similarity_row_score(row: dict) -> float:
+    try:
+        score = float(row.get("综合相似度") or 0)
+        return score if math.isfinite(score) else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _dedupe_history_similarity_rows(rows: list) -> list:
+    best_by_domain = {}
+    ordered_domains = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        domain = _history_similarity_row_domain(row)
+        if not domain:
+            continue
+        current = best_by_domain.get(domain)
+        if current is None:
+            ordered_domains.append(domain)
+            best_by_domain[domain] = row
+            continue
+        if _history_similarity_row_score(row) > _history_similarity_row_score(current):
+            best_by_domain[domain] = row
+    return [best_by_domain[domain] for domain in ordered_domains]
+
+
+def _normalize_official_domain_rows(official_domains) -> list:
+    rows = []
+    seen = set()
+    for item in official_domains or []:
+        company = ""
+        domain = ""
+        confidence = ""
+        source = ""
+        reason = ""
+        if isinstance(item, dict):
+            company = item.get("单位名称") or item.get("公司名称") or item.get("company") or item.get("organization") or ""
+            domain = item.get("官方域名") or item.get("域名") or item.get("domain") or item.get("目标域名") or item.get("target_domain") or ""
+            confidence = item.get("confidence") if item.get("confidence") is not None else ""
+            source = item.get("source") or ""
+            reason = item.get("reason") or item.get("evidence") or ""
+        elif isinstance(item, (list, tuple)):
+            if len(item) >= 2:
+                company, domain = item[0], item[1]
+            elif len(item) == 1:
+                domain = item[0]
+        else:
+            domain = item
+        domain = str(domain or "").strip().lower()
+        if not domain or domain in seen:
+            continue
+        seen.add(domain)
+        rows.append({
+            "单位名称": str(company or "").strip(),
+            "官方域名": domain,
+            "置信度": confidence,
+            "来源": source,
+            "说明": str(reason or "").strip(),
+        })
+    return rows
+
+
+def _replace_impersonation_official_sheet(file_bytes: bytes, official_domain_rows: list) -> bytes:
+    import pandas as pd
+
+    excel_input = io.BytesIO(file_bytes)
+    excel_file = pd.ExcelFile(excel_input)
+    output = io.BytesIO()
+    official_df = pd.DataFrame(
+        official_domain_rows,
+        columns=["单位名称", "官方域名", "置信度", "来源", "说明"],
+    )
+    official_written = False
+    kept_count = 0
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        for sheet_name in excel_file.sheet_names:
+            if sheet_name in {"钓鱼域名列表", "官方域名列表"}:
+                continue
+            excel_input.seek(0)
+            sheet_df = pd.read_excel(excel_input, sheet_name=sheet_name)
+            sheet_df.to_excel(writer, sheet_name=sheet_name, index=False)
+            kept_count += 1
+            if kept_count == 2:
+                official_df.to_excel(writer, sheet_name="官方域名列表", index=False)
+                official_written = True
+        if not official_written:
+            official_df.to_excel(writer, sheet_name="官方域名列表", index=False)
+    return output.getvalue()
+
+
+def _dedupe_history_similarity_sheet(file_bytes: bytes) -> bytes:
+    import pandas as pd
+
+    excel_input = io.BytesIO(file_bytes)
+    excel_file = pd.ExcelFile(excel_input)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        for sheet_name in excel_file.sheet_names:
+            excel_input.seek(0)
+            sheet_df = pd.read_excel(excel_input, sheet_name=sheet_name)
+            if sheet_name == "历史相似域名列表":
+                deduped_rows = _dedupe_history_similarity_rows(sheet_df.to_dict("records"))
+                sheet_df = pd.DataFrame(deduped_rows, columns=list(sheet_df.columns))
+            sheet_df.to_excel(writer, sheet_name=sheet_name, index=False)
+    return output.getvalue()
 
 
 def _task_result_status_payload(task: Task, extra_data: dict) -> dict:
@@ -485,6 +633,24 @@ def _parse_similarity_threshold(use_custom_threshold: str, threshold: Optional[s
         "use_custom_threshold": True,
         "threshold_percent": threshold_percent,
     }
+
+
+def _parse_history_similarity_min_score(value: Optional[str]) -> Tuple[float, int]:
+    if value is None or str(value).strip() == "":
+        return 0.55, 55
+    try:
+        threshold_percent = float(str(value).strip())
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="minScore must be a number between 0 and 100",
+        ) from exc
+    if threshold_percent < 0 or threshold_percent > 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="minScore must be between 0 and 100",
+        )
+    return threshold_percent / 100, int(round(threshold_percent))
 
 
 def _collect_daily_domains(date_range: List[str]) -> Tuple[List[str], List[str]]:
@@ -1043,6 +1209,205 @@ async def create_dga_task(
         ) from exc
 
 
+@router.post("/api/history-similarity-tasks")
+async def create_history_similarity_task(
+    request: Request,
+    model: Optional[str] = Form(None),
+    dataSource: str = Form(...),
+    file: Optional[UploadFile] = File(None),
+    dateRange: Optional[str] = Form(None),
+    manualDomains: Optional[str] = Form(None),
+    minScore: Optional[str] = Form(None),
+):
+    """创建历史高度相似检测任务。"""
+    try:
+        created_by_user_id: Optional[int] = _extract_user_id(request)
+        uploaded_by_header = request.headers.get("X-User-Name") or request.headers.get("X-User")
+
+        if dataSource not in ["upload", "newDomain", "manualInput"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="dataSource must be 'upload', 'newDomain' or 'manualInput'",
+            )
+        if dataSource == "upload" and file is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="file is required")
+        if dataSource == "newDomain" and (not dateRange or dateRange.strip() == ""):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="dateRange is required")
+
+        min_score, min_score_percent = _parse_history_similarity_min_score(minScore)
+
+        date_range_parsed = None
+        if dataSource == "newDomain":
+            date_range_parsed = _parse_detection_date_range_payload(dateRange or "")
+            start_date = _parse_date_string(date_range_parsed[0])
+            end_date = _parse_date_string(date_range_parsed[1])
+            availability = _inspect_daily_domain_availability(start_date, end_date)
+            if not availability["available"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "message": "所选日期范围内暂无可用的新注册域名数据，请重新选择日期",
+                        **availability,
+                    },
+                )
+
+        manual_domain_list = None
+        manual_domain_stats = None
+        if dataSource == "manualInput":
+            manual_domain_list, manual_domain_stats = _parse_manual_domains(manualDomains or "")
+
+        uploaded_file_meta = None
+        if file is not None:
+            file_ext = file.filename.split(".")[-1].lower() if file.filename else ""
+            allowed_extensions = ["csv", "txt", "xlsx"]
+            if file_ext not in allowed_extensions:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"File type not allowed. Only {', '.join(allowed_extensions)} are supported",
+                )
+            file_content = await file.read()
+            file_size = len(file_content)
+            max_size = 5 * 1024 * 1024
+            if file_size > max_size:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"File size exceeds maximum allowed size of {max_size / 1024 / 1024}MB",
+                )
+            file_key = upload_file_content_to_minio(
+                file_content,
+                file.filename or "unknown",
+                file.content_type,
+            )
+            uploaded_file_meta = {
+                "bucket": MINIO_BUCKET,
+                "object_key": file_key,
+                "filename": file.filename or "unknown",
+                "content_type": file.content_type,
+                "size": file_size,
+            }
+
+        extra_data = {
+            "dataSource": dataSource,
+            "dateRange": date_range_parsed,
+            "min_score": min_score,
+            "min_score_percent": min_score_percent,
+            "top_k": 10,
+        }
+        if uploaded_file_meta:
+            extra_data["file_bucket"] = uploaded_file_meta["bucket"]
+            extra_data["file_object_key"] = uploaded_file_meta["object_key"]
+        if manual_domain_list is not None:
+            extra_data["manual_domains"] = manual_domain_list
+            extra_data["manual_domain_stats"] = manual_domain_stats
+
+        task_id = f"HIS{int(datetime.utcnow().timestamp())}{uuid.uuid4().hex[:6]}"
+        db = SessionLocal()
+        try:
+            model_record = None
+            if model:
+                try:
+                    model_record = db.query(Model).filter(Model.id == int(model)).first()
+                except ValueError:
+                    model_record = db.query(Model).filter(Model.name == model).first()
+            if model_record is None:
+                model_record = _get_history_similarity_model_record(db)
+            if not model_record or model_record.model_category != "history_similarity":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No active history similarity model configured",
+                )
+
+            if created_by_user_id is not None:
+                with engine.connect() as conn:
+                    user_model_result = conn.execute(
+                        text("""
+                            SELECT um.id
+                            FROM user_models um
+                            WHERE um.user_id = :user_id
+                              AND um.model_id = :model_id
+                              AND um.is_active = 1
+                        """),
+                        {"user_id": created_by_user_id, "model_id": model_record.id},
+                    ).first()
+                if not user_model_result:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"您没有权限使用模型 {model_record.name}",
+                    )
+
+            file_record = None
+            if uploaded_file_meta:
+                file_record = StoredFile(
+                    bucket=uploaded_file_meta["bucket"],
+                    object_key=uploaded_file_meta["object_key"],
+                    filename=uploaded_file_meta["filename"],
+                    content_type=uploaded_file_meta["content_type"],
+                    size=uploaded_file_meta["size"],
+                    uploaded_by=uploaded_by_header,
+                    metadata_json={
+                        "source": "history_similarity_detection",
+                        "original_filename": uploaded_file_meta["filename"],
+                    },
+                )
+                db.add(file_record)
+                db.flush()
+
+            task = Task(
+                task_id=task_id,
+                task_type="history_similarity",
+                model_id=model_record.id,
+                file_id=file_record.id if file_record else None,
+                extra=extra_data,
+                status="pending",
+                created_by=created_by_user_id,
+            )
+            db.add(task)
+            db.commit()
+            db.refresh(task)
+
+            try:
+                dispatch_history_similarity_task(task.task_id)
+            except Exception as exc:
+                logger.exception("enqueue history similarity task failed: %s", exc)
+                task.status = "failed"
+                extra_data_failed = dict(task.extra or {})
+                extra_data_failed["error"] = str(exc)
+                extra_data_failed["enqueue_failed"] = True
+                extra_data_failed["enqueue_failed_at"] = datetime.utcnow().isoformat()
+                task.extra = extra_data_failed
+                db.commit()
+                db.refresh(task)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to enqueue task",
+                ) from exc
+
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={"ok": True, "task_id": task.task_id, "status": "pending"},
+            )
+        except HTTPException:
+            db.rollback()
+            raise
+        except Exception as exc:
+            db.rollback()
+            logger.exception("Failed to create history similarity task: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create history similarity task",
+            ) from exc
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Unexpected error in create_history_similarity_task: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred",
+        ) from exc
+
+
 @router.get("/api/tasks")
 async def list_tasks(
     request: Request,
@@ -1097,49 +1462,9 @@ async def list_tasks(
                 status_label = "等待官方域名解析"
                 progress = 0
             
-            # 对于仿冒域名检测任务，使用 detectionSource；对于恶意性检测任务，使用 dataSource
+            # 对于仿冒域名检测任务，使用 detectionSource；其他检测任务使用 dataSource
             data_source_type = ""
-            if task.task_type == "dga":
-                try:
-                    results_df = pd.read_excel(excel_file, sheet_name='预测结果')
-                except Exception:
-                    results_df = pd.DataFrame()
-                stats_df = pd.read_excel(excel_file, sheet_name='统计信息')
-                dga_list = []
-                try:
-                    excel_file.seek(0)
-                    dga_df = pd.read_excel(excel_file, sheet_name='DGA域名列表')
-                    dga_list = dga_df.to_dict('records')
-                except Exception:
-                    pass
-
-                results_list = results_df.to_dict('records')
-                statistics_dict = {}
-                for _, row in stats_df.iterrows():
-                    statistics_dict[row['统计项']] = row['数值']
-                if not dga_list:
-                    dga_list = [
-                        row for row in results_list
-                        if row.get('预测标签') == 1 or row.get('预测结果') == 'DGA-like'
-                    ]
-
-                return JSONResponse(
-                    status_code=status.HTTP_200_OK,
-                    content=_json_safe_value({
-                        "ok": True,
-                        "task_id": task.task_id,
-                        "task_type": task.task_type,
-                        "statistics": statistics_dict,
-                        "results": results_list,
-                        "dga_domains": dga_list,
-                        "result_file_key": result_key,
-                        "result_filename": extra_data.get("result_filename") or f"{task.task_id}_result.xlsx",
-                        "total_count": len(results_list),
-                        "dga_count": len(dga_list),
-                        "dga_detection": extra_data.get("dga_detection") or {},
-                    })
-                )
-            elif task.task_type == "impersonation":
+            if task.task_type == "impersonation":
                 data_source_type = extra_data.get("detectionSource", "")
             else:
                 data_source_type = extra_data.get("dataSource", "")
@@ -1260,6 +1585,89 @@ async def get_task_result_json(task_id: str, request: Request):
             excel_file = io.BytesIO(file_bytes)
 
             # 根据任务类型读取不同的工作表
+            if task.task_type == "dga":
+                try:
+                    results_df = pd.read_excel(excel_file, sheet_name='预测结果')
+                except Exception:
+                    results_df = pd.DataFrame()
+                excel_file.seek(0)
+                stats_df = pd.read_excel(excel_file, sheet_name='统计信息')
+                dga_list = []
+                try:
+                    excel_file.seek(0)
+                    dga_df = pd.read_excel(excel_file, sheet_name='DGA域名列表')
+                    dga_list = dga_df.to_dict('records')
+                except Exception:
+                    pass
+
+                results_list = results_df.to_dict('records')
+                statistics_dict = {}
+                for _, row in stats_df.iterrows():
+                    statistics_dict[row['统计项']] = row['数值']
+                if not dga_list:
+                    dga_list = [
+                        row for row in results_list
+                        if row.get('预测标签') == 1 or row.get('预测结果') == 'DGA-like'
+                    ]
+
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content=_json_safe_value({
+                        "ok": True,
+                        "task_id": task.task_id,
+                        "task_type": task.task_type,
+                        "statistics": statistics_dict,
+                        "results": results_list,
+                        "dga_domains": dga_list,
+                        "result_file_key": result_key,
+                        "result_filename": extra_data.get("result_filename") or f"{task.task_id}_result.xlsx",
+                        "total_count": len(results_list),
+                        "dga_count": len(dga_list),
+                        "dga_detection": extra_data.get("dga_detection") or {},
+                    })
+                )
+            if task.task_type == "history_similarity":
+                try:
+                    results_df = pd.read_excel(excel_file, sheet_name='预测结果')
+                except Exception:
+                    results_df = pd.DataFrame()
+                excel_file.seek(0)
+                stats_df = pd.read_excel(excel_file, sheet_name='统计信息')
+                history_list = []
+                try:
+                    excel_file.seek(0)
+                    history_df = pd.read_excel(excel_file, sheet_name='历史相似域名列表')
+                    history_list = history_df.to_dict('records')
+                except Exception:
+                    pass
+
+                results_list = results_df.to_dict('records')
+                history_list = _dedupe_history_similarity_rows(history_list)
+                statistics_dict = {}
+                for _, row in stats_df.iterrows():
+                    statistics_dict[row['统计项']] = row['数值']
+                if not history_list:
+                    history_list = _dedupe_history_similarity_rows([
+                        row for row in results_list
+                        if row.get('预测标签') == 1 or row.get('预测结果') == '历史高度相似'
+                    ])
+
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content=_json_safe_value({
+                        "ok": True,
+                        "task_id": task.task_id,
+                        "task_type": task.task_type,
+                        "statistics": statistics_dict,
+                        "results": results_list,
+                        "history_similarity_domains": history_list,
+                        "result_file_key": result_key,
+                        "result_filename": extra_data.get("result_filename") or f"{task.task_id}_result.xlsx",
+                        "total_count": len(results_list),
+                        "history_similarity_count": len(history_list),
+                        "history_similarity_detection": extra_data.get("history_similarity_detection") or {},
+                    })
+                )
             if task.task_type == "impersonation":
                 # 仿冒域名检测结果
                 try:
@@ -1294,6 +1702,22 @@ async def get_task_result_json(task_id: str, request: Request):
                 for _, row in stats_df.iterrows():
                     statistics_dict[row['统计项']] = row['数值']
 
+                official_domain_rows = _normalize_official_domain_rows(extra_data.get("official_domains") or [])
+                if not official_domain_rows and extra_data.get("official_file_object_key"):
+                    try:
+                        official_file_content = download_file_from_minio(
+                            extra_data.get("official_file_object_key"),
+                            extra_data.get("official_file_bucket") or MINIO_BUCKET,
+                        )
+                        official_domain_rows = _normalize_official_domain_rows(
+                            read_official_domains_from_file(
+                                official_file_content,
+                                extra_data.get("official_file_filename") or "official_domains",
+                            )
+                        )
+                    except Exception:
+                        logger.exception("读取任务官方域名列表失败 task_id=%s", task.task_id)
+
                 # 如果没有钓鱼域名列表，从结果中筛选
                 if not phishing_list:
                     phishing_list = [r for r in results_list if r.get('钓鱼域名')]
@@ -1311,10 +1735,12 @@ async def get_task_result_json(task_id: str, request: Request):
                         "statistics": statistics_dict,
                         "results": results_list,
                         "phishing_domains": phishing_list,
+                        "official_domains": official_domain_rows,
                         "result_file_key": result_key,
                         "result_filename": extra_data.get("result_filename") or f"{task.task_id}_result.xlsx",
                         "total_count": len(results_list),
                         "phishing_count": len(phishing_list),
+                        "official_domain_count": len(official_domain_rows),
                     })
                 )
             else:
@@ -1403,6 +1829,39 @@ async def download_task_result(task_id: str, request: Request):
         except Exception as exc:
             logger.exception("下载结果文件失败: %s", exc)
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch result file")
+        if task.task_type == "history_similarity":
+            try:
+                file_bytes = _dedupe_history_similarity_sheet(file_bytes)
+            except Exception:
+                logger.exception("历史高度相似结果Sheet去重失败 task_id=%s", task.task_id)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to deduplicate history similarity sheet",
+                )
+        if task.task_type == "impersonation":
+            official_domain_rows = _normalize_official_domain_rows(extra_data.get("official_domains") or [])
+            if not official_domain_rows and extra_data.get("official_file_object_key"):
+                try:
+                    official_file_content = download_file_from_minio(
+                        extra_data.get("official_file_object_key"),
+                        extra_data.get("official_file_bucket") or MINIO_BUCKET,
+                    )
+                    official_domain_rows = _normalize_official_domain_rows(
+                        read_official_domains_from_file(
+                            official_file_content,
+                            extra_data.get("official_file_filename") or "official_domains",
+                        )
+                    )
+                except Exception:
+                    logger.exception("下载时读取任务官方域名列表失败 task_id=%s", task.task_id)
+            try:
+                file_bytes = _replace_impersonation_official_sheet(file_bytes, official_domain_rows)
+            except Exception:
+                logger.exception("替换仿冒检测官方域名Sheet失败 task_id=%s", task.task_id)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to build official domain sheet",
+                )
         response = StreamingResponse(
             io.BytesIO(file_bytes),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1426,7 +1885,7 @@ async def create_impersonation_task(
     创建仿冒域名检测任务
     
     参数:
-    - queryName: 事件名或单位名（首选，当前解析能力为占位）
+    - queryName: 事件名或单位名（首选，使用 DeepSeek 解析相关官方域名）
     - officialFile: 官方域名文件（当事件名未解析出官方域名时可使用）
     - detectionDateRange: 新注册域名日期范围JSON字符串
     - useCustomThreshold: 是否使用自定义阈值
@@ -1462,7 +1921,33 @@ async def create_impersonation_task(
                 },
             )
         similarity_threshold, threshold_meta = _parse_similarity_threshold(useCustomThreshold, threshold)
-        official_domains = resolve_official_domains(query_name) if query_name else []
+        official_domains = []
+        official_domain_resolution_error = None
+        if query_name:
+            try:
+                official_domains = resolve_official_domains(query_name)
+                logger.info(
+                    "DeepSeek解析官方域名完成 query=%s count=%s",
+                    query_name,
+                    len(official_domains),
+                )
+            except OfficialDomainResolutionError as exc:
+                official_domain_resolution_error = str(exc)
+                logger.warning(
+                    "DeepSeek解析官方域名失败 query=%s error=%s",
+                    query_name,
+                    official_domain_resolution_error,
+                )
+                if officialFile is None:
+                    status_code = (
+                        status.HTTP_500_INTERNAL_SERVER_ERROR
+                        if isinstance(exc, OfficialDomainResolverConfigError)
+                        else status.HTTP_502_BAD_GATEWAY
+                    )
+                    raise HTTPException(
+                        status_code=status_code,
+                        detail=official_domain_resolution_error,
+                    ) from exc
         official_domain_resolution_status = "resolved" if official_domains else "pending"
         official_file_meta = None
         if officialFile is not None:
@@ -1497,6 +1982,12 @@ async def create_impersonation_task(
             }
             if not official_domains:
                 official_domain_resolution_status = "file_uploaded"
+
+        if not official_domains and official_file_meta is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="未从事件名或单位名解析到有效官方域名，请调整输入或上传官方域名文件",
+            )
         
         # 生成任务ID
         task_id = f"T{int(datetime.utcnow().timestamp())}"
@@ -1521,11 +2012,15 @@ async def create_impersonation_task(
                 "dateRange": date_range_parsed,
                 "official_domains": official_domains,
                 "official_domain_resolution_status": official_domain_resolution_status,
-                "official_domain_resolution_pending": not bool(official_domains) and official_file_meta is None,
+                "official_domain_resolution_pending": False,
+                "official_domain_resolution_method": "deepseek" if official_domains else "file",
+                "official_domain_count": len(official_domains),
                 "threshold_policy": "custom" if similarity_threshold is not None else "adaptive",
                 "similarity_threshold": similarity_threshold,
                 "threshold_percent": threshold_meta["threshold_percent"],
             }
+            if official_domain_resolution_error:
+                extra_data["official_domain_resolution_error"] = official_domain_resolution_error
             file_record = None
             if official_file_meta:
                 file_record = StoredFile(
@@ -1546,8 +2041,10 @@ async def create_impersonation_task(
                 extra_data["official_file_bucket"] = official_file_meta["bucket"]
                 extra_data["official_file_object_key"] = official_file_meta["object_key"]
                 extra_data["official_file_filename"] = official_file_meta["filename"]
-            if not official_domains and official_file_meta is None:
-                extra_data["official_domain_resolution_message"] = "官方域名检索能力尚未接入或未检索到官方域名"
+            if official_domains:
+                extra_data["official_domain_resolution_message"] = (
+                    f"DeepSeek已解析到 {len(official_domains)} 个官方域名"
+                )
             elif not official_domains and official_file_meta is not None:
                 extra_data["official_domain_resolution_message"] = "已使用上传的官方域名文件"
             
@@ -1592,6 +2089,7 @@ async def create_impersonation_task(
                     "task_id": task.task_id,
                     "status": "pending",
                     "officialDomainStatus": official_domain_resolution_status,
+                    "officialDomainCount": len(official_domains),
                 }
             )
         except HTTPException:

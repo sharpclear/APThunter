@@ -118,6 +118,16 @@ async def get_menu(authorization: str | None = Header(None)):
             "locale": "menu.detection.dga-domain-detection",
         },
         {
+            "id": 55,
+            "parentId": 4,
+            "title": "历史高度相似",
+            "component": "/detection/history-similarity-detection/index",
+            "path": "/detection/history-similarity-detection",
+            "name": "HistorySimilarityDetection",
+            "keepAlive": False,
+            "locale": "menu.detection.history-similarity-detection",
+        },
+        {
             "id": 36,
             "parentId": None,
             "title": "个人页",

@@ -12,7 +12,7 @@ Usage:
   ./scripts/deploy-remote.sh [options]
 
 Options:
-  --tag TAG                    Use releases/atdv-images-TAG.tar.gz
+  --tag TAG                    Use releases/apthunter-images-TAG.tar.gz
   --archive FILE               Use a specific image archive
   --upload-dir DIR             Directory containing uploaded archives. Default: ./releases
   --skip-migrations            Do not run SQL migration stage
@@ -164,12 +164,12 @@ resolve_archive() {
   fi
 
   if [[ -n "$DEPLOY_TAG" ]]; then
-    printf '%s/atdv-images-%s.tar.gz' "$UPLOAD_DIR" "$DEPLOY_TAG"
+    printf '%s/apthunter-images-%s.tar.gz' "$UPLOAD_DIR" "$DEPLOY_TAG"
     return
   fi
 
   local latest=""
-  latest="$(find "$UPLOAD_DIR" -maxdepth 1 -type f -name 'atdv-images-*.tar.gz' -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk 'NR == 1 {print $2}')"
+  latest="$(find "$UPLOAD_DIR" -maxdepth 1 -type f -name 'apthunter-images-*.tar.gz' -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk 'NR == 1 {print $2}')"
   [[ -n "$latest" ]] || fail "no image archive found in $UPLOAD_DIR"
   printf '%s' "$latest"
 }

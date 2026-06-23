@@ -1,5 +1,3 @@
-# These are supported funding model platforms
+# GitHub funding configuration for APTHunter.
 
-github: # Replace with up to 4 GitHub Sponsors-enabled usernames e.g., [user1, user2]
-open_collective: antdv-pro
-custom: ['https://docs.antdv-pro.com/other/sponsor.html']
+github: []

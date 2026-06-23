@@ -45,8 +45,8 @@ const { t } = useI18n()
               {{ t('account.center.posted') }}
             </span>
             <span>
-              <a-button type="link" href="https://www.antdv-pro.com/">
-                https://www.antdv-pro.com/
+              <a-button type="link" href="https://www.apthunter.com/">
+                https://www.apthunter.com/
               </a-button>
             </span>
           </div>

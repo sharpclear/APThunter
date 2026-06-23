@@ -13,6 +13,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
 
+from app.services.notification.alert_profiles import get_alert_profile
+
 logger = logging.getLogger("uvicorn.error")
 
 BEIJING_TZ = timezone(timedelta(hours=8))
@@ -127,15 +129,9 @@ def send_alert_email(user_email: str, alert_data: dict, domains_attachment_conte
     try:
         all_domains = alert_data.get("high_risk_domains", [])
         task_type = alert_data.get("task_type")
-        if task_type == "impersonation":
-            domain_type = "仿冒域名"
-            task_type_text = "仿冒域名检测"
-        elif task_type == "history_similarity":
-            domain_type = "历史高度相似域名"
-            task_type_text = "历史高度相似检测"
-        else:
-            domain_type = "恶意域名"
-            task_type_text = "恶意性检测"
+        alert_profile = get_alert_profile(task_type)
+        domain_type = alert_profile.domain_label
+        task_type_text = alert_profile.type_label
 
         preview_domains = all_domains[:20]
         body = f"""您好，
@@ -168,12 +164,7 @@ def send_alert_email(user_email: str, alert_data: dict, domains_attachment_conte
         )
 
         if domains_attachment_content:
-            if task_type == "impersonation":
-                task_type_label = "phishing"
-            elif task_type == "history_similarity":
-                task_type_label = "history_similarity"
-            else:
-                task_type_label = "malicious"
+            task_type_label = alert_profile.attachment_prefix
             timestamp = beijing_now().strftime("%Y%m%d_%H%M%S")
             filename = f"{task_type_label}_domains_{timestamp}.xlsx"
             _attach_bytes(

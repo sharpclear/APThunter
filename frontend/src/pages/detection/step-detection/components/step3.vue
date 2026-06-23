@@ -19,7 +19,7 @@ function toOrderList() {
               付款账户：
             </a-col>
             <a-col :sm="16" :xs="24">
-              antdv@aibayanyu.com
+              support@apthunter.local
             </a-col>
           </a-row>
           <a-row>

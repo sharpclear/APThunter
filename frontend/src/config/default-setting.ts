@@ -1,7 +1,7 @@
 import type { LayoutSetting } from '~@/stores/app'
 
 export default {
-  title: 'APThunter',
+  title: 'APTHunter',
   theme: 'light',
   logo: '/logo.svg',
   collapsed: false,
@@ -26,7 +26,7 @@ export default {
   leftCollapsed: true,
   compactAlgorithm: false,
   headerHeight: 48,
-  copyright: 'APThunter',
+  copyright: 'APTHunter',
   animationName: 'slide-fadein-right',
 } as LayoutSetting
 

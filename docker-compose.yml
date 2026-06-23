@@ -3,13 +3,15 @@
 # MySQL 宿主机端口用 3307，避免与本机已安装的 MySQL（占 3306）冲突。
 # Nginx 访问日志挂载至 ./logs/nginx（目录已 .gitignore）。
 
+name: apthunter
+
 services:
   # MySQL 数据库服务
   mysql:
     build:
       context: ./backend/db
       dockerfile: Dockerfile.mysql
-    container_name: atdv-mysql
+    container_name: apthunter-mysql
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword123
@@ -21,7 +23,7 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     networks:
-      - atdv-network
+      - apthunter-network
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --secure-file-priv=/docker-entrypoint-initdb.d --default-authentication-plugin=mysql_native_password
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword123"]
@@ -32,7 +34,7 @@ services:
   # MinIO 对象存储服务
   minio:
     image: minio/minio:latest
-    container_name: atdv-minio
+    container_name: apthunter-minio
     restart: unless-stopped
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -43,7 +45,7 @@ services:
     volumes:
       - minio_data:/data
     networks:
-      - atdv-network
+      - apthunter-network
     command: server /data --console-address ":9001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
@@ -54,10 +56,10 @@ services:
   # Redis（Celery broker / result backend，仅容器网络内访问）
   redis:
     image: redis:7-alpine
-    container_name: atdv-redis
+    container_name: apthunter-redis
     restart: unless-stopped
     networks:
-      - atdv-network
+      - apthunter-network
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
@@ -77,7 +79,7 @@ services:
       args:
         # 默认走官方 deb.debian.org；如需使用阿里云镜像可设置 USE_CN_MIRROR=1
         USE_CN_MIRROR: ${USE_CN_MIRROR:-0}
-    container_name: atdv-backend
+    container_name: apthunter-backend
     restart: unless-stopped
     environment:
       # MinIO 配置
@@ -134,7 +136,7 @@ services:
       - ./backend/app/daily_data:/app/app/daily_data
       - backend_data:/app/data
     networks:
-      - atdv-network
+      - apthunter-network
     depends_on:
       mysql:
         condition: service_healthy
@@ -157,7 +159,7 @@ services:
       network: host
       args:
         USE_CN_MIRROR: ${USE_CN_MIRROR:-0}
-    container_name: atdv-celery-worker
+    container_name: apthunter-celery-worker
     restart: unless-stopped
     working_dir: /app/app
     command:
@@ -200,7 +202,7 @@ services:
       - ./backend/app/daily_data:/app/app/daily_data
       - backend_data:/app/data
     networks:
-      - atdv-network
+      - apthunter-network
     depends_on:
       mysql:
         condition: service_healthy
@@ -231,7 +233,7 @@ services:
       args:
         VITE_BUILD_MODE: ${FRONTEND_BUILD_MODE:-production}
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
-    container_name: atdv-frontend
+    container_name: apthunter-frontend
     restart: unless-stopped
     ports:
       - "80:80"
@@ -239,7 +241,7 @@ services:
       # 访问日志落盘，便于宿主机 tail / 排障（error.log 同步可在此目录查看）
       - ./logs/nginx:/var/log/nginx
     networks:
-      - atdv-network
+      - apthunter-network
     depends_on:
       backend:
         condition: service_healthy
@@ -265,5 +267,5 @@ volumes:
 
 # 网络定义
 networks:
-  atdv-network:
+  apthunter-network:
     driver: bridge

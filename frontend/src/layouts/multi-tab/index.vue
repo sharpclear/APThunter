@@ -23,7 +23,7 @@ const tabStyle = computed<CSSProperties>(() => {
     style.zIndex = 3
     style.right = 0
   }
-  // bugfix https://github.com/antdv-pro/antdv-pro/issues/173
+  // bugfix https://github.com/apthunter/apthunter/issues/173
   if (layoutSetting.value.header === false || (layout.value !== 'mix' && layoutSetting.value.fixedHeader === false))
     style.top = '0px'
 

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-本文件是 ATDV Pro 仓库的 Agent 开发总规则。适用于整个项目根目录及其所有子目录，除非更深层目录另有 `AGENTS.md` 覆盖。
+本文件是 APTHunter 仓库的 Agent 开发总规则。适用于整个项目根目录及其所有子目录，除非更深层目录另有 `AGENTS.md` 覆盖。
 
 ## 项目概览
 
@@ -145,4 +145,4 @@ pnpm lint
 - 本仓库可能长期存在未提交业务改动。Agent 只提交/描述自己本轮产生的变更。
 - 二进制模型文件和大文件删除要在最终说明中列出依据和复查结果。
 - 完成后说明做了什么、验证了什么、哪些验证因环境限制未执行。
-- 不要把 `atdv-pro-app-images.tar`、`logs/`、`node_modules/`、`backend/venv/`、`.pnpm-store/`、`__pycache__/` 等产物纳入改动。
+- 不要把 `apthunter-app-images.tar`、`logs/`、`node_modules/`、`backend/venv/`、`.pnpm-store/`、`__pycache__/` 等产物纳入改动。

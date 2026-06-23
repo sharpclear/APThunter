@@ -1,27 +1,27 @@
 services:
   mysql:
-    container_name: atdvverify-mysql
+    container_name: apthunter-verify-mysql
     ports: !override
       - "127.0.0.1:3308:3306"
 
   minio:
-    container_name: atdvverify-minio
+    container_name: apthunter-verify-minio
     ports: !override
       - "127.0.0.1:9002:9000"
       - "127.0.0.1:9003:9001"
 
   redis:
-    container_name: atdvverify-redis
+    container_name: apthunter-verify-redis
 
   backend:
-    container_name: atdvverify-backend
+    container_name: apthunter-verify-backend
     ports: !override
       - "127.0.0.1:18080:8000"
 
   celery-worker:
-    container_name: atdvverify-celery-worker
+    container_name: apthunter-verify-celery-worker
 
   frontend:
-    container_name: atdvverify-frontend
+    container_name: apthunter-verify-frontend
     ports: !override
       - "127.0.0.1:8088:80"

@@ -34,7 +34,7 @@ function prevStep() {
         :wrapper-col="wrapperCol"
         class="stepFormText"
       >
-        antdv@aibayanyu.com
+        support@apthunter.local
       </a-form-item>
       <a-form-item
         label="收款账户"

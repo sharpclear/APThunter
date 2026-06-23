@@ -50,7 +50,7 @@ def create_alert_file_mapping(
         raise AlertFileMappingError("alert_id/subscription_id/task_id are required")
     if file_id is None:
         raise AlertFileMappingError("file_id is required (files row must be created first)")
-    if task_type not in {"malicious", "impersonation", "history_similarity"}:
+    if task_type not in {"malicious", "impersonation", "history_similarity", "dga"}:
         raise AlertFileMappingError(f"invalid task_type: {task_type}")
     if frequency not in {"daily", "weekly", "monthly"}:
         raise AlertFileMappingError(f"invalid frequency: {frequency}")

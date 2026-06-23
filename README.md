@@ -1,4 +1,4 @@
-# ATDV Pro - 恶意域名检测系统
+# APTHunter - 恶意域名检测系统
 
 ## 项目简介
 
@@ -18,7 +18,7 @@
 
 ```bash
 git clone <your-repo-url>
-cd atdv-pro
+cd apthunter
 ```
 
 ### 2. 一键启动所有服务
@@ -333,7 +333,7 @@ services:
 ## 项目结构
 
 ```
-atdv-pro/
+apthunter/
 ├── backend/              # 后端服务
 │   ├── app/             # 应用代码
 │   ├── Dockerfile       # 后端 Docker 配置

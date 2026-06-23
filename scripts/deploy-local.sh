@@ -80,7 +80,7 @@ choose_source_image() {
     if [[ -n "$current_image" ]]; then
       candidates+=("$current_image")
     fi
-    if container_image_id="$(docker container inspect -f '{{.Image}}' "atdv-${service}" 2>/dev/null)"; then
+    if container_image_id="$(docker container inspect -f '{{.Image}}' "apthunter-${service}" 2>/dev/null)"; then
       candidates+=("$container_image_id")
     fi
   else
@@ -230,7 +230,7 @@ for i in "${!services[@]}"; do
   log "${services[$i]}: ${source_images[$i]} -> ${target_images[$i]}"
 done
 
-archive="$OUTPUT_DIR/atdv-images-${DEPLOY_TAG}.tar.gz"
+archive="$OUTPUT_DIR/apthunter-images-${DEPLOY_TAG}.tar.gz"
 checksum_file="$archive.sha256"
 manifest_file="$OUTPUT_DIR/manifest-${DEPLOY_TAG}.env"
 

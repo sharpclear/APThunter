@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# ATDV Pro local development launcher.
+# APTHunter local development launcher.
 # Starts FastAPI, Celery worker, and Vite frontend in one terminal.
 
 set -Eeuo pipefail

@@ -178,7 +178,7 @@ async function submitRegister() {
             <span class="ant-pro-form-login-logo">
               <img w-full h-full object-cover src="/logo.svg">
             </span>
-            <span class="ant-pro-form-login-title">APThunter</span>
+            <span class="ant-pro-form-login-title">APTHunter</span>
             <span class="ant-pro-form-login-desc">{{ t("pages.layouts.userLayout.title") }}</span>
           </div>
           <div class="login-lang flex-center relative z-11">

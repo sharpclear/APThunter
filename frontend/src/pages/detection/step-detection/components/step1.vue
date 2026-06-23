@@ -45,7 +45,7 @@ async function nextStep() {
           placeholder="ant-design@alipay.com"
         >
           <a-select-option value="1">
-            antdv@aibayanyu.com
+            support@apthunter.local
           </a-select-option>
         </a-select>
       </a-form-item>

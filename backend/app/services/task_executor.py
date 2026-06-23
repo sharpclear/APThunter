@@ -410,7 +410,7 @@ def execute_dga_task(task_id: str):
             if not file_key:
                 raise ValueError("上传文件任务缺少 file_object_key")
             file_content = _download_file_from_minio(file_key, file_bucket)
-            _set_task_progress(db, task, extra_data, 40, "DGA CNN模型评分中")
+            _set_task_progress(db, task, extra_data, 40, "DGA二分类模型评分中")
             excel_content, statistics, dga_meta = dga_predict_from_file(
                 file_content,
                 file_key,
@@ -423,7 +423,7 @@ def execute_dga_task(task_id: str):
             if not date_range or len(date_range) < 2:
                 raise ValueError("newDomain 任务缺少 dateRange")
             domains, missing_dates = _collect_daily_domains(date_range)
-            _set_task_progress(db, task, extra_data, 40, "DGA CNN模型评分中")
+            _set_task_progress(db, task, extra_data, 40, "DGA二分类模型评分中")
             excel_content, statistics, dga_meta = dga_predict_from_domains(
                 domains,
                 f"daily_{task_id}",
@@ -437,7 +437,7 @@ def execute_dga_task(task_id: str):
             domains = extra_data.get("manual_domains") or []
             if not isinstance(domains, list) or not domains:
                 raise ValueError("manualInput 任务缺少有效域名")
-            _set_task_progress(db, task, extra_data, 40, "DGA CNN模型评分中")
+            _set_task_progress(db, task, extra_data, 40, "DGA二分类模型评分中")
             excel_content, statistics, dga_meta = dga_predict_from_domains(
                 domains,
                 f"manual_{task_id}",

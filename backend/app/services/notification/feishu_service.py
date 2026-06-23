@@ -22,6 +22,7 @@ from app.core.config import (
     FEISHU_HTTP_TIMEOUT_SEC,
     FEISHU_WEBHOOK_URL,
 )
+from app.services.notification.alert_profiles import get_alert_profile
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -230,23 +231,31 @@ def send_alert_notification(
     suspected_association_text: Optional[str] = None,
     phishing_matches: Optional[List[Dict[str, Any]]] = None,
     history_similarity_records: Optional[List[Dict[str, Any]]] = None,
+    dga_records: Optional[List[Dict[str, Any]]] = None,
 ) -> bool:
     """
     仅用于「已确认创建预警记录」后的展示型推送，不在此函数内做任何预警判定。
     """
-    if task_type == "impersonation":
-        type_label = "仿冒域名检测"
-    elif task_type == "history_similarity":
-        type_label = "历史高度相似检测"
-    else:
-        type_label = "恶意性检测"
-
+    alert_profile = get_alert_profile(task_type)
     title = f"【域名检测预警】{model_name}"
 
     lines: List[List[Dict[str, Any]]] = [
         [{"tag": "text", "text": f"预警ID：{alert_id}  |  任务ID：{task_id}  |  订阅ID：{subscription_id}\n"}],
-        [{"tag": "text", "text": f"检测类型：{type_label}\n"}],
+        [{"tag": "text", "text": f"检测类型：{alert_profile.type_label}\n"}],
+        [{"tag": "text", "text": f"检测时间：{created_at}\n"}],
+        [
+            {
+                "tag": "text",
+                "text": (
+                    f"检测总数：{detected_count}  |  "
+                    f"{alert_profile.domain_label}数量：{high_risk_count}\n"
+                ),
+            }
+        ],
     ]
+    summary_text = str(risk_summary or "").strip() or _format_threshold_policy(threshold)
+    lines.append([{"tag": "text", "text": f"预警策略：{summary_text}\n"}])
+
     if task_type == "impersonation":
         return _send_impersonation_alert_posts(title, lines, phishing_matches or [])
     if task_type == "history_similarity":
@@ -260,32 +269,77 @@ def send_alert_notification(
                 fallback_domains=high_risk_domains,
             ),
         )
+    if task_type == "dga":
+        return send_post(
+            title,
+            lines
+            + _build_dga_alert_lines(
+                detected_count=detected_count,
+                high_risk_count=high_risk_count,
+                records=dga_records or [],
+                fallback_domains=high_risk_domains,
+            ),
+        )
 
+    return send_post(
+        title,
+        lines
+        + _build_malicious_alert_lines(
+            detected_count=detected_count,
+            high_risk_count=high_risk_count,
+            high_risk_domains=high_risk_domains,
+            suspected_association_text=suspected_association_text,
+        ),
+    )
+
+
+def _format_threshold_policy(threshold: Optional[int]) -> str:
+    if threshold is None:
+        return "默认阈值策略"
+    return f"自定义阈值：{threshold}"
+
+
+def _build_malicious_alert_lines(
+    *,
+    detected_count: int,
+    high_risk_count: int,
+    high_risk_domains: List[str],
+    suspected_association_text: Optional[str],
+) -> List[List[Dict[str, Any]]]:
+    preview_domains = []
+    seen = set()
+    for domain in high_risk_domains or []:
+        domain_text = _safe_text(domain)
+        if not domain_text:
+            continue
+        domain_key = domain_text.lower()
+        if domain_key in seen:
+            continue
+        seen.add(domain_key)
+        preview_domains.append(domain_text)
+        if len(preview_domains) >= 20:
+            break
+
+    detail_lines = [
+        f"检测结果：命中恶意域名 {high_risk_count} 个 / 检测总数 {detected_count} 个",
+        "恶意域名列表：",
+    ]
+    if preview_domains:
+        detail_lines.extend(f"{index}. {domain}" for index, domain in enumerate(preview_domains, start=1))
+    else:
+        detail_lines.append("未能提取恶意域名明细，请查看预警详情文件。")
+
+    lines = [[{"tag": "text", "text": "\n".join(detail_lines) + "\n"}]]
     if suspected_association_text and suspected_association_text.strip():
         lines.append(
             [
                 {
                     "tag": "text",
-                    "text": f"域名关联组织：\n{suspected_association_text}\n",
+                    "text": f"域名关联组织：\n{suspected_association_text.strip()}\n",
                 }
             ]
         )
-
-    '''if detail_page_url:
-        lines.append(
-            [
-                {"tag": "text", "text": "结果详情："},
-                {"tag": "a", "text": "打开预警页", "href": detail_page_url},
-                {"tag": "text", "text": "\n"},
-            ]
-        )
-    else:
-        lines.append(
-            [{"tag": "text", "text": "结果详情：未配置 APP_PUBLIC_BASE_URL，无法生成外链。\n"}]
-        )'''
-
-
-    return send_post(title, lines)
+    return lines
 
 
 def _format_similarity_score(value: Any) -> str:
@@ -293,6 +347,70 @@ def _format_similarity_score(value: Any) -> str:
         return f"{float(value):.4f}"
     except (TypeError, ValueError):
         return "未知"
+
+
+def _format_dga_score(value: Any) -> str:
+    try:
+        return f"{float(value):.6f}"
+    except (TypeError, ValueError):
+        return "未知"
+
+
+def _build_dga_alert_lines(
+    *,
+    detected_count: int,
+    high_risk_count: int,
+    records: List[Dict[str, Any]],
+    fallback_domains: List[str],
+) -> List[List[Dict[str, Any]]]:
+    normalized_records: List[Dict[str, Any]] = []
+    seen = set()
+    for item in records or []:
+        if not isinstance(item, dict):
+            continue
+        raw = item.get("raw") if isinstance(item.get("raw"), dict) else {}
+        domain = _safe_text(item.get("domain") or item.get("域名") or raw.get("域名"))
+        if not domain:
+            continue
+        domain_key = domain.lower()
+        if domain_key in seen:
+            continue
+        seen.add(domain_key)
+        normalized_records.append(
+            {
+                "domain": domain,
+                "dga_score": item.get("dga_score", item.get("score", raw.get("DGA_score"))),
+                "label": _safe_text(item.get("label") or raw.get("预测结果"), "DGA-like"),
+                "reason": _safe_text(item.get("reason"), "DGA_score 达到订阅预警阈值"),
+            }
+        )
+
+    if not normalized_records:
+        for domain in fallback_domains or []:
+            domain_text = _safe_text(domain)
+            if domain_text:
+                normalized_records.append(
+                    {
+                        "domain": domain_text,
+                        "dga_score": None,
+                        "label": "DGA-like",
+                        "reason": "DGA_score 达到订阅预警阈值",
+                    }
+                )
+
+    detail_lines = [
+        f"检测结果：命中DGA-like域名 {high_risk_count} 个 / 检测总数 {detected_count} 个",
+        "DGA明细：",
+    ]
+    for index, item in enumerate(normalized_records, start=1):
+        detail_lines.append(
+            f"{index}. 域名：{item.get('domain', '')}\n"
+            f"   DGA_score：{_format_dga_score(item.get('dga_score'))}\n"
+            f"   预测结果：{item.get('label', 'DGA-like')}\n"
+            f"   命中原因：{item.get('reason', '')}"
+        )
+
+    return [[{"tag": "text", "text": "\n".join(detail_lines) + "\n"}]]
 
 
 def _build_history_similarity_alert_lines(

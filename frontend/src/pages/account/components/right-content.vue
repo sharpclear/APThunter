@@ -16,9 +16,9 @@ interface IDataItem {
 
 const data = ref<IDataItem[]>([
   {
-    title: 'Antdv Pro',
+    title: 'APTHunter',
     tags: ['Ant Design Vue', '中后台', '自动化'],
-    content: 'AntdvPro是一个基于Vue3、Vite4、ant-design-vue4、Pinia、UnoCSS和Typescript的一整套企业级中后台前端/设计解决方案，它参考了阿里react版本antd-pro的设计模式，使用了最新最流行的前端技术栈，内置了动态路由、多主题、多布局等功能，可以帮助你快速搭建企业级中后台产品原型。',
+    content: 'APTHunter 是面向恶意域名检测、模型管理、订阅预警和态势展示的安全分析平台，前端基于 Vue 3、Vite、Ant Design Vue、Pinia 和 UnoCSS 构建。',
   },
 ])
 

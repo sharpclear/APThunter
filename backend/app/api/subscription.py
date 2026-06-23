@@ -32,7 +32,7 @@ def _load_local_dotenv_if_present():
         api_dir = os.path.dirname(os.path.abspath(__file__))  # backend/app/api
         backend_dir = os.path.abspath(os.path.join(api_dir, "..", ".."))  # backend/app
         backend_root = os.path.abspath(os.path.join(api_dir, "..", "..", ".."))  # backend
-        project_root = os.path.abspath(os.path.join(api_dir, "..", "..", "..", ".."))  # atdv-pro
+        project_root = os.path.abspath(os.path.join(api_dir, "..", "..", "..", ".."))  # apthunter
 
         # 允许通过环境变量显式指定 dotenv 路径（最优先）
         explicit = os.getenv("DOTENV_PATH")
@@ -117,6 +117,7 @@ from history_similarity_detection import (
     alert_rows_to_score_records as history_alert_rows_to_score_records,
     predict_from_domains as history_similarity_predict_from_domains,
 )
+from dga_domain_detection import predict_from_domains as dga_predict_from_domains
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -525,11 +526,62 @@ def _extract_impersonation_alert_items(rows) -> List[dict]:
     return items
 
 
+def _safe_optional_float(value) -> Optional[float]:
+    text_value = _clean_optional_text(value)
+    if not text_value:
+        return None
+    try:
+        return float(text_value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_dga_alert_items(rows) -> List[dict]:
+    """
+    从 DGA 检测结果 DataFrame 提取订阅预警明细。
+    兼容列：域名、DGA_score、预测结果、预测标签。
+    """
+    items: List[dict] = []
+    seen = set()
+    try:
+        iterable = rows.to_dict("records")
+    except Exception:
+        return items
+
+    for row in iterable:
+        if not isinstance(row, dict):
+            continue
+        domain = _clean_optional_text(row.get("域名") or row.get("domain"))
+        if not domain:
+            continue
+        result_text = _clean_optional_text(row.get("预测结果"))
+        label_text = _clean_optional_text(row.get("预测标签"))
+        is_dga = result_text == "DGA-like" or label_text == "1"
+        if not is_dga:
+            continue
+        domain_key = domain.lower()
+        if domain_key in seen:
+            continue
+        seen.add(domain_key)
+        score = _safe_optional_float(row.get("DGA_score") or row.get("dga_score"))
+        items.append(
+            {
+                "domain": domain,
+                "dga_score": score,
+                "label": result_text or "DGA-like",
+                "reason": "DGA_score 达到订阅预警阈值",
+                "raw": dict(row),
+            }
+        )
+    return items
+
+
 def _build_alert_attachment_excel(
     *,
     task_type: str,
     high_risk_domains: List[str],
     phishing_alert_items: List[dict],
+    dga_alert_items: Optional[List[dict]] = None,
 ) -> bytes:
     """
     生成预警邮件附件 Excel。仿冒订阅按产品要求输出固定六列。
@@ -566,6 +618,28 @@ def _build_alert_attachment_excel(
                     "命中原因": "与历史恶意域名高度相似",
                 }
             )
+    elif task_type == "dga":
+        columns = ["DGA-like域名", "DGA_score", "预测结果", "命中原因"]
+        for item in dga_alert_items or []:
+            score = item.get("dga_score")
+            rows.append(
+                {
+                    "DGA-like域名": item.get("domain", ""),
+                    "DGA_score": "" if score is None else f"{float(score):.6f}",
+                    "预测结果": item.get("label") or "DGA-like",
+                    "命中原因": item.get("reason") or "DGA_score 达到订阅预警阈值",
+                }
+            )
+        if not rows:
+            for domain in high_risk_domains:
+                rows.append(
+                    {
+                        "DGA-like域名": domain,
+                        "DGA_score": "",
+                        "预测结果": "DGA-like",
+                        "命中原因": "DGA_score 达到订阅预警阈值",
+                    }
+                )
     else:
         columns = ["高风险域名", "风险等级", "最终风险分", "命中原因"]
         for domain in high_risk_domains:
@@ -670,6 +744,7 @@ def execute_subscription(subscription_id: str):
         # 仅恶意订阅：逐条预测结果（含恶意概率），供预警按阈值筛选
         results_malicious_subscription = None
         results_history_similarity_subscription = None
+        results_dga_subscription = None
 
         # 根据模型类型执行不同的检测
         if model.model_category == "impersonation":
@@ -776,6 +851,45 @@ def execute_subscription(subscription_id: str):
             db.add(task)
             db.flush()
 
+        elif model.model_category == "dga":
+            domains, missing_dates = _collect_daily_domains_for_subscription(date_range)
+            if not domains:
+                logger.warning(f"订阅 {subscription_id} 在日期范围内没有可用的域名数据，缺失日期: {missing_dates}")
+                subscription.next_run_at = beijing_datetime_to_naive(_calculate_next_run_at(subscription.frequency))
+                db.commit()
+                return
+
+            source_label = f"subscription_{subscription_id}"
+            candidate_threshold = (
+                float(subscription.threshold) / 100.0
+                if subscription.threshold is not None
+                else 0.90
+            )
+            excel_content, statistics, dga_meta = dga_predict_from_domains(
+                domains,
+                source_label,
+                model.model_path,
+                candidate_threshold=candidate_threshold,
+            )
+
+            task = Task(
+                task_id=task_id,
+                task_type="dga",
+                model_id=model.id,
+                file_id=None,
+                extra={
+                    "dataSource": "newDomain",
+                    "dateRange": date_range,
+                    "subscription_id": subscription_id,
+                    "candidate_threshold": candidate_threshold,
+                    "dga_detection": dga_meta,
+                },
+                status="processing",
+                created_by=subscription.user_id,
+            )
+            db.add(task)
+            db.flush()
+
         else:
             # 恶意性检测
             domains, missing_dates = _collect_daily_domains_for_subscription(date_range)
@@ -836,6 +950,7 @@ def execute_subscription(subscription_id: str):
         high_risk_count = 0
         high_risk_domains = []
         phishing_alert_items = []
+        dga_alert_items = []
         
         # 从Excel结果中提取高风险域名列表
         try:
@@ -885,6 +1000,43 @@ def execute_subscription(subscription_id: str):
                     if d and d_key not in seen:
                         seen.add(d_key)
                         high_risk_domains.append(d)
+                high_risk_count = len(high_risk_domains)
+            elif model.model_category == "dga":
+                dga_alert_items = []
+                try:
+                    excel_file.seek(0)
+                    dga_df = pd.read_excel(excel_file, sheet_name="DGA域名列表")
+                    dga_alert_items = _extract_dga_alert_items(dga_df)
+                except Exception:
+                    try:
+                        excel_file.seek(0)
+                        results_df = pd.read_excel(excel_file, sheet_name="预测结果")
+                        dga_alert_items = _extract_dga_alert_items(results_df)
+                    except Exception as dga_extract_error:
+                        logger.warning(f"从DGA结果中提取预警域名失败: {dga_extract_error}")
+
+                high_risk_domains = []
+                seen = set()
+                results_dga_subscription = []
+                for item in dga_alert_items:
+                    d = item.get("domain")
+                    if not d:
+                        continue
+                    d = str(d).strip()
+                    d_key = d.lower()
+                    if d and d_key not in seen:
+                        seen.add(d_key)
+                        high_risk_domains.append(d)
+                    results_dga_subscription.append(
+                        {
+                            "domain": d,
+                            "score": item.get("dga_score"),
+                            "dga_score": item.get("dga_score"),
+                            "label": item.get("label") or "DGA-like",
+                            "reason": item.get("reason") or "DGA_score 达到订阅预警阈值",
+                            "raw": item.get("raw") or {},
+                        }
+                    )
                 high_risk_count = len(high_risk_domains)
             else:
                 # 恶意订阅预警：
@@ -969,11 +1121,12 @@ def execute_subscription(subscription_id: str):
                     logger.exception("组织匹配失败，已按空匹配继续 domain=%s alert_id=%s", domain_name, alert_id)
                     match_results_by_domain[domain_name.lower()] = {"domain_name": domain_name}
 
-            risk_score_records = (
-                results_history_similarity_subscription
-                if task.task_type == "history_similarity"
-                else results_malicious_subscription
-            )
+            if task.task_type == "history_similarity":
+                risk_score_records = results_history_similarity_subscription
+            elif task.task_type == "dga":
+                risk_score_records = results_dga_subscription
+            else:
+                risk_score_records = results_malicious_subscription
 
             alert_result_json = build_alert_result_json(
                 alert_row=alert,
@@ -1085,6 +1238,7 @@ def execute_subscription(subscription_id: str):
                     task_type=task.task_type,
                     high_risk_domains=high_risk_domains,
                     phishing_alert_items=phishing_alert_items,
+                    dga_alert_items=dga_alert_items,
                 )
             except Exception as e:
                 logger.warning(f"生成预警Excel附件失败: {e}")
@@ -1104,6 +1258,11 @@ def execute_subscription(subscription_id: str):
                 history_similarity_records=(
                     results_history_similarity_subscription
                     if task.task_type == "history_similarity"
+                    else []
+                ),
+                dga_records=(
+                    results_dga_subscription
+                    if task.task_type == "dga"
                     else []
                 ),
             )

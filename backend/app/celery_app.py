@@ -6,7 +6,7 @@ from kombu import Exchange, Queue
 from app.core.config import CELERY_BROKER_URL, CELERY_RESULT_BACKEND
 
 celery_app = Celery(
-    "atdv_pro",
+    "apthunter",
     broker=CELERY_BROKER_URL,
     backend=CELERY_RESULT_BACKEND,
 )
@@ -31,18 +31,18 @@ CELERY_DEFAULT_QUEUE = os.getenv("CELERY_DEFAULT_QUEUE", "celery")
 celery_app.conf.update(task_default_queue=CELERY_DEFAULT_QUEUE)
 
 if CELERY_MULTI_QUEUE_ENABLED:
-    atdv_exchange = Exchange("atdv", type="direct")
-    malicious_queue_name = os.getenv("CELERY_MALICIOUS_QUEUE", "atdv_malicious")
-    impersonation_queue_name = os.getenv("CELERY_IMPERSONATION_QUEUE", "atdv_impersonation")
-    dga_queue_name = os.getenv("CELERY_DGA_QUEUE", "atdv_dga")
+    apthunter_exchange = Exchange("apthunter", type="direct")
+    malicious_queue_name = os.getenv("CELERY_MALICIOUS_QUEUE", "apthunter_malicious")
+    impersonation_queue_name = os.getenv("CELERY_IMPERSONATION_QUEUE", "apthunter_impersonation")
+    dga_queue_name = os.getenv("CELERY_DGA_QUEUE", "apthunter_dga")
 
     celery_app.conf.update(
         task_queues=(
-            Queue(malicious_queue_name, exchange=atdv_exchange, routing_key=malicious_queue_name),
-            Queue(impersonation_queue_name, exchange=atdv_exchange, routing_key=impersonation_queue_name),
-            Queue(dga_queue_name, exchange=atdv_exchange, routing_key=dga_queue_name),
+            Queue(malicious_queue_name, exchange=apthunter_exchange, routing_key=malicious_queue_name),
+            Queue(impersonation_queue_name, exchange=apthunter_exchange, routing_key=impersonation_queue_name),
+            Queue(dga_queue_name, exchange=apthunter_exchange, routing_key=dga_queue_name),
             # 保留默认队列，便于兼容
-            Queue(CELERY_DEFAULT_QUEUE, exchange=atdv_exchange, routing_key=CELERY_DEFAULT_QUEUE),
+            Queue(CELERY_DEFAULT_QUEUE, exchange=apthunter_exchange, routing_key=CELERY_DEFAULT_QUEUE),
         ),
         task_routes={
             "tasks.execute_malicious_task": {

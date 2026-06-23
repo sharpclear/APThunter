@@ -36,7 +36,7 @@ export default defineEventHandler(async (_event) => {
     },
     {
       id: 6,
-      name: 'Antdv Pro',
+      name: 'APTHunter',
       value: '2000',
       remark: '不管何时何地，做你想做的事永远都不嫌晚',
     },

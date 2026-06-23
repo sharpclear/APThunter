@@ -83,10 +83,38 @@ def _build_domain_score_map(results_malicious_subscription: Any) -> Dict[str, fl
         if not domain:
             continue
         try:
-            score_map[domain] = float(item.get("恶意概率", item.get("malicious_score", item.get("score", 0.0))))
+            score_map[domain] = float(
+                item.get(
+                    "恶意概率",
+                    item.get(
+                        "malicious_score",
+                        item.get(
+                            "dga_score",
+                            item.get(
+                                "history_similarity_score",
+                                item.get("risk_score", item.get("score", 0.0)),
+                            ),
+                        ),
+                    ),
+                )
+            )
         except (TypeError, ValueError):
             continue
     return score_map
+
+
+def _build_domain_record_map(records: Any) -> Dict[str, Mapping[str, Any]]:
+    record_map: Dict[str, Mapping[str, Any]] = {}
+    if not records or not isinstance(records, Sequence):
+        return record_map
+    for item in records:
+        if not isinstance(item, Mapping):
+            continue
+        domain = str(item.get("domain") or item.get("域名") or "").strip().lower()
+        if not domain or domain in record_map:
+            continue
+        record_map[domain] = item
+    return record_map
 
 
 def _score_to_level(score: Optional[float]) -> str:
@@ -210,6 +238,7 @@ def build_alert_result_json(
     """
     match_by_domain = _index_match_results(match_results)
     risk_score_map = _build_domain_score_map(results_malicious_subscription)
+    risk_record_map = _build_domain_record_map(results_malicious_subscription)
     phishing_match_by_domain: Dict[str, Mapping[str, Any]] = {}
     if phishing_matches and isinstance(phishing_matches, Sequence):
         for item in phishing_matches:
@@ -264,6 +293,7 @@ def build_alert_result_json(
                 ),
                 "risk_score": risk_score,
                 "risk_level": _score_to_level(risk_score),
+                "detection_record": _to_plain_value(risk_record_map.get(domain_key, {})),
                 "scores": {
                     "scenario_score": None,
                     "infrastructure_score": None,

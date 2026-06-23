@@ -78,10 +78,16 @@ INSERT INTO models (
 SELECT
   '官方DGA域名检测模型',
   'v1.0',
-  '用于DGA-like域名检测的官方Char-CNN模型',
-  'saved_model/dga_cnn_detector.keras',
+  '用于DGA-like域名检测的官方二分类模型',
+  'saved_model/dga_binary_detector.joblib',
   NULL,
-  JSON_OBJECT('note', '官方DGA Char-CNN种子模型'),
+  JSON_OBJECT(
+    'note', '官方DGA二分类种子模型',
+    'threshold', 0.90,
+    'precision', 0.9000,
+    'recall', 0.6206,
+    'f1', 0.7347
+  ),
   'official',
   'dga',
   1,

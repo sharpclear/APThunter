@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# ATDV Pro 项目启动脚本
+# APTHunter 项目启动脚本
 # 使用方法: ./start.sh
 
 set -e
 
 echo "=========================================="
-echo "  ATDV Pro - 恶意域名检测系统"
+echo "  APTHunter - 恶意域名检测系统"
 echo "  启动脚本"
 echo "=========================================="
 echo ""

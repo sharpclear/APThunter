@@ -53,7 +53,7 @@ def load_canine_model(model_path=None, device=None):
         return _CANINE_TOKENIZER_CACHE, _CANINE_MODEL_CACHE
 
     if model_path is None:
-        model_path = os.getenv("ATDV_CANINE_MODEL_PATH", DEFAULT_CANINE_MODEL_PATH)
+        model_path = os.getenv("APTHUNTER_CANINE_MODEL_PATH", DEFAULT_CANINE_MODEL_PATH)
 
     if not os.path.isdir(model_path):
         raise FileNotFoundError(f"CANINE 本地模型目录不存在: {model_path}")

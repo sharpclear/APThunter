@@ -1092,7 +1092,7 @@ async def create_dga_task(
         extra_data = {
             "dataSource": dataSource,
             "dateRange": date_range_parsed,
-            "candidate_threshold": 0.99,
+            "candidate_threshold": 0.90,
         }
         if uploaded_file_meta:
             extra_data["file_bucket"] = uploaded_file_meta["bucket"]

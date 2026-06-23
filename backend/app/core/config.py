@@ -13,7 +13,7 @@ def _load_local_dotenv_if_present():
         config_dir = os.path.dirname(os.path.abspath(__file__))  # backend/app/core
         app_dir = os.path.abspath(os.path.join(config_dir, ".."))  # backend/app
         backend_root = os.path.abspath(os.path.join(config_dir, "..", ".."))  # backend
-        project_root = os.path.abspath(os.path.join(config_dir, "..", "..", ".."))  # atdv-pro
+        project_root = os.path.abspath(os.path.join(config_dir, "..", "..", ".."))  # apthunter
         cwd = os.getcwd()
         explicit = os.getenv("DOTENV_PATH")
         candidates = []

@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# ATDV Pro 项目停止脚本
+# APTHunter 项目停止脚本
 # 使用方法: ./stop.sh [--remove-volumes]
 
 set -e
 
 echo "=========================================="
-echo "  ATDV Pro - 停止服务"
+echo "  APTHunter - 停止服务"
 echo "=========================================="
 echo ""
 

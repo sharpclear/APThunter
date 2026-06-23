@@ -237,12 +237,12 @@ function resetForm() {
           <div class="card-header">
             <div class="card-title">创建DGA域名检测任务</div>
             <div class="card-subtitle">
-              使用Char-CNN模型筛选DGA-like候选域名，并对高置信候选进行LLM字符串研判。
+              使用DGA二分类模型计算域名的DGA-like分数并输出检测结果。
             </div>
             <div class="header-tags">
-              <span class="mini-tag">Char-CNN</span>
+              <span class="mini-tag">二分类模型</span>
               <span class="mini-tag">DGA-like</span>
-              <span class="mini-tag">LLM复核</span>
+              <span class="mini-tag">离线检测</span>
             </div>
           </div>
 
@@ -329,9 +329,9 @@ function resetForm() {
       <a-col :xs="24" :xl="8">
         <a-card title="处理流程" class="guide-card" :bordered="false">
           <ul class="guide-list">
-            <li><span class="dot">1</span><span>先用DGA Char-CNN模型计算每个域名的DGA_score。</span></li>
-            <li><span class="dot">2</span><span>仅将DGA_score不低于0.99的域名作为候选。</span></li>
-            <li><span class="dot">3</span><span>候选域名批量交给DeepSeek模型做字符串层面的DGA-like研判。</span></li>
+            <li><span class="dot">1</span><span>先用DGA二分类模型计算每个域名的DGA_score。</span></li>
+            <li><span class="dot">2</span><span>将DGA_score不低于0.90的域名判定为DGA-like。</span></li>
+            <li><span class="dot">3</span><span>生成预测结果、统计信息和DGA域名列表。</span></li>
           </ul>
         </a-card>
       </a-col>

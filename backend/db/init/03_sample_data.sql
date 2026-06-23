@@ -87,7 +87,7 @@ CREATE TABLE _stg_apt_events (
 
 LOAD DATA INFILE '/docker-entrypoint-initdb.d/apt_events.csv'
 INTO TABLE _stg_apt_events
-CHARACTER SET utf8mb4
+CHARACTER SET gbk
 FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"' ESCAPED BY '"'
 LINES TERMINATED BY '\n'
 IGNORE 1 LINES;

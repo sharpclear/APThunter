@@ -96,6 +96,7 @@ coverage/
 *.lcov
 
 # Build artifacts
+.deploy/
 *.tar
 *.tar.gz
 *.zip

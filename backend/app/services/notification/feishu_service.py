@@ -235,6 +235,7 @@ def send_alert_notification(
     phishing_matches: Optional[List[Dict[str, Any]]] = None,
     history_similarity_records: Optional[List[Dict[str, Any]]] = None,
     dga_records: Optional[List[Dict[str, Any]]] = None,
+    apt_template_nrd_records: Optional[List[Dict[str, Any]]] = None,
 ) -> bool:
     """
     仅用于「已确认创建预警记录」后的展示型推送，不在此函数内做任何预警判定。
@@ -284,6 +285,17 @@ def send_alert_notification(
                 detected_count=detected_count,
                 high_risk_count=high_risk_count,
                 records=dga_records or [],
+                fallback_domains=high_risk_domains,
+            ),
+        )
+    if task_type == "apt_template_nrd":
+        return send_post(
+            title,
+            lines
+            + _build_apt_template_nrd_alert_lines(
+                detected_count=detected_count,
+                high_risk_count=high_risk_count,
+                records=apt_template_nrd_records or [],
                 fallback_domains=high_risk_domains,
             ),
         )
@@ -370,6 +382,13 @@ def _coerce_dga_score(value: Any) -> Optional[float]:
         return None
 
 
+def _coerce_score(value: Any) -> Optional[float]:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _build_dga_alert_lines(
     *,
     detected_count: int,
@@ -438,6 +457,82 @@ def _build_dga_alert_lines(
     if len(normalized_records) > len(preview_records):
         detail_lines.append(
             f"仅展示评分排名前30的DGA域名，其余 {len(normalized_records) - len(preview_records)} 个请查看预警附件或结果文件。"
+        )
+
+    return [[{"tag": "text", "text": "\n".join(detail_lines) + "\n"}]]
+
+
+def _build_apt_template_nrd_alert_lines(
+    *,
+    detected_count: int,
+    high_risk_count: int,
+    records: List[Dict[str, Any]],
+    fallback_domains: List[str],
+) -> List[List[Dict[str, Any]]]:
+    normalized_records: List[Dict[str, Any]] = []
+    seen = set()
+    for item in records or []:
+        if not isinstance(item, dict):
+            continue
+        raw = item.get("raw") if isinstance(item.get("raw"), dict) else {}
+        domain = _safe_text(item.get("domain") or item.get("域名") or raw.get("域名"))
+        if not domain:
+            continue
+        domain_key = domain.lower()
+        if domain_key in seen:
+            continue
+        seen.add(domain_key)
+        score = item.get("score", item.get("risk_score", raw.get("score")))
+        normalized_records.append(
+            {
+                "domain": domain,
+                "score": score,
+                "_score_value": _coerce_score(score),
+                "risk_level": _safe_text(item.get("risk_level") or raw.get("risk_level") or raw.get("风险等级"), "高"),
+                "matched_template": _safe_text(item.get("matched_template") or raw.get("匹配模板")),
+                "reason": _safe_text(item.get("reason") or raw.get("reason") or raw.get("命中原因"), "命中APT注册模板"),
+            }
+        )
+
+    if not normalized_records:
+        for domain in fallback_domains or []:
+            domain_text = _safe_text(domain)
+            if domain_text:
+                normalized_records.append(
+                    {
+                        "domain": domain_text,
+                        "score": None,
+                        "_score_value": None,
+                        "risk_level": "高",
+                        "matched_template": "",
+                        "reason": "命中APT注册模板",
+                    }
+                )
+
+    normalized_records.sort(
+        key=lambda item: (
+            item.get("_score_value") is None,
+            -(item.get("_score_value") or 0.0),
+            str(item.get("domain") or "").lower(),
+        )
+    )
+    preview_records = normalized_records[:30]
+
+    detail_lines = [
+        f"检测结果：命中APT模板新注册域名 {high_risk_count} 个 / 检测总数 {detected_count} 个",
+        "APT模板命中明细（按风险分降序，仅展示前30个）：",
+    ]
+    for index, item in enumerate(preview_records, start=1):
+        detail_lines.append(
+            f"{index}. 域名：{item.get('domain', '')}\n"
+            f"   风险分：{_format_similarity_score(item.get('score'))}\n"
+            f"   风险等级：{item.get('risk_level', '')}\n"
+            f"   匹配模板：{item.get('matched_template', '') or '未知'}\n"
+            f"   命中原因：{item.get('reason', '')}"
+        )
+    if len(normalized_records) > len(preview_records):
+        detail_lines.append(
+            f"仅展示评分排名前30的APT模板命中域名，其余 {len(normalized_records) - len(preview_records)} 个请查看预警附件或结果文件。"
         )
 
     return [[{"tag": "text", "text": "\n".join(detail_lines) + "\n"}]]

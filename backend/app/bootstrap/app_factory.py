@@ -19,11 +19,11 @@ def _apply_runtime_schema_compatibility(engine) -> None:
     statements = [
         "ALTER TABLE subscriptions MODIFY COLUMN threshold INT NULL DEFAULT NULL",
         "ALTER TABLE alerts MODIFY COLUMN threshold INT NULL DEFAULT NULL",
-        "ALTER TABLE models MODIFY COLUMN model_category ENUM('malicious','impersonation','dga','history_similarity') DEFAULT NULL",
-        "ALTER TABLE tasks MODIFY COLUMN task_type ENUM('malicious','impersonation','malicious_ip','dga','history_similarity') NOT NULL COMMENT '任务类型'",
-        "ALTER TABLE training_tasks MODIFY COLUMN model_category ENUM('malicious','impersonation','dga','history_similarity') NOT NULL DEFAULT 'malicious'",
-        "ALTER TABLE alerts MODIFY COLUMN task_type ENUM('malicious','impersonation','malicious_ip','dga','history_similarity') NOT NULL COMMENT '任务类型：恶意域名检测/仿冒域名检测/恶意IP检测/DGA域名检测/历史高度相似检测'",
-        "ALTER TABLE alert_files MODIFY COLUMN task_type ENUM('malicious','impersonation','malicious_ip','dga','history_similarity') NOT NULL COMMENT '任务类型'",
+        "ALTER TABLE models MODIFY COLUMN model_category ENUM('malicious','impersonation','dga','history_similarity','apt_template_nrd') DEFAULT NULL",
+        "ALTER TABLE tasks MODIFY COLUMN task_type ENUM('malicious','impersonation','malicious_ip','dga','history_similarity','apt_template_nrd') NOT NULL COMMENT '任务类型'",
+        "ALTER TABLE training_tasks MODIFY COLUMN model_category ENUM('malicious','impersonation','dga','history_similarity','apt_template_nrd') NOT NULL DEFAULT 'malicious'",
+        "ALTER TABLE alerts MODIFY COLUMN task_type ENUM('malicious','impersonation','malicious_ip','dga','history_similarity','apt_template_nrd') NOT NULL COMMENT '任务类型：恶意域名检测/仿冒域名检测/恶意IP检测/DGA域名检测/历史高度相似检测/APT模板新注册域名检测'",
+        "ALTER TABLE alert_files MODIFY COLUMN task_type ENUM('malicious','impersonation','malicious_ip','dga','history_similarity','apt_template_nrd') NOT NULL COMMENT '任务类型'",
     ]
     with engine.begin() as conn:
         for statement in statements:

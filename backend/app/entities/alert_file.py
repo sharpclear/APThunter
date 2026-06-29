@@ -19,6 +19,7 @@ class AlertFile(Base):
             "malicious_ip",
             "dga",
             "history_similarity",
+            "apt_template_nrd",
             name="alert_files_task_type_enum",
         ),
         nullable=False,

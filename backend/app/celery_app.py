@@ -35,12 +35,14 @@ if CELERY_MULTI_QUEUE_ENABLED:
     malicious_queue_name = os.getenv("CELERY_MALICIOUS_QUEUE", "apthunter_malicious")
     impersonation_queue_name = os.getenv("CELERY_IMPERSONATION_QUEUE", "apthunter_impersonation")
     dga_queue_name = os.getenv("CELERY_DGA_QUEUE", "apthunter_dga")
+    apt_template_nrd_queue_name = os.getenv("CELERY_APT_TEMPLATE_NRD_QUEUE", "apthunter_apt_template_nrd")
 
     celery_app.conf.update(
         task_queues=(
             Queue(malicious_queue_name, exchange=apthunter_exchange, routing_key=malicious_queue_name),
             Queue(impersonation_queue_name, exchange=apthunter_exchange, routing_key=impersonation_queue_name),
             Queue(dga_queue_name, exchange=apthunter_exchange, routing_key=dga_queue_name),
+            Queue(apt_template_nrd_queue_name, exchange=apthunter_exchange, routing_key=apt_template_nrd_queue_name),
             # 保留默认队列，便于兼容
             Queue(CELERY_DEFAULT_QUEUE, exchange=apthunter_exchange, routing_key=CELERY_DEFAULT_QUEUE),
         ),
@@ -56,6 +58,10 @@ if CELERY_MULTI_QUEUE_ENABLED:
             "tasks.execute_dga_task": {
                 "queue": dga_queue_name,
                 "routing_key": dga_queue_name,
+            },
+            "tasks.execute_apt_template_nrd_task": {
+                "queue": apt_template_nrd_queue_name,
+                "routing_key": apt_template_nrd_queue_name,
             },
         },
     )

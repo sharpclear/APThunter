@@ -128,6 +128,16 @@ async def get_menu(authorization: str | None = Header(None)):
             "locale": "menu.detection.history-similarity-detection",
         },
         {
+            "id": 56,
+            "parentId": 4,
+            "title": "APT模板新注册域名",
+            "component": "/detection/apt-template-nrd-detection/index",
+            "path": "/detection/apt-template-nrd-detection",
+            "name": "AptTemplateNrdDetection",
+            "keepAlive": False,
+            "locale": "menu.detection.apt-template-nrd-detection",
+        },
+        {
             "id": 36,
             "parentId": None,
             "title": "个人页",

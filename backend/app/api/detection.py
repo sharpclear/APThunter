@@ -37,6 +37,7 @@ from app.services.official_domain_resolver import (
     resolve_official_domains,
 )
 from app.services.task_dispatcher import (
+    dispatch_apt_template_nrd_task,
     dispatch_dga_task,
     dispatch_history_similarity_task,
     dispatch_impersonation_task,
@@ -72,6 +73,7 @@ TASK_TYPE_LABEL_MAP = {
     "malicious_ip": "恶意IP检测",
     "dga": "DGA域名检测",
     "history_similarity": "历史高度相似检测",
+    "apt_template_nrd": "模板化APT域名检测",
 }
 DATA_SOURCE_LABEL_MAP = {
     "upload": "上传文件",
@@ -167,6 +169,18 @@ def _get_history_similarity_model_record(db):
         db.query(Model)
         .filter(
             Model.model_category == "history_similarity",
+            Model.status == "active",
+        )
+        .order_by(Model.model_type.asc(), Model.id.asc())
+        .first()
+    )
+
+
+def _get_apt_template_nrd_model_record(db):
+    return (
+        db.query(Model)
+        .filter(
+            Model.model_category == "apt_template_nrd",
             Model.status == "active",
         )
         .order_by(Model.model_type.asc(), Model.id.asc())
@@ -883,6 +897,24 @@ def _parse_detection_preview_payload(
         "total_count": len(results_list),
         "malicious_count": len(malicious_list),
     })
+
+
+def _parse_apt_template_nrd_score_threshold(value: Optional[str]) -> Tuple[float, int]:
+    if value is None or str(value).strip() == "":
+        return 0.90, 90
+    try:
+        threshold_percent = float(str(value).strip())
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="scoreThreshold must be a number between 0 and 100",
+        ) from exc
+    if threshold_percent < 0 or threshold_percent > 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="scoreThreshold must be between 0 and 100",
+        )
+    return threshold_percent / 100, int(round(threshold_percent))
 
 
 def _collect_daily_domains(date_range: List[str]) -> Tuple[List[str], List[str]]:
@@ -1916,6 +1948,204 @@ async def create_history_similarity_task(
         ) from exc
 
 
+@router.post("/api/apt-template-nrd-tasks")
+async def create_apt_template_nrd_task(
+    request: Request,
+    model: Optional[str] = Form(None),
+    dataSource: str = Form(...),
+    file: Optional[UploadFile] = File(None),
+    dateRange: Optional[str] = Form(None),
+    manualDomains: Optional[str] = Form(None),
+    scoreThreshold: Optional[str] = Form(None),
+):
+    """创建模板化APT域名检测任务。"""
+    try:
+        created_by_user_id: Optional[int] = _extract_user_id(request)
+        uploaded_by_header = request.headers.get("X-User-Name") or request.headers.get("X-User")
+
+        if dataSource not in ["upload", "newDomain", "manualInput"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="dataSource must be 'upload', 'newDomain' or 'manualInput'",
+            )
+        if dataSource == "upload" and file is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="file is required")
+        if dataSource == "newDomain" and (not dateRange or dateRange.strip() == ""):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="dateRange is required")
+
+        score_threshold, score_threshold_percent = _parse_apt_template_nrd_score_threshold(scoreThreshold)
+
+        date_range_parsed = None
+        if dataSource == "newDomain":
+            date_range_parsed = _parse_detection_date_range_payload(dateRange or "")
+            start_date = _parse_date_string(date_range_parsed[0])
+            end_date = _parse_date_string(date_range_parsed[1])
+            availability = _inspect_daily_domain_availability(start_date, end_date)
+            if not availability["available"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "message": "所选日期范围内暂无可用的新注册域名数据，请重新选择日期",
+                        **availability,
+                    },
+                )
+
+        manual_domain_list = None
+        manual_domain_stats = None
+        if dataSource == "manualInput":
+            manual_domain_list, manual_domain_stats = _parse_manual_domains(manualDomains or "")
+
+        uploaded_file_meta = None
+        if file is not None:
+            file_ext = file.filename.split(".")[-1].lower() if file.filename else ""
+            allowed_extensions = ["csv", "txt", "xlsx"]
+            if file_ext not in allowed_extensions:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"File type not allowed. Only {', '.join(allowed_extensions)} are supported",
+                )
+            file_content = await file.read()
+            file_size = len(file_content)
+            max_size = 5 * 1024 * 1024
+            if file_size > max_size:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"File size exceeds maximum allowed size of {max_size / 1024 / 1024}MB",
+                )
+            file_key = upload_file_content_to_minio(
+                file_content,
+                file.filename or "unknown",
+                file.content_type,
+            )
+            uploaded_file_meta = {
+                "bucket": MINIO_BUCKET,
+                "object_key": file_key,
+                "filename": file.filename or "unknown",
+                "content_type": file.content_type,
+                "size": file_size,
+            }
+
+        extra_data = {
+            "dataSource": dataSource,
+            "dateRange": date_range_parsed,
+            "score_threshold": score_threshold,
+            "score_threshold_percent": score_threshold_percent,
+        }
+        if uploaded_file_meta:
+            extra_data["file_bucket"] = uploaded_file_meta["bucket"]
+            extra_data["file_object_key"] = uploaded_file_meta["object_key"]
+        if manual_domain_list is not None:
+            extra_data["manual_domains"] = manual_domain_list
+            extra_data["manual_domain_stats"] = manual_domain_stats
+
+        task_id = f"APT{int(datetime.utcnow().timestamp())}{uuid.uuid4().hex[:6]}"
+        db = SessionLocal()
+        try:
+            model_record = None
+            if model:
+                try:
+                    model_record = db.query(Model).filter(Model.id == int(model)).first()
+                except ValueError:
+                    model_record = db.query(Model).filter(Model.name == model).first()
+            if model_record is None:
+                model_record = _get_apt_template_nrd_model_record(db)
+            if not model_record or model_record.model_category != "apt_template_nrd":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No active APT template NRD model configured",
+                )
+
+            if created_by_user_id is not None:
+                with engine.connect() as conn:
+                    user_model_result = conn.execute(
+                        text("""
+                            SELECT um.id
+                            FROM user_models um
+                            WHERE um.user_id = :user_id
+                              AND um.model_id = :model_id
+                              AND um.is_active = 1
+                        """),
+                        {"user_id": created_by_user_id, "model_id": model_record.id},
+                    ).first()
+                if not user_model_result:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"您没有权限使用模型 {model_record.name}",
+                    )
+
+            file_record = None
+            if uploaded_file_meta:
+                file_record = StoredFile(
+                    bucket=uploaded_file_meta["bucket"],
+                    object_key=uploaded_file_meta["object_key"],
+                    filename=uploaded_file_meta["filename"],
+                    content_type=uploaded_file_meta["content_type"],
+                    size=uploaded_file_meta["size"],
+                    uploaded_by=uploaded_by_header,
+                    metadata_json={
+                        "source": "apt_template_nrd_detection",
+                        "original_filename": uploaded_file_meta["filename"],
+                    },
+                )
+                db.add(file_record)
+                db.flush()
+
+            task = Task(
+                task_id=task_id,
+                task_type="apt_template_nrd",
+                model_id=model_record.id,
+                file_id=file_record.id if file_record else None,
+                extra=extra_data,
+                status="pending",
+                created_by=created_by_user_id,
+            )
+            db.add(task)
+            db.commit()
+            db.refresh(task)
+
+            try:
+                dispatch_apt_template_nrd_task(task.task_id)
+            except Exception as exc:
+                logger.exception("enqueue apt template nrd task failed: %s", exc)
+                task.status = "failed"
+                extra_data_failed = dict(task.extra or {})
+                extra_data_failed["error"] = str(exc)
+                extra_data_failed["enqueue_failed"] = True
+                extra_data_failed["enqueue_failed_at"] = datetime.utcnow().isoformat()
+                task.extra = extra_data_failed
+                db.commit()
+                db.refresh(task)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to enqueue task",
+                ) from exc
+
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={"ok": True, "task_id": task.task_id, "status": "pending"},
+            )
+        except HTTPException:
+            db.rollback()
+            raise
+        except Exception as exc:
+            db.rollback()
+            logger.exception("Failed to create apt template nrd task: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create APT template NRD task",
+            ) from exc
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Unexpected error in create_apt_template_nrd_task: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred",
+        ) from exc
+
+
 @router.get("/api/tasks")
 async def list_tasks(
     request: Request,
@@ -2093,6 +2323,55 @@ async def get_task_result_json(task_id: str, request: Request):
             excel_file = io.BytesIO(file_bytes)
 
             # 根据任务类型读取不同的工作表
+            if task.task_type == "apt_template_nrd":
+                try:
+                    results_df = pd.read_excel(excel_file, sheet_name='预测结果')
+                except Exception:
+                    results_df = pd.DataFrame()
+                excel_file.seek(0)
+                stats_df = pd.read_excel(excel_file, sheet_name='统计信息')
+                apt_list = []
+                try:
+                    excel_file.seek(0)
+                    apt_df = pd.read_excel(excel_file, sheet_name='模板化APT域名列表')
+                    apt_list = apt_df.to_dict('records')
+                except Exception:
+                    try:
+                        excel_file.seek(0)
+                        apt_df = pd.read_excel(excel_file, sheet_name='APT模板命中域名列表')
+                        apt_list = apt_df.to_dict('records')
+                    except Exception:
+                        pass
+
+                results_list = results_df.to_dict('records')
+                statistics_dict = {}
+                for _, row in stats_df.iterrows():
+                    statistics_dict[row['统计项']] = row['数值']
+                if not apt_list:
+                    apt_list = [
+                        row for row in results_list
+                        if row.get('预测标签') == 1
+                        or row.get('预测结果') == '模板化APT命中'
+                        or row.get('预测结果') == 'APT模板命中'
+                        or str(row.get('risk_level') or '').lower() == 'high'
+                    ]
+
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content=_json_safe_value({
+                        "ok": True,
+                        "task_id": task.task_id,
+                        "task_type": task.task_type,
+                        "statistics": statistics_dict,
+                        "results": results_list,
+                        "apt_template_nrd_domains": apt_list,
+                        "result_file_key": result_key,
+                        "result_filename": extra_data.get("result_filename") or f"{task.task_id}_result.xlsx",
+                        "total_count": len(results_list),
+                        "apt_template_nrd_count": len(apt_list),
+                        "apt_template_nrd_detection": extra_data.get("apt_template_nrd_detection") or {},
+                    })
+                )
             if task.task_type == "dga":
                 try:
                     results_df = pd.read_excel(excel_file, sheet_name='预测结果')

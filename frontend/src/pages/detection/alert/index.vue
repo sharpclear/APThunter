@@ -7,7 +7,7 @@ import { getApiBase } from '~/utils/api-public'
 
 defineOptions({ name: 'DetectionAlert' })
 
-type SubscriptionModelType = 'malicious' | 'phishing' | 'history_similarity' | 'dga'
+type SubscriptionModelType = 'malicious' | 'phishing' | 'history_similarity' | 'dga' | 'apt_template_nrd'
 
 interface ModelItem {
   id: number
@@ -85,6 +85,8 @@ function modelTypeLabel(type?: SubscriptionModelType | '') {
     return '历史高度相似检测'
   if (type === 'dga')
     return 'DGA域名检测'
+  if (type === 'apt_template_nrd')
+    return 'APT模板新注册域名检测'
   return '恶意性检测'
 }
 
@@ -95,11 +97,17 @@ function modelTypeTagColor(type?: SubscriptionModelType | '') {
     return 'volcano'
   if (type === 'dga')
     return 'geekblue'
+  if (type === 'apt_template_nrd')
+    return 'red'
   return 'processing'
 }
 
 function defaultThresholdValue(type?: SubscriptionModelType | '') {
-  return type === 'history_similarity' ? 55 : 60
+  if (type === 'history_similarity')
+    return 55
+  if (type === 'apt_template_nrd')
+    return 90
+  return 60
 }
 
 function defaultThresholdPolicyTextByType(type?: SubscriptionModelType | '') {
@@ -109,6 +117,8 @@ function defaultThresholdPolicyTextByType(type?: SubscriptionModelType | '') {
     return '默认使用综合相似度 55 作为预警阈值。'
   if (type === 'dga')
     return '默认将模型判定为DGA-like的结果作为预警对象。'
+  if (type === 'apt_template_nrd')
+    return '默认使用风险分 90 作为APT模板命中预警阈值。'
   return '默认将模型判定为恶意的结果全部作为预警对象。'
 }
 

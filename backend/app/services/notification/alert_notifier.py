@@ -202,7 +202,7 @@ def dispatch_alert_notifications(
     在预警记录已提交数据库之后调用。内部异常不影响调用方事务（调用方已 commit）。
 
     - 邮件：ALERT_EMAIL_ENABLED 且用户有邮箱且 SMTP 配置完整（见 email_service）；仿冒与恶意预警均可能发送
-    - 飞书：恶意性检测、历史高度相似检测、DGA 检测和仿冒检测推送
+    - 飞书：恶意性检测、历史高度相似检测、DGA 检测和模板化APT域名检测推送；仿冒检测按 FEISHU_PUSH_IMPERSONATION_ALERTS 配置控制
     - 飞书幂等：依赖 alerts.feishu_notified，成功后再更新
     """
     # 邮件通道
@@ -218,7 +218,7 @@ def dispatch_alert_notifications(
     else:
         logger.info("ALERT_EMAIL_ENABLED=false，跳过邮件")
 
-    # 飞书通道（订阅预警：恶意性/历史相似/DGA/仿冒检测推送）
+    # 飞书通道（订阅预警：恶意性/历史相似/DGA/模板化APT域名检测；仿冒检测由配置项控制）
     if not FEISHU_ENABLE_PUSH or not (FEISHU_WEBHOOK_URL or "").strip():
         return
     task_type = str(alert_data.get("task_type", "malicious") or "malicious")
@@ -248,6 +248,7 @@ def dispatch_alert_notifications(
     )
     history_similarity_records = alert_data.get("history_similarity_records") or []
     dga_records = alert_data.get("dga_records") or []
+    apt_template_nrd_records = alert_data.get("apt_template_nrd_records") or []
 
     detail = ""
     if APP_PUBLIC_BASE_URL:
@@ -288,6 +289,7 @@ def dispatch_alert_notifications(
             impersonation_matches=impersonation_matches if isinstance(impersonation_matches, list) else [],
             history_similarity_records=history_similarity_records if isinstance(history_similarity_records, list) else [],
             dga_records=dga_records if isinstance(dga_records, list) else [],
+            apt_template_nrd_records=apt_template_nrd_records if isinstance(apt_template_nrd_records, list) else [],
         )
     except Exception:
         logger.exception("飞书预警推送异常（已吞掉，不影响主流程）")
@@ -320,6 +322,7 @@ def build_alert_data_dict(
     phishing_matches: Optional[list] = None,
     history_similarity_records: Optional[list] = None,
     dga_records: Optional[list] = None,
+    apt_template_nrd_records: Optional[list] = None,
 ) -> dict:
     normalized_impersonation_matches = (
         impersonation_matches
@@ -340,4 +343,5 @@ def build_alert_data_dict(
         "phishing_matches": normalized_impersonation_matches,
         "history_similarity_records": history_similarity_records or [],
         "dga_records": dga_records or [],
+        "apt_template_nrd_records": apt_template_nrd_records or [],
     }

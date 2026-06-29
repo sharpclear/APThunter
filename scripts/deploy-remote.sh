@@ -16,6 +16,7 @@ Options:
   --archive FILE               Use a specific image archive
   --upload-dir DIR             Directory containing uploaded archives. Default: ./releases
   --skip-migrations            Do not run SQL migration stage
+  --skip-db-bootstrap          Do not run idempotent DB seed/fix stage
   --migrations-only            Run migration stage only; do not load images or recreate app containers
   --baseline-migrations        Record current migration SQL files as applied without executing them
   --run-untracked-migrations   If schema_migrations is missing, execute existing SQL files instead of baselining them
@@ -25,6 +26,7 @@ Options:
 Environment overrides:
   COMPOSE_PROJECT_NAME         Default: apthunter
   RUN_MIGRATIONS               Default: 1
+  RUN_DB_BOOTSTRAP             Default: 1
   BASELINE_ON_MISSING_TABLE    Default: 1
   STOP_APP_BEFORE_MIGRATION    Default: 1
   PULL_EXTERNAL_IMAGES         Default: 1
@@ -57,6 +59,7 @@ UPLOAD_DIR="${REMOTE_UPLOAD_DIR:-$ROOT/releases}"
 DEPLOY_TAG="${DEPLOY_TAG:-}"
 ARCHIVE="${ARCHIVE:-}"
 RUN_MIGRATIONS="${RUN_MIGRATIONS:-1}"
+RUN_DB_BOOTSTRAP="${RUN_DB_BOOTSTRAP:-1}"
 BASELINE_MIGRATIONS="${BASELINE_MIGRATIONS:-0}"
 BASELINE_ON_MISSING_TABLE="${BASELINE_ON_MISSING_TABLE:-1}"
 STOP_APP_BEFORE_MIGRATION="${STOP_APP_BEFORE_MIGRATION:-1}"
@@ -81,6 +84,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-migrations)
       RUN_MIGRATIONS=0
+      shift
+      ;;
+    --skip-db-bootstrap)
+      RUN_DB_BOOTSTRAP=0
       shift
       ;;
     --migrations-only)
@@ -298,10 +305,72 @@ SQL
       continue
     fi
 
+    if [[ "$filename" == "007_add_dga_detection_task.sql" ]]; then
+      log "recording superseded legacy migration without executing: $filename"
+      record_migration "$filename" "$checksum"
+      continue
+    fi
+
     log "applying migration: $filename"
     mysql_exec < "$file"
     record_migration "$filename" "$checksum"
   done
+}
+
+run_db_bootstrap() {
+  log "running idempotent DB bootstrap"
+
+  log "ensuring current model/task enums"
+  cat <<'SQL' | mysql_exec >/dev/null
+ALTER TABLE models
+  MODIFY COLUMN model_category ENUM('malicious','impersonation','dga','history_similarity') DEFAULT NULL;
+
+ALTER TABLE tasks
+  MODIFY COLUMN task_type ENUM('malicious','impersonation','malicious_ip','dga','history_similarity') NOT NULL COMMENT '任务类型';
+
+ALTER TABLE training_tasks
+  MODIFY COLUMN model_category ENUM('malicious','impersonation','dga','history_similarity') NOT NULL DEFAULT 'malicious';
+
+ALTER TABLE alerts
+  MODIFY COLUMN task_type ENUM('malicious', 'impersonation', 'malicious_ip', 'dga', 'history_similarity') NOT NULL COMMENT '任务类型：恶意域名检测/仿冒域名检测/恶意IP检测/DGA域名检测/历史高度相似检测';
+
+ALTER TABLE alert_files
+  MODIFY COLUMN task_type ENUM('malicious', 'impersonation', 'malicious_ip', 'dga', 'history_similarity') NOT NULL COMMENT '任务类型';
+SQL
+
+  local seed_file="$ROOT/backend/db/init/05_seed_core_data.sql"
+  [[ -f "$seed_file" ]] || fail "core seed SQL not found: $seed_file"
+  log "seeding official users/models: $(basename "$seed_file")"
+  mysql_exec < "$seed_file"
+
+  local dga_switch_file="$ROOT/backend/db/migrations/009_switch_dga_binary_detector.sql"
+  if [[ -f "$dga_switch_file" ]]; then
+    log "ensuring DGA binary model metadata: $(basename "$dga_switch_file")"
+    mysql_exec < "$dga_switch_file"
+  else
+    log "DGA switch migration not found; skipping: $dga_switch_file"
+  fi
+
+  log "granting active official models to all users"
+  cat <<'SQL' | mysql_exec >/dev/null
+INSERT INTO user_models (user_id, model_id, acquired_at, is_active, source)
+SELECT u.id, m.id, NOW(), 1, 'official'
+FROM users u
+JOIN models m
+  ON m.model_type = 'official'
+ AND m.status = 'active'
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM user_models um
+  WHERE um.user_id = u.id
+    AND um.model_id = m.id
+);
+SQL
+
+  log "verifying DGA official model"
+  local dga_count
+  dga_count="$(printf "SELECT COUNT(*) FROM models WHERE model_category = 'dga' AND model_type = 'official' AND status = 'active' AND model_path = 'saved_model/dga_binary_detector.joblib';\n" | mysql_query | tr -d '[:space:]')"
+  [[ "$dga_count" != "0" ]] || fail "DGA official model is missing after DB bootstrap"
 }
 
 recreate_app_services() {
@@ -358,13 +427,21 @@ main() {
   ensure_infra_services
 
   if [[ "$RUN_MIGRATIONS" == "1" ]]; then
-    if [[ "$STOP_APP_BEFORE_MIGRATION" == "1" ]]; then
+    if [[ "$STOP_APP_BEFORE_MIGRATION" == "1" && "$MIGRATIONS_ONLY" != "1" ]]; then
       log "stopping app services before migration"
       compose stop frontend celery-worker backend || true
+    elif [[ "$STOP_APP_BEFORE_MIGRATION" == "1" ]]; then
+      log "migrations-only mode; app services will not be stopped"
     fi
     run_migrations
   else
     log "migration stage skipped"
+  fi
+
+  if [[ "$RUN_DB_BOOTSTRAP" == "1" ]]; then
+    run_db_bootstrap
+  else
+    log "DB bootstrap stage skipped"
   fi
 
   if [[ "$MIGRATIONS_ONLY" == "1" ]]; then

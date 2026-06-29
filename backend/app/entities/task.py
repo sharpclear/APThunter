@@ -17,6 +17,7 @@ class Task(Base):
             "malicious_ip",
             "dga",
             "history_similarity",
+            "apt_template_nrd",
             name="task_type_enum",
         ),
         nullable=False,

@@ -123,6 +123,10 @@ from history_similarity_detection import (
     predict_from_domains as history_similarity_predict_from_domains,
 )
 from dga_domain_detection import predict_from_domains as dga_predict_from_domains
+from apt_template_nrd_matcher import (
+    alert_rows_to_score_records as apt_template_nrd_alert_rows_to_score_records,
+    predict_from_domains as apt_template_nrd_predict_from_domains,
+)
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -182,6 +186,7 @@ class Alert(Base):
             "malicious_ip",
             "dga",
             "history_similarity",
+            "apt_template_nrd",
             name="task_type_enum",
         ),
         nullable=False,
@@ -493,6 +498,8 @@ def _model_category_to_subscription_type(model_category: Optional[str]) -> str:
         return "history_similarity"
     if model_category == "dga":
         return "dga"
+    if model_category == "apt_template_nrd":
+        return "apt_template_nrd"
     return "malicious"
 
 
@@ -503,6 +510,8 @@ def _task_type_to_subscription_type(task_type: Optional[str]) -> str:
         return "history_similarity"
     if task_type == "dga":
         return "dga"
+    if task_type == "apt_template_nrd":
+        return "apt_template_nrd"
     return "malicious"
 
 
@@ -644,12 +653,54 @@ def _extract_dga_alert_items(rows) -> List[dict]:
     return items
 
 
+def _extract_apt_template_nrd_alert_items(rows) -> List[dict]:
+    """
+    从 APT 模板新注册域名检测结果 DataFrame 提取订阅预警明细。
+    兼容列：域名、score、risk_level、风险等级、匹配模板、reason、命中原因。
+    """
+    items: List[dict] = []
+    seen = set()
+    try:
+        iterable = rows.to_dict("records")
+    except Exception:
+        return items
+
+    for row in iterable:
+        if not isinstance(row, dict):
+            continue
+        domain = _clean_optional_text(row.get("域名") or row.get("domain"))
+        if not domain:
+            continue
+        domain_key = domain.lower()
+        if domain_key in seen:
+            continue
+        score = _safe_optional_float(row.get("score") or row.get("risk_score"))
+        label_text = _clean_optional_text(row.get("预测标签"))
+        result_text = _clean_optional_text(row.get("预测结果"))
+        if label_text not in {"1", "1.0"} and result_text != "APT模板命中" and not (score is not None and score > 0):
+            continue
+        seen.add(domain_key)
+        items.append(
+            {
+                "domain": domain,
+                "score": score,
+                "risk_score": score,
+                "risk_level": _clean_optional_text(row.get("risk_level") or row.get("风险等级")),
+                "matched_template": _clean_optional_text(row.get("匹配模板") or row.get("matched_template")),
+                "reason": _clean_optional_text(row.get("reason") or row.get("命中原因")) or "命中APT注册模板",
+                "raw": dict(row),
+            }
+        )
+    return items
+
+
 def _build_alert_attachment_excel(
     *,
     task_type: str,
     high_risk_domains: List[str],
     phishing_alert_items: List[dict],
     dga_alert_items: Optional[List[dict]] = None,
+    apt_template_nrd_alert_items: Optional[List[dict]] = None,
 ) -> bytes:
     """
     生成预警邮件附件 Excel。仿冒订阅按产品要求输出固定六列。
@@ -707,6 +758,30 @@ def _build_alert_attachment_excel(
                         "DGA_score": "",
                         "预测结果": "DGA-like",
                         "命中原因": "DGA_score 达到订阅预警阈值",
+                    }
+                )
+    elif task_type == "apt_template_nrd":
+        columns = ["APT模板命中域名", "风险分", "风险等级", "匹配模板", "命中原因"]
+        for item in apt_template_nrd_alert_items or []:
+            score = item.get("score")
+            rows.append(
+                {
+                    "APT模板命中域名": item.get("domain", ""),
+                    "风险分": "" if score is None else f"{float(score):.6f}",
+                    "风险等级": item.get("risk_level", ""),
+                    "匹配模板": item.get("matched_template", ""),
+                    "命中原因": item.get("reason") or "命中APT注册模板",
+                }
+            )
+        if not rows:
+            for domain in high_risk_domains:
+                rows.append(
+                    {
+                        "APT模板命中域名": domain,
+                        "风险分": "",
+                        "风险等级": "",
+                        "匹配模板": "",
+                        "命中原因": "命中APT注册模板",
                     }
                 )
     else:
@@ -815,6 +890,7 @@ def execute_subscription(subscription_id: str):
         results_history_similarity_subscription = None
         results_dga_subscription = None
         word_report_content = None
+        results_apt_template_nrd_subscription = None
 
         # 根据模型类型执行不同的检测
         if model.model_category == "impersonation":
@@ -978,6 +1054,49 @@ def execute_subscription(subscription_id: str):
             db.add(task)
             db.flush()
 
+        elif model.model_category == "apt_template_nrd":
+            domains, missing_dates = _collect_daily_domains_for_subscription(date_range)
+            if not domains:
+                logger.warning(f"订阅 {subscription_id} 在日期范围内没有可用的域名数据，缺失日期: {missing_dates}")
+                subscription.next_run_at = beijing_datetime_to_naive(_calculate_next_run_at(subscription.frequency))
+                db.commit()
+                return
+
+            source_label = f"subscription_{subscription_id}"
+            score_threshold = (
+                float(subscription.threshold) / 100.0
+                if subscription.threshold is not None
+                else 0.90
+            )
+            excel_content, statistics, apt_meta, apt_alert_rows = apt_template_nrd_predict_from_domains(
+                domains,
+                source_label,
+                model.model_path,
+                score_threshold=score_threshold,
+                high_risk_only=False,
+            )
+            results_apt_template_nrd_subscription = apt_template_nrd_alert_rows_to_score_records(apt_alert_rows)
+
+            task = Task(
+                task_id=task_id,
+                task_type="apt_template_nrd",
+                model_id=model.id,
+                file_id=None,
+                extra={
+                    "dataSource": "newDomain",
+                    "dateRange": date_range,
+                    "subscription_id": subscription_id,
+                    "score_threshold": score_threshold,
+                    "score_threshold_percent": int(round(score_threshold * 100)),
+                    "apt_template_nrd_detection": apt_meta,
+                    "apt_template_nrd_alert_rows": results_apt_template_nrd_subscription,
+                },
+                status="processing",
+                created_by=subscription.user_id,
+            )
+            db.add(task)
+            db.flush()
+
         else:
             # 恶意性检测
             domains, missing_dates = _collect_daily_domains_for_subscription(date_range)
@@ -1056,6 +1175,7 @@ def execute_subscription(subscription_id: str):
         high_risk_domains = []
         phishing_alert_items = []
         dga_alert_items = []
+        apt_template_nrd_alert_items = []
         
         # 从Excel结果中提取高风险域名列表
         try:
@@ -1159,6 +1279,50 @@ def execute_subscription(subscription_id: str):
                         }
                     )
                 high_risk_count = len(high_risk_domains)
+            elif model.model_category == "apt_template_nrd":
+                apt_template_nrd_alert_items = []
+                for item in results_apt_template_nrd_subscription or []:
+                    if isinstance(item, dict):
+                        apt_template_nrd_alert_items.append(item)
+                if not apt_template_nrd_alert_items:
+                    try:
+                        excel_file.seek(0)
+                        apt_df = pd.read_excel(excel_file, sheet_name="APT模板命中域名列表")
+                        apt_template_nrd_alert_items = _extract_apt_template_nrd_alert_items(apt_df)
+                    except Exception:
+                        try:
+                            excel_file.seek(0)
+                            results_df = pd.read_excel(excel_file, sheet_name="预测结果")
+                            apt_template_nrd_alert_items = _extract_apt_template_nrd_alert_items(results_df)
+                        except Exception as apt_extract_error:
+                            logger.warning(f"从APT模板检测结果中提取预警域名失败: {apt_extract_error}")
+
+                high_risk_domains = []
+                seen = set()
+                normalized_records = []
+                for item in apt_template_nrd_alert_items:
+                    d = item.get("domain") or item.get("域名")
+                    if not d:
+                        continue
+                    d = str(d).strip()
+                    d_key = d.lower()
+                    if d and d_key not in seen:
+                        seen.add(d_key)
+                        high_risk_domains.append(d)
+                    normalized_records.append(
+                        {
+                            "domain": d,
+                            "score": item.get("score") or item.get("risk_score"),
+                            "risk_score": item.get("risk_score") or item.get("score"),
+                            "risk_level": item.get("risk_level"),
+                            "matched_template": item.get("matched_template"),
+                            "reason": item.get("reason") or "命中APT注册模板",
+                            "raw": item.get("raw") or {},
+                        }
+                    )
+                results_apt_template_nrd_subscription = normalized_records
+                apt_template_nrd_alert_items = normalized_records
+                high_risk_count = len(high_risk_domains)
             else:
                 # 恶意订阅预警：
                 # - 默认策略：model.predict 判为恶意的结果全部预警
@@ -1246,6 +1410,8 @@ def execute_subscription(subscription_id: str):
                 risk_score_records = results_history_similarity_subscription
             elif task.task_type == "dga":
                 risk_score_records = results_dga_subscription
+            elif task.task_type == "apt_template_nrd":
+                risk_score_records = results_apt_template_nrd_subscription
             else:
                 risk_score_records = results_malicious_subscription
 
@@ -1360,6 +1526,7 @@ def execute_subscription(subscription_id: str):
                     high_risk_domains=high_risk_domains,
                     phishing_alert_items=phishing_alert_items,
                     dga_alert_items=dga_alert_items,
+                    apt_template_nrd_alert_items=apt_template_nrd_alert_items,
                 )
             except Exception as e:
                 logger.warning(f"生成预警Excel附件失败: {e}")
@@ -1384,6 +1551,11 @@ def execute_subscription(subscription_id: str):
                 dga_records=(
                     results_dga_subscription
                     if task.task_type == "dga"
+                    else []
+                ),
+                apt_template_nrd_records=(
+                    results_apt_template_nrd_subscription
+                    if task.task_type == "apt_template_nrd"
                     else []
                 ),
             )

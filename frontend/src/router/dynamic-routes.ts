@@ -95,6 +95,15 @@ export default [
             },
           },
           {
+            path: '/detection/apt-template-nrd-detection',
+            name: 'AptTemplateNrdDetection',
+            component: () => import('~/pages/detection/apt-template-nrd-detection/index.vue'),
+            meta: {
+              title: 'APT模板新注册域名',
+              locale: 'menu.detection.apt-template-nrd-detection',
+            },
+          },
+          {
             path: '/detection/malicious-ip-detection',
             name: 'MaliciousIpDetection',
             component: () => import('~/pages/detection/malicious-ip-detection/index.vue'),

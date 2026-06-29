@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1040" viewBox="0 0 1900 1040" role="img" aria-label="APT注册模板与新注册域名匹配算法框图">
+  <defs>
+    <marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
+      <path d="M1,1 L11,6 L1,11 Z" fill="#000"/>
+    </marker>
+    <marker id="smallArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M1,1 L9,5 L1,9 Z" fill="#111"/>
+    </marker>
+    <style>
+      .title { font-family: Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 30px; font-weight: 700; fill: #000; }
+      .phase-title { font-family: Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 24px; font-weight: 700; fill: #000; }
+      .label { font-family: Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 21px; fill: #000; }
+      .small { font-family: Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 17px; fill: #111; }
+      .tiny { font-family: Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 14px; fill: #111; }
+      .bold { font-weight: 700; }
+      .outer { fill: #fff; stroke: #000; stroke-width: 3; }
+      .dash { fill: #fff; stroke: #5b5b5b; stroke-width: 2.5; stroke-dasharray: 8 9; }
+      .solid { fill: #fff; stroke: #000; stroke-width: 2; }
+      .soft-green { fill: #dcefd7; stroke: #8bb880; stroke-width: 1.5; }
+      .soft-blue { fill: #e3f0fb; stroke: #7fb4df; stroke-width: 1.5; }
+      .soft-red { fill: #fee5e6; stroke: #ee8d92; stroke-width: 1.5; }
+      .soft-purple { fill: #eaddec; stroke: #a983ad; stroke-width: 1.5; }
+      .soft-yellow { fill: #fff3d8; stroke: #d7a84a; stroke-width: 1.5; }
+      .soft-gray { fill: #f6f6f6; stroke: #222; stroke-width: 1.6; }
+      .arrow { stroke: #000; stroke-width: 4; fill: none; marker-end: url(#arrow); }
+      .thin-arrow { stroke: #111; stroke-width: 2.7; fill: none; marker-end: url(#smallArrow); }
+      .mini-red { fill: #ff646b; }
+      .mini-blue { fill: #5aaeea; }
+      .mini-green { fill: #28a745; }
+      .mini-purple { fill: #8b51d6; }
+      .mini-yellow { fill: #f2b84b; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1900" height="1040" fill="#fff"/>
+
+  <!-- Column titles -->
+  <circle cx="82" cy="54" r="23" fill="#000"/>
+  <text x="82" y="63" text-anchor="middle" class="title" fill="#fff" style="font-size:28px;">1</text>
+  <text x="118" y="65" class="title">APT 注册模板编译</text>
+
+  <circle cx="689" cy="54" r="23" fill="#000"/>
+  <text x="689" y="63" text-anchor="middle" class="title" fill="#fff" style="font-size:28px;">2</text>
+  <text x="725" y="65" class="title">日期范围 NRD 数据扫描</text>
+
+  <circle cx="1296" cy="54" r="23" fill="#000"/>
+  <text x="1296" y="63" text-anchor="middle" class="title" fill="#fff" style="font-size:28px;">3</text>
+  <text x="1332" y="65" class="title">模板匹配与结果输出</text>
+
+  <!-- Outer panels -->
+  <rect x="60" y="95" width="540" height="770" rx="78" class="outer"/>
+  <rect x="680" y="95" width="540" height="770" rx="78" class="outer"/>
+  <rect x="1300" y="95" width="540" height="770" rx="78" class="outer"/>
+
+  <path d="M610 480 H668" class="arrow"/>
+  <path d="M1230 480 H1288" class="arrow"/>
+
+  <!-- Column 1: template compilation -->
+  <text x="330" y="145" text-anchor="middle" class="phase-title">Template Workbook &amp; Compilation</text>
+
+  <rect x="112" y="174" width="436" height="80" rx="14" class="soft-red"/>
+  <text x="330" y="204" text-anchor="middle" class="label bold">APT 疑似模板工作簿</text>
+  <text x="330" y="232" text-anchor="middle" class="small">疑似模板化注册域名_筛选结果.xlsx</text>
+
+  <path d="M330 256 V278" class="thin-arrow"/>
+
+  <rect x="112" y="288" width="436" height="72" rx="14" class="soft-blue"/>
+  <text x="330" y="316" text-anchor="middle" class="label bold">工作表读取与模板去重</text>
+  <text x="330" y="341" text-anchor="middle" class="small">模板汇总 → 筛选结果 → 首个工作表</text>
+
+  <path d="M330 362 V384" class="thin-arrow"/>
+
+  <rect x="112" y="392" width="436" height="328" rx="38" class="dash"/>
+  <text x="330" y="426" text-anchor="middle" class="phase-title">Template Compiler</text>
+
+  <rect x="132" y="452" width="396" height="58" rx="10" class="soft-gray"/>
+  <text x="330" y="476" text-anchor="middle" class="small bold">拆分 SLD 模板与后缀模板</text>
+  <text x="330" y="498" text-anchor="middle" class="tiny">split_template(template)</text>
+
+  <path d="M330 512 V532" class="thin-arrow"/>
+
+  <rect x="132" y="540" width="180" height="72" rx="10" class="soft-green"/>
+  <text x="222" y="565" text-anchor="middle" class="small bold">{x} 通配片段</text>
+  <text x="222" y="588" text-anchor="middle" class="tiny">[a-z0-9]+ 命名捕获组</text>
+
+  <rect x="348" y="540" width="180" height="72" rx="10" class="soft-yellow"/>
+  <text x="438" y="565" text-anchor="middle" class="small bold">后缀约束</text>
+  <text x="438" y="588" text-anchor="middle" class="tiny">固定 suffix 或 {tld}</text>
+
+  <path d="M222 614 V632 H330" class="thin-arrow"/>
+  <path d="M438 614 V632 H330" class="thin-arrow"/>
+
+  <rect x="154" y="642" width="352" height="62" rx="12" class="soft-purple"/>
+  <text x="330" y="668" text-anchor="middle" class="label bold">编译 SLD 全匹配正则</text>
+  <text x="330" y="691" text-anchor="middle" class="tiny">^...$ · re.IGNORECASE · wildcard_count</text>
+
+  <path d="M330 722 V744" class="thin-arrow"/>
+
+  <rect x="132" y="754" width="396" height="86" rx="14" class="solid"/>
+  <text x="330" y="782" text-anchor="middle" class="label bold">TemplateSpec 集合</text>
+  <text x="330" y="806" text-anchor="middle" class="small">模板 · 判定依据 · root/row count</text>
+  <text x="330" y="828" text-anchor="middle" class="tiny">regex · fixed_token_count · wildcard_count</text>
+
+  <!-- Column 2: daily NRD loading -->
+  <text x="950" y="145" text-anchor="middle" class="phase-title">Date Range &amp; Daily NRD Loading</text>
+
+  <rect x="742" y="174" width="416" height="80" rx="14" class="soft-yellow"/>
+  <text x="950" y="204" text-anchor="middle" class="label bold">日期范围输入</text>
+  <text x="950" y="232" text-anchor="middle" class="small">YYYYMMDD–YYYYMMDD · 闭区间</text>
+
+  <path d="M950 256 V278" class="thin-arrow"/>
+
+  <rect x="742" y="288" width="416" height="76" rx="14" class="soft-gray"/>
+  <text x="950" y="316" text-anchor="middle" class="label bold">定位每日 NRD ZIP</text>
+  <text x="950" y="342" text-anchor="middle" class="tiny">NRD / YYYY-MM / YYYY-MM-DD-domain.zip</text>
+
+  <path d="M950 366 V388" class="thin-arrow"/>
+
+  <rect x="730" y="396" width="440" height="310" rx="36" class="dash"/>
+  <text x="950" y="430" text-anchor="middle" class="phase-title">NRD Stream Processing</text>
+
+  <rect x="750" y="454" width="190" height="72" rx="10" class="soft-blue"/>
+  <text x="845" y="480" text-anchor="middle" class="small bold">ZIP 内文件遍历</text>
+  <text x="845" y="503" text-anchor="middle" class="tiny">仅 TXT / CSV</text>
+
+  <rect x="960" y="454" width="190" height="72" rx="10" class="soft-green"/>
+  <text x="1055" y="480" text-anchor="middle" class="small bold">容错解码</text>
+  <text x="1055" y="503" text-anchor="middle" class="tiny">UTF-8 / GB18030 / Latin-1</text>
+
+  <path d="M940 490 H956" class="thin-arrow"/>
+  <path d="M950 528 V550" class="thin-arrow"/>
+
+  <rect x="750" y="558" width="400" height="74" rx="12" class="soft-purple"/>
+  <text x="950" y="586" text-anchor="middle" class="label bold">域名规范化与合法性校验</text>
+  <text x="950" y="612" text-anchor="middle" class="small">normalize_domain · is_normalized_domain_like</text>
+
+  <path d="M950 634 V654" class="thin-arrow"/>
+
+  <rect x="750" y="662" width="400" height="58" rx="12" class="soft-gray"/>
+  <text x="950" y="686" text-anchor="middle" class="small bold">解析 registered domain / SLD / suffix</text>
+  <text x="950" y="708" text-anchor="middle" class="tiny">记录 date 与 source_file</text>
+
+  <path d="M950 722 V746" class="thin-arrow"/>
+
+  <rect x="758" y="756" width="384" height="84" rx="14" class="solid"/>
+  <text x="950" y="784" text-anchor="middle" class="label bold">逐域名模板匹配输入流</text>
+  <text x="950" y="809" text-anchor="middle" class="small">有效域名进入匹配，无效行计数</text>
+  <text x="950" y="830" text-anchor="middle" class="tiny">allow_missing 可跳过缺失日期文件</text>
+
+  <!-- Column 3: deterministic matching -->
+  <text x="1570" y="145" text-anchor="middle" class="phase-title">Deterministic Matching &amp; Best Template</text>
+
+  <rect x="1342" y="166" width="456" height="552" rx="12" class="dash"/>
+  <text x="1368" y="206" class="phase-title">1. 正则全匹配与择优</text>
+
+  <rect x="1378" y="236" width="170" height="62" rx="10" class="soft-green"/>
+  <text x="1463" y="262" text-anchor="middle" class="small bold">TemplateSpec 集合</text>
+  <text x="1463" y="284" text-anchor="middle" class="tiny">compiled regex</text>
+
+  <rect x="1592" y="236" width="170" height="62" rx="10" class="soft-blue"/>
+  <text x="1677" y="262" text-anchor="middle" class="small bold">标准化 NRD</text>
+  <text x="1677" y="284" text-anchor="middle" class="tiny">SLD + suffix</text>
+
+  <path d="M1548 267 H1588" class="thin-arrow"/>
+  <path d="M1570 300 V324" class="thin-arrow"/>
+
+  <rect x="1386" y="334" width="368" height="68" rx="11" class="soft-yellow"/>
+  <text x="1570" y="361" text-anchor="middle" class="label bold">后缀门控</text>
+  <text x="1570" y="386" text-anchor="middle" class="small">固定后缀必须一致；{tld} 接受实际 suffix</text>
+
+  <path d="M1570 404 V424" class="thin-arrow"/>
+
+  <rect x="1386" y="432" width="368" height="68" rx="11" class="soft-purple"/>
+  <text x="1570" y="459" text-anchor="middle" class="label bold">SLD 正则 fullmatch</text>
+  <text x="1570" y="484" text-anchor="middle" class="small">捕获 x1…xN 与可变 tld</text>
+
+  <path d="M1570 502 V522" class="thin-arrow"/>
+
+  <rect x="1386" y="530" width="368" height="98" rx="11" class="soft-gray"/>
+  <text x="1570" y="557" text-anchor="middle" class="label bold">模板特异度评分</text>
+  <text x="1570" y="582" text-anchor="middle" class="small">精确 SLD +10000 · 固定后缀 +1000</text>
+  <text x="1570" y="606" text-anchor="middle" class="small">固定 token ×100 − wildcard_count</text>
+
+  <path d="M1570 630 V646" class="thin-arrow"/>
+
+  <rect x="1390" y="650" width="360" height="54" rx="12" class="soft-red"/>
+  <text x="1570" y="674" text-anchor="middle" class="small bold">取 specificity_score 最大模板</text>
+  <text x="1570" y="695" text-anchor="middle" class="tiny">无匹配则跳过</text>
+
+  <rect x="1342" y="730" width="456" height="116" rx="12" class="dash"/>
+  <text x="1368" y="760" class="phase-title">2. 匹配结果输出</text>
+
+  <rect x="1364" y="776" width="202" height="58" rx="11" class="soft-green"/>
+  <text x="1465" y="800" text-anchor="middle" class="small bold">匹配明细 CSV</text>
+  <text x="1465" y="822" text-anchor="middle" class="tiny">template · variables_json</text>
+
+  <rect x="1580" y="776" width="196" height="58" rx="11" class="soft-purple"/>
+  <text x="1678" y="800" text-anchor="middle" class="small bold">运行摘要 JSON</text>
+  <text x="1678" y="822" text-anchor="middle" class="tiny">计数 · 文件 · 耗时</text>
+
+  <!-- Legend -->
+  <line x1="82" y1="910" x2="1818" y2="910" stroke="#000" stroke-width="2"/>
+  <text x="82" y="968" class="label bold">图例</text>
+
+  <rect x="150" y="944" width="28" height="28" rx="5" class="soft-red"/>
+  <rect x="188" y="944" width="28" height="28" rx="5" class="soft-blue"/>
+  <text x="240" y="967" class="label">模板来源与 NRD 输入</text>
+
+  <rect x="520" y="944" width="72" height="34" rx="10" class="dash"/>
+  <text x="616" y="968" class="label">虚线框：编译、扫描与匹配阶段</text>
+
+  <rect x="1002" y="944" width="32" height="32" rx="7" class="soft-purple"/>
+  <rect x="1042" y="944" width="32" height="32" rx="7" class="soft-yellow"/>
+  <text x="1100" y="968" class="label">正则匹配与约束门控</text>
+
+  <path d="M1482 960 H1554" class="arrow"/>
+  <text x="1584" y="968" class="label">数据流与决策流</text>
+</svg>

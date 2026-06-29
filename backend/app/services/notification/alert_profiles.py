@@ -49,6 +49,13 @@ ALERT_PROFILES: Dict[str, AlertProfile] = {
         attachment_prefix="dga",
         default_reason="DGA_score 达到订阅预警阈值",
     ),
+    "apt_template_nrd": AlertProfile(
+        task_type="apt_template_nrd",
+        type_label="APT模板新注册域名检测",
+        domain_label="APT模板命中域名",
+        attachment_prefix="apt_template_nrd",
+        default_reason="命中APT注册模板",
+    ),
 }
 
 DEFAULT_ALERT_PROFILE = ALERT_PROFILES["malicious"]

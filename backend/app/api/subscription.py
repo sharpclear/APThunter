@@ -90,7 +90,7 @@ from app.entities import AlertFile, Task, Model, StoredFile, User
 from app.infra.minio_client import minio_client
 from app.db.session import SessionLocal, engine
 from app.db.base import Base
-from app.core.config import MINIO_BUCKET, IMPERSONATION_MODEL_NAME
+from app.core.config import MINIO_BUCKET, IMPERSONATION_MODEL_NAME, IMPERSONATION_FULL_WHITELIST_PATH
 from sqlalchemy import Column, BigInteger, String, DateTime, ForeignKey, Enum as SqlEnum, Integer, JSON, text, Boolean
 from app.services.notification.alert_notifier import build_alert_data_dict, dispatch_alert_notifications
 from app.services.actor_matcher import (
@@ -123,6 +123,27 @@ logger = logging.getLogger("uvicorn.error")
 
 # 数据延迟配置：数据文件延迟多少天到达（默认1天，即今天的数据明天才能获取）
 DATA_DELAY_DAYS = int(os.getenv("DATA_DELAY_DAYS", "1"))
+
+
+def _resolve_full_whitelist_path() -> str:
+    return os.path.abspath(os.path.expanduser(IMPERSONATION_FULL_WHITELIST_PATH))
+
+
+def _load_full_whitelist_file() -> Tuple[bytes, str, str]:
+    whitelist_path = _resolve_full_whitelist_path()
+    if not os.path.isfile(whitelist_path):
+        raise FileNotFoundError(
+            f"系统全量白名单不存在，请保存为: {whitelist_path}"
+        )
+    filename = os.path.basename(whitelist_path) or "full_whitelist.csv"
+    file_ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if file_ext not in {"csv", "txt", "xlsx"}:
+        raise ValueError("系统全量白名单文件类型必须是 csv, txt 或 xlsx")
+    with open(whitelist_path, "rb") as file_handle:
+        content = file_handle.read()
+    if not content.strip():
+        raise ValueError(f"系统全量白名单为空: {whitelist_path}")
+    return content, filename, whitelist_path
 
 # 定义 Subscription 和 Alert 模型（因为 main.py 中已删除）
 class Subscription(Base):
@@ -445,6 +466,21 @@ def _clean_optional_text(value) -> str:
     return "" if text_value.lower() == "nan" else text_value
 
 
+def _impersonation_item_is_medium_or_high(item: dict) -> bool:
+    risk_level = _clean_optional_text(item.get("risk_level")).lower()
+    if risk_level in {"高", "高危", "high", "中", "中危", "medium", "middle"}:
+        return True
+    if risk_level in {"低", "低危", "low", "忽略", "ignore"}:
+        return False
+    score_text = _clean_optional_text(
+        item.get("final_risk_score") or item.get("similarity") or item.get("llm_score")
+    )
+    try:
+        return float(score_text) >= 0.65
+    except (TypeError, ValueError):
+        return False
+
+
 def _model_category_to_subscription_type(model_category: Optional[str]) -> str:
     if model_category == "impersonation":
         return "phishing"
@@ -468,7 +504,7 @@ def _task_type_to_subscription_type(task_type: Optional[str]) -> str:
 def _extract_impersonation_alert_items(rows) -> List[dict]:
     """
     从仿冒检测结果 DataFrame 提取飞书/邮件附件预警明细。
-    兼容列：钓鱼域名、官方域名/目标域名、公司名称、相似度、匹配类型、风险等级、最终风险分、命中原因、LLM研判标签、LLM研判分数、研判原因、LLM处置结果。
+    兼容列：仿冒域名、钓鱼域名、官方域名/目标域名、公司名称、单位类型、相似度、匹配类型、风险等级、最终风险分、命中原因、LLM研判标签、LLM研判分数、研判原因、LLM处置结果。
     """
     keep_dispositions = {"保留人工复核", "保留高危告警"}
     items: List[dict] = []
@@ -481,25 +517,49 @@ def _extract_impersonation_alert_items(rows) -> List[dict]:
     for row in iterable:
         if not isinstance(row, dict):
             continue
-        phishing_domain = _clean_optional_text(row.get("钓鱼域名"))
-        if not phishing_domain:
+        impersonation_domain = _clean_optional_text(
+            row.get("仿冒域名") or row.get("钓鱼域名") or row.get("candidate_domain")
+        )
+        if not impersonation_domain:
             continue
-        official_domain = _clean_optional_text(row.get("官方域名") or row.get("目标域名"))
-        official_unit_name = _clean_optional_text(row.get("公司名称"))
-        similarity = _clean_optional_text(row.get("相似度"))
-        match_type = _clean_optional_text(row.get("匹配类型"))
-        risk_level = _clean_optional_text(row.get("风险等级"))
-        final_risk_score = _clean_optional_text(row.get("最终风险分") or row.get("相似度"))
-        hit_reason = _clean_optional_text(row.get("命中原因"))
+        official_domain = _clean_optional_text(
+            row.get("官方域名") or row.get("目标域名") or row.get("matched_target_domain")
+        )
+        official_unit_name = _clean_optional_text(
+            row.get("公司名称")
+            or row.get("单位名称")
+            or row.get("官方域名单位名称")
+            or row.get("matched_target_name")
+        )
+        official_unit_type = _clean_optional_text(
+            row.get("单位类型")
+            or row.get("官方域名单位类型")
+            or row.get("matched_target_type")
+            or row.get("target_type")
+            or row.get("target_tier")
+        )
+        official_unit_subtype = _clean_optional_text(
+            row.get("单位小类")
+            or row.get("单位子类型")
+            or row.get("官方域名单位小类")
+            or row.get("matched_target_subtype")
+            or row.get("target_subtype_label")
+            or row.get("target_subtype")
+        )
+        similarity = _clean_optional_text(row.get("相似度") or row.get("final_score"))
+        match_type = _clean_optional_text(row.get("匹配类型") or row.get("all_categories") or row.get("main_category"))
+        risk_level = _clean_optional_text(row.get("风险等级") or row.get("risk_level"))
+        final_risk_score = _clean_optional_text(row.get("最终风险分") or row.get("相似度") or row.get("final_score"))
+        hit_reason = _clean_optional_text(row.get("命中原因") or row.get("reason"))
         llm_label = _clean_optional_text(row.get("LLM研判标签"))
         llm_score = _clean_optional_text(row.get("LLM研判分数"))
         llm_reason = _clean_optional_text(row.get("研判原因"))
         llm_disposition = _clean_optional_text(row.get("LLM处置结果") or row.get("LLM处置建议"))
-        if llm_disposition not in keep_dispositions:
+        if llm_disposition and llm_disposition not in keep_dispositions:
             continue
         llm_key_features = _clean_optional_text(row.get("关键特征"))
         dedupe_key = (
-            phishing_domain.lower(),
+            impersonation_domain.lower(),
             official_domain.lower(),
             official_unit_name.lower(),
         )
@@ -510,7 +570,10 @@ def _extract_impersonation_alert_items(rows) -> List[dict]:
             {
                 "official_domain": official_domain,
                 "official_unit_name": official_unit_name,
-                "phishing_domain": phishing_domain,
+                "official_unit_type": official_unit_type,
+                "official_unit_subtype": official_unit_subtype,
+                "impersonation_domain": impersonation_domain,
+                "phishing_domain": impersonation_domain,
                 "similarity": similarity,
                 "match_type": match_type,
                 "risk_level": risk_level,
@@ -590,14 +653,15 @@ def _build_alert_attachment_excel(
 
     rows = []
     if task_type == "impersonation":
-        columns = ["疑似仿冒域名", "目标域名", "单位名称", "风险等级", "最终风险分", "LLM研判标签", "LLM研判分数", "研判原因", "LLM处置结果", "命中原因"]
+        columns = ["疑似仿冒域名", "目标域名", "单位名称", "单位类型", "风险等级", "最终风险分", "LLM研判标签", "LLM研判分数", "研判原因", "LLM处置结果", "命中原因"]
         if phishing_alert_items:
             for item in phishing_alert_items:
                 rows.append(
                     {
-                        "疑似仿冒域名": item.get("phishing_domain", ""),
+                        "疑似仿冒域名": item.get("impersonation_domain") or item.get("phishing_domain", ""),
                         "目标域名": item.get("official_domain", ""),
                         "单位名称": item.get("official_unit_name", ""),
+                        "单位类型": item.get("official_unit_type", ""),
                         "风险等级": item.get("risk_level", ""),
                         "最终风险分": item.get("final_risk_score", ""),
                         "LLM研判标签": item.get("llm_label", ""),
@@ -749,24 +813,40 @@ def execute_subscription(subscription_id: str):
         # 根据模型类型执行不同的检测
         if model.model_category == "impersonation":
             # 仿冒域名检测
-            if not subscription.official_file_id:
-                logger.error(f"订阅 {subscription_id} 缺少官方文件，更新下次执行时间后跳过")
-                subscription.next_run_at = beijing_datetime_to_naive(_calculate_next_run_at(subscription.frequency))
-                db.commit()
-                return
-            
-            official_file = db.query(StoredFile).filter(StoredFile.id == subscription.official_file_id).first()
-            if not official_file:
-                logger.error(f"官方文件 {subscription.official_file_id} 不存在，更新下次执行时间后跳过")
-                subscription.next_run_at = beijing_datetime_to_naive(_calculate_next_run_at(subscription.frequency))
-                db.commit()
-                return
-            
-            # 下载官方文件
-            official_file_content = download_file_from_minio(
-                official_file.object_key,
-                official_file.bucket
-            )
+            official_file = None
+            official_file_content = None
+            official_filename = ""
+            official_source = "full_whitelist"
+            official_whitelist_path = ""
+
+            if subscription.official_file_id:
+                official_source = "uploaded_file"
+                official_file = db.query(StoredFile).filter(StoredFile.id == subscription.official_file_id).first()
+                if not official_file:
+                    logger.error(f"官方文件 {subscription.official_file_id} 不存在，更新下次执行时间后跳过")
+                    subscription.next_run_at = beijing_datetime_to_naive(_calculate_next_run_at(subscription.frequency))
+                    db.commit()
+                    return
+
+                # 下载官方文件
+                official_file_content = download_file_from_minio(
+                    official_file.object_key,
+                    official_file.bucket
+                )
+                official_filename = official_file.filename or "unknown"
+            else:
+                try:
+                    official_file_content, official_filename, official_whitelist_path = _load_full_whitelist_file()
+                    logger.info(
+                        "订阅 %s 未绑定官方文件，使用系统全量白名单: %s",
+                        subscription_id,
+                        official_whitelist_path,
+                    )
+                except Exception as exc:
+                    logger.error(f"订阅 {subscription_id} 无法加载系统全量白名单，更新下次执行时间后跳过: {exc}")
+                    subscription.next_run_at = beijing_datetime_to_naive(_calculate_next_run_at(subscription.frequency))
+                    db.commit()
+                    return
             
             # 收集每日域名（使用订阅专用函数，不会因为没有数据而报错）
             detection_domains, missing_dates = _collect_daily_domains_for_subscription(date_range)
@@ -780,7 +860,7 @@ def execute_subscription(subscription_id: str):
             # 读取官方域名
             official_domains = read_official_domains_from_file(
                 official_file_content,
-                official_file.filename or "unknown"
+                official_filename
             )
             
             # 执行检测
@@ -798,11 +878,13 @@ def execute_subscription(subscription_id: str):
                 task_id=task_id,
                 task_type="impersonation",
                 model_id=model.id,
-                file_id=official_file.id,
+                file_id=official_file.id if official_file else None,
                 extra={
                     "detectionSource": "newDomain",
                     "dateRange": date_range,
                     "subscription_id": subscription_id,
+                    "official_source": official_source,
+                    "official_whitelist_path": official_whitelist_path,
                 },
                 status="processing",
                 created_by=subscription.user_id,
@@ -958,34 +1040,50 @@ def execute_subscription(subscription_id: str):
             excel_file = io.BytesIO(excel_content)
             
             if model.model_category == "impersonation":
-                # 仿冒检测：从统计信息中获取钓鱼域名数量
-                high_risk_count = statistics.get("phishing", 0) or statistics.get("钓鱼域名数量", 0) or statistics.get("检测到的钓鱼域名数量", 0)
-                
-                # 从Excel中提取钓鱼域名列表（提取所有，不限制数量）
+                # 仿冒检测：从统计信息中获取仿冒域名数量
+                high_risk_count = (
+                    statistics.get("impersonation", 0)
+                    or statistics.get("phishing", 0)
+                    or statistics.get("仿冒域名数", 0)
+                    or statistics.get("仿冒域名数量", 0)
+                    or statistics.get("钓鱼域名数量", 0)
+                    or statistics.get("检测到的仿冒域名数量", 0)
+                    or statistics.get("检测到的钓鱼域名数量", 0)
+                )
+
+                # 从Excel中提取仿冒域名列表（提取所有，不限制数量）
                 try:
                     results_df = pd.read_excel(excel_file, sheet_name='检测结果')
-                    # 筛选出有钓鱼域名的行
-                    phishing_rows = results_df[results_df['钓鱼域名'].notna()]
+                    domain_column = "仿冒域名" if "仿冒域名" in results_df.columns else "钓鱼域名"
+                    phishing_rows = results_df[results_df[domain_column].notna()]
                     phishing_alert_items = _extract_impersonation_alert_items(phishing_rows)
                 except Exception as e:
-                    logger.warning(f"从Excel提取钓鱼域名列表失败: {e}")
+                    logger.warning(f"从Excel提取仿冒域名列表失败: {e}")
                     try:
-                        # 尝试从钓鱼域名列表工作表读取
+                        # 尝试从仿冒域名列表工作表读取，兼容旧的钓鱼域名列表工作表
                         excel_file.seek(0)
-                        phishing_df = pd.read_excel(excel_file, sheet_name='钓鱼域名列表')
-                        if '钓鱼域名' in phishing_df.columns:
+                        try:
+                            phishing_df = pd.read_excel(excel_file, sheet_name='仿冒域名列表')
+                        except Exception:
+                            excel_file.seek(0)
+                            phishing_df = pd.read_excel(excel_file, sheet_name='钓鱼域名列表')
+                        if '仿冒域名' in phishing_df.columns or '钓鱼域名' in phishing_df.columns:
                             phishing_alert_items = _extract_impersonation_alert_items(phishing_df)
                         else:
                             high_risk_domains = []
                     except:
                         pass
                 high_risk_domains = []
-                seen_phishing_domains = set()
+                seen_impersonation_domains = set()
+                phishing_alert_items = [
+                    item for item in phishing_alert_items
+                    if _impersonation_item_is_medium_or_high(item)
+                ]
                 for item in phishing_alert_items:
-                    domain = _clean_optional_text(item.get("phishing_domain"))
+                    domain = _clean_optional_text(item.get("impersonation_domain") or item.get("phishing_domain"))
                     domain_key = domain.lower()
-                    if domain and domain_key not in seen_phishing_domains:
-                        seen_phishing_domains.add(domain_key)
+                    if domain and domain_key not in seen_impersonation_domains:
+                        seen_impersonation_domains.add(domain_key)
                         high_risk_domains.append(domain)
                 high_risk_count = len(high_risk_domains)
             elif model.model_category == "history_similarity":
@@ -1456,49 +1554,52 @@ async def create_subscription(
         # 处理官方文件（仅仿冒检测需要）
         official_file_id = None
         if model.model_category == "impersonation":
-            if not officialFile:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="仿冒检测订阅需要上传官方域名文件"
+            if officialFile:
+                # 验证文件类型
+                file_ext = officialFile.filename.split(".")[-1].lower() if officialFile.filename else ""
+                if file_ext not in ["csv", "txt", "xlsx"]:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="文件类型必须是 csv, txt 或 xlsx"
+                    )
+
+                # 读取并上传文件
+                file_content = await officialFile.read()
+                file_size = len(file_content)
+                max_size = 5 * 1024 * 1024  # 5MB
+                if file_size > max_size:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"文件大小不能超过 {max_size / 1024 / 1024}MB"
+                    )
+
+                file_key = upload_file_content_to_minio(
+                    file_content,
+                    officialFile.filename or "unknown",
+                    officialFile.content_type
                 )
-            
-            # 验证文件类型
-            file_ext = officialFile.filename.split(".")[-1].lower() if officialFile.filename else ""
-            if file_ext not in ["csv", "txt", "xlsx"]:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="文件类型必须是 csv, txt 或 xlsx"
+
+                uploaded_by = request.headers.get("X-User-Name") or request.headers.get("X-User")
+                official_file = StoredFile(
+                    bucket=MINIO_BUCKET,
+                    object_key=file_key,
+                    filename=officialFile.filename,
+                    content_type=officialFile.content_type,
+                    size=file_size,
+                    uploaded_by=uploaded_by,
+                    metadata_json={"source": "subscription", "role": "official"},
                 )
-            
-            # 读取并上传文件
-            file_content = await officialFile.read()
-            file_size = len(file_content)
-            max_size = 5 * 1024 * 1024  # 5MB
-            if file_size > max_size:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"文件大小不能超过 {max_size / 1024 / 1024}MB"
-                )
-            
-            file_key = upload_file_content_to_minio(
-                file_content,
-                officialFile.filename or "unknown",
-                officialFile.content_type
-            )
-            
-            uploaded_by = request.headers.get("X-User-Name") or request.headers.get("X-User")
-            official_file = StoredFile(
-                bucket=MINIO_BUCKET,
-                object_key=file_key,
-                filename=officialFile.filename,
-                content_type=officialFile.content_type,
-                size=file_size,
-                uploaded_by=uploaded_by,
-                metadata_json={"source": "subscription", "role": "official"},
-            )
-            db.add(official_file)
-            db.flush()
-            official_file_id = official_file.id
+                db.add(official_file)
+                db.flush()
+                official_file_id = official_file.id
+            else:
+                try:
+                    _load_full_whitelist_file()
+                except Exception as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"未上传官方域名文件，且系统全量白名单不可用: {exc}"
+                    )
         
         # 创建订阅
         subscription_id = f"S{int(beijing_now().timestamp())}"
@@ -1577,6 +1678,8 @@ async def list_subscriptions(
                 ).first()
                 if official_file:
                     official_file_name = official_file.filename
+            elif model.model_category == "impersonation":
+                official_file_name = f"系统全量白名单 ({os.path.basename(_resolve_full_whitelist_path())})"
             
             items.append({
                 "id": subscription.subscription_id,

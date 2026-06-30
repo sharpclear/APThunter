@@ -1,0 +1,158 @@
+subtypes:
+  email:
+    label: 邮箱服务
+    target_tiers: [brand, cloud]
+    domains:
+      - gmail.com
+      - outlook.com
+      - hotmail.com
+      - live.com
+      - mail.ru
+      - proton.me
+      - protonmail.com
+      - yahoo.com
+      - yandex.com
+    slds: [gmail, outlook, hotmail, webmail, protonmail, proton, yahoo, yandexmail]
+    keywords: [gmail, outlook, hotmail, webmail, email, mail, mailbox, protonmail, yandex mail]
+
+  social:
+    label: 社交平台
+    target_tiers: [brand, media]
+    domains:
+      - facebook.com
+      - instagram.com
+      - twitter.com
+      - x.com
+      - linkedin.com
+      - tiktok.com
+      - telegram.org
+      - telegram.me
+      - whatsapp.com
+      - reddit.com
+      - discord.com
+    slds: [facebook, instagram, twitter, linkedin, tiktok, telegram, whatsapp, reddit, discord, snapchat, pinterest]
+    keywords: [facebook, instagram, twitter, linkedin, tiktok, telegram, whatsapp, reddit, discord, social, messenger]
+
+  internet_company:
+    label: 互联网公司
+    target_tiers: [brand]
+    domains:
+      - google.com
+      - microsoft.com
+      - apple.com
+      - baidu.com
+      - yahoo.com
+      - yandex.com
+      - netflix.com
+      - spotify.com
+      - adobe.com
+    slds: [google, microsoft, apple, baidu, yahoo, yandex, netflix, spotify, adobe, mozilla, opera]
+    keywords: [google, microsoft, apple, baidu, yahoo, yandex, netflix, spotify, adobe, browser, search]
+
+  developer:
+    label: 开发者平台
+    target_tiers: [brand, cloud]
+    domains:
+      - github.com
+      - gitlab.com
+      - npmjs.com
+      - pypi.org
+      - docker.com
+      - stackoverflow.com
+    slds: [github, gitlab, npmjs, pypi, docker, stackoverflow, bitbucket]
+    keywords: [github, gitlab, npm, pypi, docker, stack overflow, developer, code, api]
+
+  cloud_service:
+    label: 云服务
+    target_tiers: [cloud, brand]
+    domains:
+      - aws.amazon.com
+      - azure.microsoft.com
+      - cloud.google.com
+      - aliyun.com
+      - cloudflare.com
+      - ucloud.cn
+      - pcloud.com
+      - icloud.com
+    slds: [aws, azure, aliyun, cloudflare, ucloud, pcloud, icloud, qcloud, huaweicloud, tencentcloud]
+    keywords: [cloud, aws, azure, aliyun, cloudflare, ucloud, pcloud, icloud, hosting, cdn]
+
+  payment:
+    label: 支付平台
+    target_tiers: [finance, brand, ecommerce]
+    domains:
+      - paypal.com
+      - paypal.me
+      - alipay.com
+      - pay.weixin.qq.com
+      - stripe.com
+      - payoneer.com
+    slds: [paypal, alipay, stripe, payoneer, unionpay, wechatpay]
+    keywords: [paypal, alipay, stripe, payoneer, payment, pay, wallet, checkout]
+
+  crypto:
+    label: 加密货币
+    target_tiers: [finance, brand]
+    domains:
+      - binance.com
+      - coinbase.com
+      - bitget.com
+      - okx.com
+      - bybit.com
+      - trezor.io
+      - metamask.io
+    slds: [binance, coinbase, bitget, okx, bybit, trezor, metamask, blockchain]
+    keywords: [crypto, bitcoin, blockchain, binance, coinbase, bitget, okx, wallet, exchange]
+
+  banking:
+    label: 银行金融
+    target_tiers: [finance]
+    slds: [bank, abchina, icbc, ccb, boc, citibank, scotiabank, usbank, santander, hsbc]
+    keywords: [bank, banking, bankofamerica, citibank, scotiabank, santander, hsbc, credit, loan]
+
+  ecommerce:
+    label: 电商零售
+    target_tiers: [ecommerce, brand]
+    domains:
+      - amazon.com
+      - ebay.com
+      - walmart.com
+      - taobao.com
+      - tmall.com
+      - jd.com
+      - shopee.com
+    slds: [amazon, ebay, walmart, taobao, tmall, jd, shopee, shopify, aliexpress]
+    keywords: [shop, mall, store, retail, amazon, ebay, walmart, taobao, tmall, jd, shopee]
+
+  game:
+    label: 游戏娱乐
+    target_tiers: [brand]
+    domains:
+      - steamcommunity.com
+      - steampowered.com
+      - epicgames.com
+      - roblox.com
+      - minecraft.net
+    slds: [steam, steamcommunity, epicgames, roblox, minecraft, ea, playstation, xbox]
+    keywords: [game, gaming, steam, roblox, minecraft, playstation, xbox]
+
+  travel:
+    label: 旅游出行
+    target_tiers: [brand]
+    domains:
+      - booking.com
+      - airbnb.com
+      - tripadvisor.com
+      - uber.com
+    slds: [booking, airbnb, tripadvisor, uber, lyft]
+    keywords: [travel, hotel, booking, trip, airline, flight, taxi, rideshare]
+
+defaults:
+  gov: 政府机构
+  edu: 教育机构
+  finance: 金融机构
+  cloud: 云服务
+  ecommerce: 电商零售
+  media: 媒体资讯
+  brand: 其他品牌
+  other: 其他

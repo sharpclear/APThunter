@@ -1,4 +1,4 @@
-numpy>=1.26.3,<3
+numpy==1.23.5
 pandas>=2.2.2
 tqdm>=4.66.5
 Levenshtein>=0.25.1
@@ -7,7 +7,7 @@ joblib>=1.4,<2
 requests>=2.32.3
 openpyxl>=3.1.5
 transformers>=4.40.0
-scipy>=1.13.1
+scipy==1.10.0
 uvicorn>=0.38.0
 APScheduler>=3.10.0
 # 添加缺失的依赖
@@ -20,7 +20,7 @@ pydantic>=2.0.0
 cryptography>=41.0.0
 passlib[bcrypt]>=1.7.4
 PyJWT>=2.8.0
-scikit-learn>=1.4,<2
+scikit-learn==1.2.1
 email-validator>=2.0.0
 apscheduler
 celery>=5.6.2
@@ -31,3 +31,8 @@ cloudscraper>=1.2.71
 lxml>=5.3.0
 python-whois>=0.9.6
 dnspython>=2.8.0
+lightgbm>=4.0.0
+rapidfuzz>=3.0.0
+tldextract>=3.2.0
+PyYAML>=6.0.0
+pypinyin>=0.50.0

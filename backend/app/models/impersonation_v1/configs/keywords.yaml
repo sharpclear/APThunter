@@ -1,0 +1,118 @@
+strong_risk_words:
+  - login
+  - logon
+  - signin
+  - verify
+  - auth
+  - account
+  - password
+  - secure
+  - security
+  - sso
+  - webmail
+  - vpn
+  - token
+  - oauth
+  - reset
+  - recover
+  - 2fa
+  - mfa
+  - otp
+
+medium_risk_words:
+  - portal
+  - service
+  - support
+  - update
+  - admin
+  - mail
+  - email
+  - payment
+  - pay
+  - bank
+  - official
+  - gov
+  - cn
+  - notice
+  - api
+  - user
+  - oa
+
+weak_risk_words:
+  - app
+  - online
+  - cloud
+  - system
+  - office
+  - site
+  - center
+  - download
+  - help
+  - home
+
+suspicious_tlds:
+  - top
+  - xyz
+  - vip
+  - shop
+  - site
+  - online
+  - icu
+  - live
+  - click
+  - work
+  - store
+  - info
+  - cc
+  - tk
+
+weak_target_tokens:
+  - app
+  - apps
+  - api
+  - apis
+  - admin
+  - ads
+  - cdn
+  - center
+  - cloud
+  - dev
+  - developer
+  - docs
+  - download
+  - email
+  - help
+  - home
+  - login
+  - mail
+  - name
+  - names
+  - office
+  - online
+  - page
+  - pages
+  - portal
+  - service
+  - services
+  - site
+  - static
+  - support
+  - system
+  - web
+  - webmail
+  - www
+
+generic_medium_target_tokens:
+  - bank
+  - casino
+  - finance
+  - game
+  - market
+  - media
+  - news
+  - pay
+  - search
+  - shop
+  - sports
+  - store
+  - studio

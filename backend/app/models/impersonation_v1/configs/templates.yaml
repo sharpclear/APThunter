@@ -1,0 +1,19 @@
+templates:
+  - login-{target}
+  - "{target}-login"
+  - verify-{target}
+  - "{target}-verify"
+  - secure-{target}
+  - "{target}-secure"
+  - auth-{target}
+  - "{target}-auth"
+  - help-{target}
+  - "{target}-help"
+  - support-{target}
+  - "{target}-support"
+  - secure-account-{target}
+  - account-update-{target}
+  - sso-login-{target}
+  - mail-vpn-{target}
+  - login-verify-{target}
+  - "{target}-login-verify"

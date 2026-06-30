@@ -1,0 +1,50 @@
+recall:
+  min_rule_score: 0.45
+  exact_target_sld_score: 0.90
+  exact_token_score: 0.80
+  no_hyphen_match_score: 0.85
+  confusable_match_score: 0.85
+  risk_word_combo_score: 0.80
+  tld_replace_score: 0.75
+  fuzzy_match_score: 0.70
+  subdomain_deception_score: 0.80
+  fuzzy_ratio_min: 88
+  jaro_winkler_min: 0.88
+  edit_distance_max: 2
+
+hard_filter:
+  allow_weak_token_alone: false
+  require_context_for_short_token: true
+  require_context_for_medium_token: true
+  require_target_token: true
+  require_context_for_weak_substring: true
+  short_token_max_len: 4
+  suspicious_tld_as_context: true
+  structure_anomaly_as_context: true
+
+risk_context:
+  strong_risk_word_weight: 1.0
+  medium_risk_word_weight: 0.6
+  weak_risk_word_weight: 0.2
+  min_context_score_for_short_token: 1.0
+  min_context_score_for_medium_token: 0.6
+
+risk_levels:
+  high: 0.85
+  medium: 0.65
+  low: 0.45
+  ignore: 0.0
+
+dataset_split:
+  train_size: 0.70
+  valid_size: 0.15
+  test_size: 0.15
+  random_state: 42
+
+target_profile:
+  enough_positive_min: 10
+
+sampling:
+  cross_negative_per_positive: 3
+  hard_negative_per_positive: 2
+  random_state: 42

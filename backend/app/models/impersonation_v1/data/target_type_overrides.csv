@@ -1,0 +1,20 @@
+target_domain,target_name,target_tier,target_subtype,target_subtype_label,target_type_source,note
+gmail.com,Gmail,,email,邮箱服务,manual_override,email service
+outlook.com,Outlook,,email,邮箱服务,manual_override,email service
+facebook.com,Facebook,,social,社交平台,manual_override,social platform
+telegram.org,Telegram,,social,社交平台,manual_override,social platform
+telegram.me,Telegram,,social,社交平台,manual_override,social platform
+github.com,GitHub,,developer,开发者平台,manual_override,developer platform
+gitlab.com,GitLab,,developer,开发者平台,manual_override,developer platform
+paypal.com,Paypal,,payment,支付平台,manual_override,payment platform
+paypal.me,Paypal,,payment,支付平台,manual_override,payment platform
+alipay.com,支付宝,,payment,支付平台,manual_override,payment platform
+binance.com,Binance,,crypto,加密货币,manual_override,crypto exchange
+coinbase.com,Coinbase,,crypto,加密货币,manual_override,crypto exchange
+bitget.com,Bitget,,crypto,加密货币,manual_override,crypto exchange
+cloudflare.com,Cloudflare,,cloud_service,云服务,manual_override,cloud service
+ucloud.cn,Ucloud,,cloud_service,云服务,manual_override,cloud service
+pcloud.com,pCloud,,cloud_service,云服务,manual_override,cloud service
+icloud.com,iCloud,,cloud_service,云服务,manual_override,cloud service
+amazon.com,Amazon,,ecommerce,电商零售,manual_override,ecommerce
+steamcommunity.com,Steam Community,,game,游戏娱乐,manual_override,gaming community

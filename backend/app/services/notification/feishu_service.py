@@ -9,7 +9,9 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 import time
+from collections import Counter
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
@@ -502,14 +504,369 @@ def _safe_text(value: Any, default: str = "") -> str:
     return text if text else default
 
 
+_IMPERSONATION_PUSH_MIN_SCORE = 0.65
+_REGIONAL_SECOND_LEVEL_LABELS = {
+    "ac",
+    "co",
+    "com",
+    "edu",
+    "go",
+    "gov",
+    "ne",
+    "net",
+    "or",
+    "org",
+}
+_PRIMARY_TLD_LABELS = {"com", "org", "net", "edu", "gov"}
+
+_MATCH_TYPE_LABELS = {
+    "brand_combo": "品牌组合",
+    "service_entry": "业务入口仿冒",
+    "prefix_suffix": "前后缀仿冒",
+    "typo": "拼写变体",
+    "confusable": "视觉混淆",
+    "hyphenation": "连字符变体",
+    "tld_replace": "后缀替换",
+    "subdomain_deception": "子域名欺骗",
+    "template_reuse": "历史模板复用",
+    "pinyin_abbr": "拼音缩写",
+    "other_suspicious": "其他可疑",
+}
+
+_RISK_LEVEL_LABELS = {
+    "high": "高",
+    "medium": "中",
+    "low": "低",
+    "ignore": "忽略",
+}
+
+_TARGET_TYPE_LABELS = {
+    "gov": "政府",
+    "government": "政府",
+    "政府": "政府",
+    "edu": "教育",
+    "education": "教育",
+    "教育": "教育",
+    "finance": "金融",
+    "financial": "金融",
+    "金融": "金融",
+    "brand": "品牌",
+    "品牌": "品牌",
+    "cloud": "云服务",
+    "云服务": "云服务",
+    "ecommerce": "电商",
+    "e-commerce": "电商",
+    "电商": "电商",
+    "media": "媒体",
+    "媒体": "媒体",
+    "other": "其他",
+    "其他": "其他",
+}
+
+_TARGET_SUBTYPE_LABELS = {
+    "email": "邮箱服务",
+    "social": "社交平台",
+    "internet_company": "互联网公司",
+    "developer": "开发者平台",
+    "cloud_service": "云服务",
+    "payment": "支付平台",
+    "crypto": "加密货币",
+    "banking": "银行金融",
+    "financial_institution": "金融机构",
+    "ecommerce": "电商零售",
+    "game": "游戏娱乐",
+    "travel": "旅游出行",
+    "government": "政府机构",
+    "education": "教育机构",
+    "media": "媒体资讯",
+    "other_brand": "其他品牌",
+    "other": "其他",
+}
+
+_UNIT_TYPE_ORDER = {
+    "政府": 0,
+    "金融": 1,
+    "教育": 2,
+}
+_OTHER_UNIT_TYPE_ORDER = {
+    "云服务": 100,
+    "电商": 101,
+    "媒体": 102,
+    "其他": 190,
+    "未知": 200,
+}
+_BRAND_SUBTYPE_UNIT_TYPES = {"品牌", "云服务", "电商", "媒体", "其他"}
+
+_RISK_LEVEL_RANKS = {
+    "high": 3,
+    "高": 3,
+    "高危": 3,
+    "medium": 2,
+    "middle": 2,
+    "中": 2,
+    "中危": 2,
+    "low": 1,
+    "低": 1,
+    "低危": 1,
+    "ignore": 0,
+    "忽略": 0,
+}
+
+
+def _parse_float(value: Any, default: float = 0.0) -> float:
+    text = _safe_text(value, "")
+    if not text:
+        return default
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return default
+
+
+def _normalize_v1_label(value: Any, labels: Dict[str, str]) -> str:
+    text = _safe_text(value, "")
+    return labels.get(text, labels.get(text.lower(), text))
+
+
+def _normalize_multi_v1_labels(value: Any, labels: Dict[str, str]) -> str:
+    text = _safe_text(value, "")
+    if not text:
+        return ""
+    parts = [
+        part.strip()
+        for part in re.split(r"[|\\/,，、;；]+", text)
+        if part and part.strip()
+    ]
+    if not parts:
+        return _normalize_v1_label(text, labels)
+    translated = [_normalize_v1_label(part, labels) for part in parts]
+    return "\\".join(dict.fromkeys(item for item in translated if item))
+
+
+def _normalize_target_subtype(value: Any) -> str:
+    text = _safe_text(value, "")
+    return _TARGET_SUBTYPE_LABELS.get(text, _TARGET_SUBTYPE_LABELS.get(text.lower(), text))
+
+
+def _impersonation_domain(item: Dict[str, Any]) -> str:
+    return _safe_text(item.get("impersonation_domain") or item.get("phishing_domain"), "")
+
+
+def _impersonation_score(item: Dict[str, Any]) -> float:
+    return _parse_float(
+        item.get("final_risk_score") or item.get("similarity") or item.get("llm_score"),
+        0.0,
+    )
+
+
+def _impersonation_risk_rank(item: Dict[str, Any]) -> int:
+    raw_level = _safe_text(item.get("risk_level"), "")
+    normalized = raw_level.strip().lower()
+    if raw_level in _RISK_LEVEL_RANKS:
+        return _RISK_LEVEL_RANKS[raw_level]
+    if normalized in _RISK_LEVEL_RANKS:
+        return _RISK_LEVEL_RANKS[normalized]
+
+    score = _impersonation_score(item)
+    if score >= 0.85:
+        return 3
+    if score >= _IMPERSONATION_PUSH_MIN_SCORE:
+        return 2
+    if score > 0:
+        return 1
+    return 0
+
+
+def _is_medium_or_high_impersonation_match(item: Dict[str, Any]) -> bool:
+    raw_level = _safe_text(item.get("risk_level"), "")
+    rank = _impersonation_risk_rank(item)
+    if raw_level:
+        return rank >= 2
+    return _impersonation_score(item) >= _IMPERSONATION_PUSH_MIN_SCORE
+
+
+def _impersonation_match_priority(item: Dict[str, Any]) -> tuple[int, float, int]:
+    return (
+        _impersonation_risk_rank(item),
+        _impersonation_score(item),
+        1 if _safe_text(item.get("official_domain"), "") else 0,
+    )
+
+
+def _official_domain_labels(domain: Any) -> List[str]:
+    text = _safe_text(domain, "").lower().strip(".")
+    if not text:
+        return []
+    if "://" in text:
+        text = urlparse(text).netloc or text
+    text = text.split("/", 1)[0].split(":", 1)[0].strip(".")
+    if text.startswith("www."):
+        text = text[4:]
+    return [part for part in text.split(".") if part]
+
+
+def _is_country_code_label(label: str) -> bool:
+    return len(label) == 2 and label.isalpha()
+
+
+def _is_regional_second_level_domain(labels: List[str]) -> bool:
+    return (
+        len(labels) >= 3
+        and labels[-2] in _REGIONAL_SECOND_LEVEL_LABELS
+        and _is_country_code_label(labels[-1])
+    )
+
+
+def _official_domain_brand_key(domain: Any) -> str:
+    labels = _official_domain_labels(domain)
+    if not labels:
+        return ""
+    if _is_regional_second_level_domain(labels):
+        return labels[-3]
+    if len(labels) >= 2:
+        return labels[-2]
+    return labels[0]
+
+
+def _official_domain_canonical_priority(item: Dict[str, Any]) -> tuple[int, int, int, int, int]:
+    labels = _official_domain_labels(item.get("official_domain"))
+    if not labels:
+        return (0, 0, 0, 0, 0)
+
+    regional_second_level = _is_regional_second_level_domain(labels)
+    primary_tld = labels[-1] in _PRIMARY_TLD_LABELS
+    domain_length = len(".".join(labels))
+    return (
+        1 if len(labels) == 2 else 0,
+        0 if regional_second_level else 1,
+        1 if primary_tld else 0,
+        -len(labels),
+        -domain_length,
+    )
+
+
+def _select_best_impersonation_match(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    severity_best = max(items, key=_impersonation_match_priority)
+    brand_key = _official_domain_brand_key(severity_best.get("official_domain"))
+    same_brand_items = [
+        item
+        for item in items
+        if brand_key and _official_domain_brand_key(item.get("official_domain")) == brand_key
+    ]
+    candidate_items = same_brand_items or items
+    return max(
+        candidate_items,
+        key=lambda item: (
+            _official_domain_canonical_priority(item),
+            _impersonation_match_priority(item),
+        ),
+    )
+
+
 def _filter_impersonation_matches(
     phishing_matches: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     keep_dispositions = {"保留人工复核", "保留高危告警"}
-    return [
-        item for item in phishing_matches
-        if str(item.get("llm_disposition") or "").strip() in keep_dispositions
+    matches_by_domain: Dict[str, List[Dict[str, Any]]] = {}
+
+    for idx, item in enumerate(phishing_matches):
+        if not isinstance(item, dict):
+            continue
+        disposition = str(item.get("llm_disposition") or "").strip()
+        if disposition and disposition not in keep_dispositions:
+            continue
+        if not _is_medium_or_high_impersonation_match(item):
+            continue
+
+        domain = _impersonation_domain(item).lower()
+        dedupe_key = domain or f"__missing_impersonation_domain_{idx}"
+        matches_by_domain.setdefault(dedupe_key, []).append(item)
+
+    selected_matches = [
+        _select_best_impersonation_match(items)
+        for items in matches_by_domain.values()
+        if items
     ]
+    return sorted(selected_matches, key=_impersonation_match_priority, reverse=True)
+
+
+def _chinese_ordinal(value: int) -> str:
+    numerals = "零一二三四五六七八九"
+    if value <= 0:
+        return str(value)
+    if value < 10:
+        return numerals[value]
+    if value == 10:
+        return "十"
+    if value < 20:
+        return "十" + numerals[value % 10]
+    if value < 100:
+        tens, ones = divmod(value, 10)
+        return numerals[tens] + "十" + (numerals[ones] if ones else "")
+    return str(value)
+
+
+def _unit_type_label(item: Dict[str, Any]) -> str:
+    return _normalize_v1_label(item.get("official_unit_type"), _TARGET_TYPE_LABELS) or "未知"
+
+
+def _unit_subtype_label(item: Dict[str, Any]) -> str:
+    return (
+        _normalize_target_subtype(item.get("official_unit_subtype"))
+        or _normalize_target_subtype(item.get("matched_target_subtype"))
+        or _normalize_target_subtype(item.get("target_subtype"))
+        or "其他"
+    )
+
+
+def _unit_group_label(item: Dict[str, Any]) -> str:
+    unit_type = _unit_type_label(item)
+    if unit_type in _UNIT_TYPE_ORDER:
+        return unit_type
+    if unit_type in _BRAND_SUBTYPE_UNIT_TYPES:
+        subtype = _unit_subtype_label(item)
+        if subtype and subtype not in {"未知", "其他"}:
+            return f"品牌-{subtype}"
+        if unit_type not in {"品牌", "其他"}:
+            return f"品牌-{unit_type}"
+        return "品牌-其他"
+    return unit_type or "未知"
+
+
+def _unit_group_sort_key(label: str, count: int) -> tuple[int, int, str]:
+    if label in _UNIT_TYPE_ORDER:
+        return (_UNIT_TYPE_ORDER[label], 0, label)
+    if label.startswith("品牌-"):
+        return (3, -count, label)
+    return (_OTHER_UNIT_TYPE_ORDER.get(label, 150), 0, label)
+
+
+def _group_impersonation_matches(
+    phishing_matches: List[Dict[str, Any]],
+) -> List[tuple[str, List[Dict[str, Any]]]]:
+    counts = Counter(_unit_group_label(item) for item in phishing_matches)
+    ordered_labels = sorted(counts, key=lambda label: _unit_group_sort_key(label, counts[label]))
+    groups: List[tuple[str, List[Dict[str, Any]]]] = []
+    for label in ordered_labels:
+        groups.append((
+            label,
+            [item for item in phishing_matches if _unit_group_label(item) == label],
+        ))
+    return groups
+
+
+def _build_impersonation_grouped_detail_lines(
+    phishing_matches: List[Dict[str, Any]],
+) -> List[List[Dict[str, Any]]]:
+    lines: List[List[Dict[str, Any]]] = []
+    for group_idx, (unit_group, items) in enumerate(
+        _group_impersonation_matches(phishing_matches),
+        start=1,
+    ):
+        lines.append([{"tag": "text", "text": f"{_chinese_ordinal(group_idx)}、单位类型：{unit_group}\n"}])
+        for item_idx, item in enumerate(items, start=1):
+            lines.append(_build_impersonation_match_line(item_idx, item))
+    return lines
 
 
 def _build_impersonation_alert_lines(
@@ -517,60 +874,30 @@ def _build_impersonation_alert_lines(
 ) -> List[List[Dict[str, Any]]]:
     phishing_matches = _filter_impersonation_matches(phishing_matches)
     if not phishing_matches:
-        return [[{"tag": "text", "text": "仿冒检测结果：未能提取仿冒明细，请查看预警详情文件。\n"}]]
+        return [[{"tag": "text", "text": "仿冒检测结果：未发现中高风险仿冒域名，低风险结果已过滤。\n"}]]
 
     lines: List[List[Dict[str, Any]]] = [
         [{"tag": "text", "text": f"仿冒域名数量：{len(phishing_matches)}\n"}],
-        [{"tag": "text", "text": "仿冒明细：\n"}],
     ]
-
-    for idx, item in enumerate(phishing_matches, start=1):
-        official_unit_name = _safe_text(item.get("official_unit_name"), "未知单位")
-        official_domain = _safe_text(item.get("official_domain"), "未知官方域名")
-        phishing_domain = _safe_text(item.get("phishing_domain"), "未知仿冒域名")
-        llm_score = _safe_text(item.get("llm_score"), "未知")
-        llm_reason = _safe_text(item.get("llm_reason"), "")
-        llm_disposition = _safe_text(item.get("llm_disposition"), "")
-        llm_reason_line = f"   LLM研判原因：{llm_reason}\n" if llm_reason else ""
-        llm_disposition_line = f"   LLM处置结果：{llm_disposition}\n" if llm_disposition else ""
-        lines.append(
-            [
-                {
-                    "tag": "text",
-                    "text": (
-                        f"{idx}. 官方域名：{official_domain}\n"
-                        f"   官方域名单位名称：{official_unit_name}\n"
-                        f"   检测出的仿冒域名：{phishing_domain}\n"
-                        f"   LLM风险分：{llm_score}\n"
-                        f"{llm_disposition_line}"
-                        f"{llm_reason_line}"
-                    ),
-                }
-            ]
-        )
-
+    lines.extend(_build_impersonation_grouped_detail_lines(phishing_matches))
     return lines
 
 
 def _build_impersonation_match_line(idx: int, item: Dict[str, Any]) -> List[Dict[str, Any]]:
     official_unit_name = _safe_text(item.get("official_unit_name"), "未知单位")
     official_domain = _safe_text(item.get("official_domain"), "未知官方域名")
-    phishing_domain = _safe_text(item.get("phishing_domain"), "未知仿冒域名")
-    llm_score = _safe_text(item.get("llm_score"), "未知")
-    llm_reason = _safe_text(item.get("llm_reason"), "")
-    llm_disposition = _safe_text(item.get("llm_disposition"), "")
-    llm_reason_line = f"   LLM研判原因：{llm_reason}\n" if llm_reason else ""
-    llm_disposition_line = f"   LLM处置结果：{llm_disposition}\n" if llm_disposition else ""
+    impersonation_domain = _safe_text(_impersonation_domain(item), "未知仿冒域名")
+    match_type = _normalize_multi_v1_labels(item.get("match_type"), _MATCH_TYPE_LABELS) or "未知"
+    risk_level = _normalize_v1_label(item.get("risk_level"), _RISK_LEVEL_LABELS) or "未知"
     return [
         {
             "tag": "text",
             "text": (
-                f"{idx}. 官方域名：{official_domain}\n"
-                f"   官方域名单位名称：{official_unit_name}\n"
-                f"   检测出的仿冒域名：{phishing_domain}\n"
-                f"   LLM风险分：{llm_score}\n"
-                f"{llm_disposition_line}"
-                f"{llm_reason_line}"
+                f"{idx}. 仿冒域名：{impersonation_domain}\n"
+                f"   官方域名：{official_domain}\n"
+                f"   官方单位名称：{official_unit_name}\n"
+                f"   匹配类型：{match_type}\n"
+                f"   风险等级：{risk_level}\n"
             ),
         }
     ]
@@ -583,20 +910,16 @@ def _send_impersonation_alert_posts(
 ) -> bool:
     filtered_matches = _filter_impersonation_matches(phishing_matches)
     if not filtered_matches:
-        return send_post(
-            title,
-            header_lines + [[{"tag": "text", "text": "仿冒检测结果：未能提取仿冒明细，请查看预警详情文件。\n"}]],
-        )
+        logger.info("仿冒检测飞书推送无中高风险明细，跳过发送")
+        return True
 
     intro_lines = [
         [{"tag": "text", "text": f"仿冒域名数量：{len(filtered_matches)}\n"}],
-        [{"tag": "text", "text": "仿冒明细：\n"}],
     ]
     chunks: List[List[List[Dict[str, Any]]]] = []
     current = header_lines + intro_lines
 
-    for idx, item in enumerate(filtered_matches, start=1):
-        item_line = _build_impersonation_match_line(idx, item)
+    for item_line in _build_impersonation_grouped_detail_lines(filtered_matches):
         candidate = current + [item_line]
         if len(current) > len(header_lines) + len(intro_lines) and _body_size_bytes(_build_post_body(title, candidate)) > _MAX_BODY_BYTES:
             chunks.append(current)

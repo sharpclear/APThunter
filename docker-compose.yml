@@ -96,6 +96,7 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       # 模型配置
       IMPERSONATION_MODEL_NAME: impersonation_detector
+      IMPERSONATION_FULL_WHITELIST_PATH: ${IMPERSONATION_FULL_WHITELIST_PATH:-/app/app/data/official_domains/full_whitelist.csv}
       # SMTP 配置（从宿主机 .env 注入；不要在此硬编码密码）
       SMTP_HOST: ${SMTP_HOST:-smtp.example.com}
       SMTP_PORT: ${SMTP_PORT:-587}
@@ -109,6 +110,7 @@ services:
       FEISHU_WEBHOOK_URL: ${FEISHU_WEBHOOK_URL:-}
       FEISHU_BOT_SECRET: ${FEISHU_BOT_SECRET:-}
       FEISHU_PUSH_ONLY_ON_ALERT: ${FEISHU_PUSH_ONLY_ON_ALERT:-true}
+      FEISHU_PUSH_IMPERSONATION_ALERTS: ${FEISHU_PUSH_IMPERSONATION_ALERTS:-false}
       APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-}
       FEISHU_HTTP_TIMEOUT_SEC: ${FEISHU_HTTP_TIMEOUT_SEC:-10}
       FEISHU_HTTP_RETRIES: ${FEISHU_HTTP_RETRIES:-3}
@@ -134,6 +136,7 @@ services:
       - ./backend/app/models/saved_model:/app/app/models/saved_model
       # 每日域名 zip：与宿主机 ./backend/app/daily_data 双向同步（含其下新建子目录）
       - ./backend/app/daily_data:/app/app/daily_data
+      - ./backend/app/data/official_domains:/app/app/data/official_domains
       - backend_data:/app/data
     networks:
       - apthunter-network
@@ -178,6 +181,7 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       IMPERSONATION_MODEL_NAME: impersonation_detector
+      IMPERSONATION_FULL_WHITELIST_PATH: ${IMPERSONATION_FULL_WHITELIST_PATH:-/app/app/data/official_domains/full_whitelist.csv}
       SMTP_HOST: ${SMTP_HOST:-smtp.example.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
@@ -200,6 +204,7 @@ services:
     volumes:
       - ./backend/app/models/saved_model:/app/app/models/saved_model
       - ./backend/app/daily_data:/app/app/daily_data
+      - ./backend/app/data/official_domains:/app/app/data/official_domains
       - backend_data:/app/data
     networks:
       - apthunter-network

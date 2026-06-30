@@ -622,7 +622,7 @@ def execute_impersonation_task(task_id: str):
             )
             extra_data["official_domains"] = [
                 {"单位名称": str(company or ""), "官方域名": str(domain or "")}
-                for company, domain in official_domains
+                for company, domain, *rest in official_domains
             ]
             extra_data["official_domain_count"] = len(official_domains)
         if not official_domains:

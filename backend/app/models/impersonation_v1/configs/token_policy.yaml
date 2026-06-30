@@ -1,0 +1,131 @@
+weak_tokens:
+  - digital
+  - global
+  - service
+  - cloud
+  - health
+  - design
+  - mail
+  - portal
+  - online
+  - system
+  - office
+  - center
+  - group
+  - tech
+  - technology
+  - data
+  - info
+  - news
+  - tiger
+
+generic_medium_target_tokens:
+  - academy
+  - auto
+  - bank
+  - blockchain
+  - business
+  - capital
+  - company
+  - clients
+  - culture
+  - direct
+  - energy
+  - expert
+  - finance
+  - football
+  - government
+  - investor
+  - market
+  - media
+  - nation
+  - official
+  - people
+  - personal
+  - privacy
+  - processing
+  - radio
+  - register
+  - search
+  - security
+  - signal
+  - smart
+  - sport
+  - sports
+  - space
+  - travel
+  - video
+  - workers
+  - world
+
+inherited_tokens:
+  - gov
+  - edu
+  - cn
+  - china
+  - national
+  - state
+  - public
+
+forbidden_strong_tokens:
+  - digital
+  - global
+  - service
+  - cloud
+  - mail
+  - portal
+  - online
+
+spelling_variant_block_base_tokens:
+  - account
+  - admin
+  - app
+  - auth
+  - bank
+  - blockchain
+  - cloud
+  - clients
+  - direct
+  - email
+  - energy
+  - help
+  - import
+  - lay
+  - login
+  - mail
+  - online
+  - pages
+  - pay
+  - payment
+  - personal
+  - play
+  - portal
+  - privacy
+  - secure
+  - security
+  - service
+  - shop
+  - signal
+  - sense
+  - site
+  - sport
+  - sports
+  - store
+  - support
+  - tiger
+  - verify
+  - web
+  - workers
+
+spelling_variant_complete_word_block_tokens:
+  - import
+  - lay
+  - pages
+  - play
+  - sense
+
+spelling_variant_suffix_pair_blocks:
+  - candidate_suffix: play
+    target_suffix: pay
+  - candidate_suffix: lay
+    target_suffix: pay

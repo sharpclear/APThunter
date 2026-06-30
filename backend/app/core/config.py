@@ -49,6 +49,18 @@ MYSQL_URL = os.getenv(
 IMPERSONATION_MODEL_NAME = os.getenv(
     "IMPERSONATION_MODEL_NAME", "impersonation_detector"
 )
+IMPERSONATION_FULL_WHITELIST_PATH = os.getenv(
+    "IMPERSONATION_FULL_WHITELIST_PATH",
+    os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "data",
+            "official_domains",
+            "full_whitelist.csv",
+        )
+    ),
+)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL)
@@ -70,6 +82,9 @@ FEISHU_ENABLE_PUSH = _env_bool("FEISHU_ENABLE_PUSH", False)
 FEISHU_WEBHOOK_URL = (os.getenv("FEISHU_WEBHOOK_URL") or "").strip()
 FEISHU_BOT_SECRET = (os.getenv("FEISHU_BOT_SECRET") or "").strip()
 FEISHU_PUSH_ONLY_ON_ALERT = _env_bool("FEISHU_PUSH_ONLY_ON_ALERT", True)
+FEISHU_PUSH_IMPERSONATION_ALERTS = _env_bool(
+    "FEISHU_PUSH_IMPERSONATION_ALERTS", False
+)
 # 可选：逗号分隔 channels，例如 email,feishu（用于与 ALERT_*_ENABLED 组合理解；当前逻辑以各 ENABLED 为准）
 ALERT_NOTIFY_CHANNELS = os.getenv("ALERT_NOTIFY_CHANNELS", "")
 

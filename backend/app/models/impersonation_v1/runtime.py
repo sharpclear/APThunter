@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import io
+import tempfile
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -13,6 +14,7 @@ from .normalize import normalize_domain
 from .official_alias import build_official_alias_groups
 from .predict import (
     DEFAULT_MIN_SCORE,
+    OUTPUT_COLUMNS,
     add_explanation_columns,
     add_model_scores,
     add_unique_candidate_rank_columns,
@@ -20,6 +22,9 @@ from .predict import (
     extract_prediction_features,
     target_subtype_label,
     target_tier_label,
+    write_prediction_report,
+    write_prediction_word_report,
+    write_unique_candidate_output,
 )
 from .target_profile import build_target_profiles, load_positive_threshold, load_token_policy
 
@@ -77,7 +82,8 @@ def detect_impersonation_domains(
     official_domains: Iterable[Any],
     detection_domains: Iterable[Any],
     similarity_threshold: float | None = None,
-) -> tuple[pd.DataFrame, dict[str, Any]]:
+    return_scored: bool = False,
+) -> tuple[pd.DataFrame, dict[str, Any]] | tuple[pd.DataFrame, dict[str, Any], pd.DataFrame]:
     official_rows = _coerce_official_domains(official_domains)
     raw_detection_domains = list(detection_domains or [])
     candidate_domains = _coerce_detection_domains(raw_detection_domains)
@@ -85,7 +91,11 @@ def detect_impersonation_domains(
     if not official_rows:
         raise ValueError("官方域名列表中没有有效域名")
     if not candidate_domains:
-        return _empty_result(), _build_statistics(len(raw_detection_domains), 0, 0)
+        result = _empty_result()
+        statistics = _build_statistics(len(raw_detection_domains), 0, 0, target_count=len(official_rows))
+        if return_scored:
+            return result, statistics, _empty_scored_result()
+        return result, statistics
 
     whitelist = pd.DataFrame(official_rows)
     if "target_tier" not in whitelist.columns:
@@ -109,7 +119,16 @@ def detect_impersonation_domains(
         keywords=recall_keywords,
     )
     if recalled.empty:
-        return _empty_result(), _build_statistics(len(raw_detection_domains), 0, 0)
+        result = _empty_result()
+        statistics = _build_statistics(
+            len(raw_detection_domains),
+            0,
+            0,
+            target_count=len(profiles),
+        )
+        if return_scored:
+            return result, statistics, _empty_scored_result()
+        return result, statistics
 
     pairs = ensure_prediction_pair_columns(recalled, profiles)
     feature_keywords = load_feature_keywords(KEYWORDS_PATH)
@@ -157,11 +176,16 @@ def detect_impersonation_domains(
     else:
         selected = selected.reset_index(drop=True)
     result = _build_result_dataframe(selected)
-    return result, _build_statistics(
+    statistics = _build_statistics(
         len(raw_detection_domains),
         len(result),
         len(recalled),
+        target_count=len(profiles),
+        scored_count=len(scored),
     )
+    if return_scored:
+        return result, statistics, selected
+    return result, statistics
 
 
 def predict_from_domains(
@@ -175,6 +199,22 @@ def predict_from_domains(
         similarity_threshold=similarity_threshold,
     )
     return _build_result_excel(result, statistics), statistics
+
+
+def predict_from_domains_with_report(
+    official_domains: Iterable[Any],
+    detection_domains: Iterable[Any],
+    similarity_threshold: float | None = None,
+) -> tuple[bytes, dict[str, Any], bytes]:
+    result, statistics, scored_result = detect_impersonation_domains(
+        official_domains,
+        detection_domains,
+        similarity_threshold=similarity_threshold,
+        return_scored=True,
+    )
+    excel_content = _build_result_excel(result, statistics)
+    report_content = _build_word_report(scored_result, statistics)
+    return excel_content, statistics, report_content
 
 
 def _coerce_official_domains(official_domains: Iterable[Any]) -> list[dict[str, str]]:
@@ -279,6 +319,10 @@ def _empty_result() -> pd.DataFrame:
     return pd.DataFrame(columns=RESULT_COLUMNS)
 
 
+def _empty_scored_result() -> pd.DataFrame:
+    return pd.DataFrame(columns=OUTPUT_COLUMNS)
+
+
 def _build_result_dataframe(scored: pd.DataFrame) -> pd.DataFrame:
     if scored.empty:
         return _empty_result()
@@ -331,7 +375,62 @@ def _build_result_dataframe(scored: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=RESULT_COLUMNS)
 
 
-def _build_statistics(total: int, impersonation: int, recalled: int) -> dict[str, Any]:
+def _build_word_report(scored: pd.DataFrame, statistics: dict[str, Any]) -> bytes:
+    with tempfile.TemporaryDirectory(prefix="impersonation_v1_report_") as temp_dir:
+        report_dir = Path(temp_dir)
+        full_output = report_dir / "suspicious_domains_result.csv"
+        unique_output = report_dir / "suspicious_domains_result_unique_candidates.csv"
+        markdown_output = report_dir / "prediction_report.md"
+        word_output = report_dir / "prediction_report.docx"
+        high_value_review_output = report_dir / "review_high_value_targets.csv"
+
+        report_df = scored.copy() if scored is not None else _empty_scored_result()
+        if report_df.empty:
+            report_df = _empty_scored_result()
+        report_df.to_csv(full_output, index=False, encoding="utf-8-sig")
+        unique_df = write_unique_candidate_output(report_df, unique_output)
+        pd.DataFrame(columns=OUTPUT_COLUMNS).to_csv(
+            high_value_review_output,
+            index=False,
+            encoding="utf-8-sig",
+        )
+
+        summary = {
+            "target_count": int(statistics.get("target_count", 0) or 0),
+            "input_domain_count": int(statistics.get("total", 0) or 0),
+            "recalled_count": int(statistics.get("算法候选数", 0) or 0),
+            "scored_count": int(statistics.get("scored_count", len(report_df)) or 0),
+            "output_count": int(len(report_df)),
+            "unique_candidate_count": int(len(unique_df)),
+            "high_value_review_count": 0,
+            "risk_level_counts": (
+                report_df["risk_level"].value_counts().to_dict()
+                if "risk_level" in report_df.columns
+                else {}
+            ),
+            "target_type_counts": (
+                report_df["matched_target_type"].value_counts().to_dict()
+                if "matched_target_type" in report_df.columns
+                else {}
+            ),
+            "output": str(full_output),
+            "unique_output": str(unique_output),
+            "report_output": str(markdown_output),
+            "word_report_output": str(word_output),
+            "high_value_review_output": str(high_value_review_output),
+        }
+        write_prediction_report(summary, markdown_output)
+        write_prediction_word_report(summary, word_output)
+        return word_output.read_bytes()
+
+
+def _build_statistics(
+    total: int,
+    impersonation: int,
+    recalled: int,
+    target_count: int = 0,
+    scored_count: int = 0,
+) -> dict[str, Any]:
     benign = max(total - impersonation, 0)
     impersonation_rate = impersonation / total * 100 if total else 0.0
     return {
@@ -339,8 +438,12 @@ def _build_statistics(total: int, impersonation: int, recalled: int) -> dict[str
         "impersonation": impersonation,
         "benign": benign,
         "impersonation_rate": impersonation_rate,
+        "target_count": target_count,
+        "scored_count": scored_count,
         "总域名数": total,
+        "受保护目标数": target_count,
         "算法候选数": recalled,
+        "模型评分候选数": scored_count,
         "仿冒域名数": impersonation,
         "正常域名数": benign,
         "仿冒域名占比": f"{impersonation_rate:.2f}%",
@@ -358,7 +461,9 @@ def _build_result_excel(result: pd.DataFrame, statistics: dict[str, Any]) -> byt
             {
                 "统计项": [
                     "总域名数",
+                    "受保护目标数",
                     "算法候选数",
+                    "模型评分候选数",
                     "仿冒域名数",
                     "正常域名数",
                     "仿冒域名占比",
@@ -368,7 +473,9 @@ def _build_result_excel(result: pd.DataFrame, statistics: dict[str, Any]) -> byt
                 ],
                 "数值": [
                     statistics["total"],
+                    statistics.get("target_count", 0),
                     statistics["算法候选数"],
+                    statistics.get("scored_count", 0),
                     statistics["impersonation"],
                     statistics["benign"],
                     f"{statistics['impersonation_rate']:.2f}%",

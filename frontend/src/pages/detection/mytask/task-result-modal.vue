@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { useUserId } from '~/composables/user-id'
 import { useAuthorization } from '~/composables/authorization'
@@ -42,12 +42,17 @@ interface AttributionDetail {
 }
 
 interface PhishingResultItem {
-  钓鱼域名: string
-  官方域名: string
+  仿冒域名?: string
+  钓鱼域名?: string
+  官方域名?: string
   目标域名?: string
-  公司名称: string
-  相似度: string
-  匹配类型: string
+  官方域名单位名称?: string
+  公司名称?: string
+  单位类型?: string
+  单位小类?: string
+  相似度?: string
+  匹配类型?: string
+  风险等级?: string
   LLM研判标签?: string
   LLM研判分数?: string | number
   LLM处置结果?: string
@@ -95,6 +100,8 @@ interface MaliciousStatistics {
 interface PhishingStatistics {
   总域名数?: string | number
   算法候选数?: string | number
+  仿冒域名数?: string | number
+  仿冒域名占比?: string
   钓鱼域名数?: string | number
   正常域名数?: string | number
   钓鱼域名占比?: string
@@ -134,6 +141,7 @@ interface ResultData {
   dga_domains?: ResultItem[]
   history_similarity_domains?: ResultItem[]
   result_filename: string
+  word_report_filename?: string
   total_count: number
   malicious_count?: number
   phishing_count?: number
@@ -163,6 +171,36 @@ const resultData = ref<ResultData | null>(null)
 const expandedEvidenceDomains = ref<string[]>([])
 
 const modalVisible = ref(false)
+
+const UNIT_TYPE_PRIORITY = ['政府', '金融', '教育']
+const CHINESE_ORDINALS = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
+
+const impersonationPreviewGroups = computed(() => {
+  if (resultData.value?.task_type !== 'impersonation')
+    return []
+  const items = ((resultData.value.phishing_domains || []) as PhishingResultItem[])
+    .filter(item => getImpersonationDomain(item) !== '未知域名')
+  const groupMap = new Map<string, PhishingResultItem[]>()
+  for (const item of items) {
+    const unitType = getUnitType(item)
+    const groupItems = groupMap.get(unitType) || []
+    groupItems.push(item)
+    groupMap.set(unitType, groupItems)
+  }
+  return Array.from(groupMap.entries())
+    .map(([unitType, groupItems]) => ({ unitType, items: groupItems }))
+    .sort((left, right) => {
+      const leftPriority = UNIT_TYPE_PRIORITY.indexOf(left.unitType)
+      const rightPriority = UNIT_TYPE_PRIORITY.indexOf(right.unitType)
+      if (leftPriority !== -1 || rightPriority !== -1)
+        return (leftPriority === -1 ? 999 : leftPriority) - (rightPriority === -1 ? 999 : rightPriority)
+      return right.items.length - left.items.length
+    })
+})
+
+function chineseOrdinal(index: number) {
+  return CHINESE_ORDINALS[index] || `${index + 1}`
+}
 
 const officialDomainColumns = [
   {
@@ -279,6 +317,36 @@ function displayLlmScore(item: Partial<PhishingResultItem>) {
   return item.LLM研判分数 || '未知'
 }
 
+function getImpersonationDomain(item: Partial<PhishingResultItem>) {
+  return item.仿冒域名 || item.钓鱼域名 || '未知域名'
+}
+
+function getOfficialDomain(item: Partial<PhishingResultItem>) {
+  return item.官方域名 || item.目标域名 || '未知'
+}
+
+function getOfficialUnitName(item: Partial<PhishingResultItem>) {
+  return item.官方域名单位名称 || item.公司名称 || '未知单位'
+}
+
+function getUnitType(item: Partial<PhishingResultItem>) {
+  return item.单位类型 || item.单位小类 || '未分类'
+}
+
+function getRiskLevel(item: Partial<PhishingResultItem>) {
+  return item.风险等级 || '未知'
+}
+
+function riskLevelColor(level?: string) {
+  if (level === '高')
+    return 'red'
+  if (level === '中')
+    return 'orange'
+  if (level === '低')
+    return 'blue'
+  return 'default'
+}
+
 function riskStatTitle(taskType?: string) {
   if (taskType === 'impersonation')
     return '仿冒域名'
@@ -291,7 +359,7 @@ function riskStatTitle(taskType?: string) {
 
 function riskStatValue(data: ResultData) {
   if (data.task_type === 'impersonation')
-    return data.statistics['钓鱼域名数']
+    return data.statistics['仿冒域名数'] || data.statistics['钓鱼域名数']
   if (data.task_type === 'dga')
     return data.statistics['DGA域名数']
   if (data.task_type === 'history_similarity')
@@ -311,7 +379,7 @@ function riskRateTitle(taskType?: string) {
 
 function riskRateValue(data: ResultData) {
   if (data.task_type === 'impersonation')
-    return data.statistics['钓鱼域名占比'] || '0%'
+    return data.statistics['仿冒域名占比'] || data.statistics['钓鱼域名占比'] || '0%'
   if (data.task_type === 'dga')
     return data.statistics['DGA域名占比'] || '0%'
   if (data.task_type === 'history_similarity')
@@ -491,6 +559,10 @@ function handleDownload() {
     emit('download', props.taskId)
   }
 }
+
+function downloadButtonText() {
+  return resultData.value?.task_type === 'impersonation' ? '下载Word报告' : '下载Excel'
+}
 </script>
 
 <template>
@@ -579,7 +651,41 @@ function handleDownload() {
 
         <!-- 恶意/钓鱼域名列表（如果有） -->
         <a-card
-          v-if="hasRiskDomains(resultData)"
+          v-if="resultData.task_type === 'impersonation' && hasRiskDomains(resultData)"
+          title="仿冒域名明细"
+          style="margin-bottom: 16px;"
+        >
+          <div class="impersonation-preview">
+            <div class="impersonation-summary-line">检测类型：仿冒域名检测</div>
+            <div class="impersonation-summary-line">仿冒域名数量：{{ resultData.phishing_count || resultData.phishing_domains?.length || 0 }}</div>
+            <div
+              v-for="(group, groupIndex) in impersonationPreviewGroups"
+              :key="group.unitType"
+              class="impersonation-group"
+            >
+              <div class="impersonation-group-title">
+                {{ chineseOrdinal(groupIndex) }}、单位类型：{{ group.unitType }}
+              </div>
+              <div
+                v-for="(item, itemIndex) in group.items"
+                :key="getImpersonationDomain(item)"
+                class="impersonation-item"
+              >
+                <div>{{ itemIndex + 1 }}. 仿冒域名：{{ getImpersonationDomain(item) }}</div>
+                <div>官方域名：{{ getOfficialDomain(item) }}</div>
+                <div>官方单位名称：{{ getOfficialUnitName(item) }}</div>
+                <div>匹配类型：{{ item.匹配类型 || '未知' }}</div>
+                <div>
+                  风险等级：
+                  <a-tag :color="riskLevelColor(getRiskLevel(item))">{{ getRiskLevel(item) }}</a-tag>
+                </div>
+              </div>
+            </div>
+          </div>
+        </a-card>
+
+        <a-card
+          v-else-if="hasRiskDomains(resultData)"
           :title="riskListTitle(resultData.task_type)"
           style="margin-bottom: 16px;"
         >
@@ -594,18 +700,16 @@ function handleDownload() {
                 <a-list-item-meta>
                   <template #title>
                     <span style="color: #cf1322; font-weight: bold;">
-                      {{ resultData.task_type === 'impersonation' ? item.钓鱼域名 : item.域名 }}
+                      {{ resultData.task_type === 'impersonation' ? getImpersonationDomain(item) : item.域名 }}
                     </span>
                   </template>
                   <template v-if="resultData.task_type === 'impersonation'" #description>
                     <div>
-                      <span>官方域名: {{ item.官方域名 || item.目标域名 }}</span><br>
-                      <span>官方域名单位名称: {{ item.公司名称 || '未知单位' }}</span>
-                      <span class="summary-item">LLM风险分: {{ displayLlmScore(item) }}</span>
-                      <span class="summary-item">LLM处置结果: {{ displayLlmDisposition(item) }}</span>
-                      <div v-if="item.研判原因" style="margin-top: 4px; color: #667085;">
-                        LLM研判原因: {{ item.研判原因 }}
-                      </div>
+                      <div>官方域名: {{ getOfficialDomain(item) }}</div>
+                      <div>官方域名单位名称: {{ getOfficialUnitName(item) }}</div>
+                      <span class="summary-item">单位类型: {{ getUnitType(item) }}</span>
+                      <span class="summary-item">匹配类型: {{ item.匹配类型 || '未知' }}</span>
+                      <a-tag :color="riskLevelColor(getRiskLevel(item))">风险等级: {{ getRiskLevel(item) }}</a-tag>
                     </div>
                   </template>
                   <template v-else-if="resultData.task_type === 'dga'" #description>
@@ -705,7 +809,7 @@ function handleDownload() {
         <div style="margin-top: 16px; text-align: right;">
           <a-space>
             <a-button type="primary" @click="handleDownload">
-              下载Excel
+              {{ downloadButtonText() }}
             </a-button>
             <a-button @click="modalVisible = false">
               关闭
@@ -735,6 +839,28 @@ function handleDownload() {
 }
 .summary-item {
   color: #475467;
+}
+.impersonation-preview {
+  color: #344054;
+  line-height: 1.8;
+}
+.impersonation-summary-line {
+  font-weight: 600;
+}
+.impersonation-group {
+  margin-top: 14px;
+}
+.impersonation-group-title {
+  margin-bottom: 8px;
+  color: #101828;
+  font-weight: 700;
+}
+.impersonation-item {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  background: #fcfcfd;
 }
 .evidence-summary {
   display: flex;

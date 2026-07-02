@@ -22,6 +22,13 @@ function convertNumber(number: number) {
   return number.toLocaleString()
 }
 
+function formatIocCount(count?: number | string | null) {
+  const value = Number(count ?? 0)
+  if (!Number.isFinite(value))
+    return 0
+  return value === 100 ? '100+' : value
+}
+
 const router = useRouter()
 
 // APT统计数据
@@ -519,28 +526,18 @@ function goToDomainAttributes() {
 // 加载攻击来源Top10
 async function loadRegionDistribution() {
   try {
-    const response = await fetch('/api/dashboard/data-display/attack-sources?limit=10')
+    const response = await fetch('/api/dashboard/data-display/region-distribution')
     if (response.ok) {
       const result = await response.json()
       if (result.code === 200 && Array.isArray(result.data) && result.data.length > 0) {
-        attackSourceTop10.value = result.data.map((item: any) => ({
-          country: item.country || '未知',
+        attackSourceTop10.value = result.data.slice(0, 10).map((item: any) => ({
+          country: item.region || '未知',
           count: item.count || 0,
         }))
         return
       }
     }
-
-    const fallbackResponse = await fetch('/api/dashboard/data-display/region-distribution')
-    if (fallbackResponse.ok) {
-      const fallbackResult = await fallbackResponse.json()
-      if (fallbackResult.code === 200 && fallbackResult.data) {
-        attackSourceTop10.value = fallbackResult.data.slice(0, 10).map((item: any) => ({
-          country: item.region || '未知',
-          count: item.count || 0,
-        }))
-      }
-    }
+    attackSourceTop10.value = []
   } catch (error) {
     console.error('加载攻击来源失败:', error)
   }
@@ -742,14 +739,16 @@ function renderDashboardCharts() {
       xAxis: {
         label: {
           autoRotate: false,
+          autoHide: false,
+          autoEllipsis: false,
         },
       },
       meta: {
         country: {
-          alias: '国家',
+          alias: '地区',
         },
         count: {
-          alias: '攻击次数',
+          alias: '攻击事件数',
         },
       },
     })
@@ -1130,7 +1129,7 @@ onMounted(async () => {
                         关联IOC：
                       </a-typography-text>
                       <a-typography-text strong>
-                        {{ org.iocCount ?? 0 }} 个
+                        {{ formatIocCount(org.iocCount) }} 个
                       </a-typography-text>
                     </span>
                     <span>

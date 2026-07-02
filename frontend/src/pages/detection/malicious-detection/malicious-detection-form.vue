@@ -2,55 +2,216 @@
 import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import { computed, onMounted, ref } from 'vue'
-import { useUserId } from '~/composables/user-id'
 import { useAuthorization } from '~/composables/authorization'
+import { useUserId } from '~/composables/user-id'
 import { getApiBase } from '~/utils/api-public'
 
 defineOptions({
   name: 'MaliciousDetectionForm',
 })
 
+type ModelCategory = 'impersonation' | 'dga' | 'history_similarity'
+type DataSource = 'manualInput' | 'upload' | 'newDomain'
+
+interface ModelOption {
+  key: string
+  id: string | number
+  name: string
+  category: ModelCategory
+  label: string
+}
+
+const API_BASE = getApiBase()
 const userId = useUserId()
 const token = useAuthorization()
 
-// 模型列表
-const modelList = ref<{ id: string | number, name: string }[]>([])
-const selectedModel = ref<string | number | null>('')
+const MODEL_CATEGORIES: Array<{ value: ModelCategory, label: string }> = [
+  { value: 'impersonation', label: '仿冒域名检测模型' },
+  { value: 'dga', label: 'DGA域名检测模型' },
+  { value: 'history_similarity', label: '历史高度相似恶意域名检测模型' },
+]
+
+const modelList = ref<ModelOption[]>([])
+const selectedModelKey = ref('')
 const modelListLoading = ref(false)
+const dataSource = ref<DataSource>('manualInput')
+const submitLoading = ref(false)
+const manualDomains = ref('')
+const uploadFile = ref<File | null>(null)
+const previewResult = ref<any | null>(null)
 
-// 数据来源选择
-const dataSource = ref<'upload' | 'newDomain' | 'manualInput'>('upload')
-
-// 文件上传控制
-const uploadFile = ref<any>(null)
-const uploadLoading = ref(false)
-const fileRules = {
-  maxSize: 5 * 1024 * 1024, // 5MB
-  accept: '.csv,.txt,.xlsx',
-}
-
-// 新注册域名日期范围：开始日期 >= 2024-09-01，窗口最多 30 天
 const MIN_START_DATE = dayjs('2024-09-01')
 const dateRange = ref<[string, string] | null>(null)
 const pickedAnchorDate = ref<dayjs.Dayjs | null>(null)
 const pickedAnchorType = ref<'start' | 'end' | null>(null)
+
+const fileRules = {
+  maxSize: 5 * 1024 * 1024,
+  accept: '.csv,.txt,.xlsx',
+}
+
+const manualDomainItems = computed(() => {
+  return manualDomains.value
+    .split(/[\s,，;；]+/)
+    .map(item => item.trim())
+    .filter(Boolean)
+})
+
+const selectedModel = computed(() => {
+  return modelList.value.find(item => item.key === selectedModelKey.value) || null
+})
+
+const selectedCategory = computed<ModelCategory | ''>(() => selectedModel.value?.category || '')
+
+const selectedModelTypeLabel = computed(() => {
+  return selectedCategory.value ? categoryLabel(selectedCategory.value) : '未选择'
+})
+
+const previewTitle = computed(() => {
+  if (!previewResult.value)
+    return ''
+  return `${categoryLabel(previewResult.value.task_type)}结果预览`
+})
+
+const previewMainCount = computed(() => {
+  const data = previewResult.value
+  if (!data)
+    return 0
+  if (data.task_type === 'impersonation')
+    return data.phishing_count || data.phishing_domains?.length || 0
+  if (data.task_type === 'dga')
+    return data.dga_count || data.dga_domains?.length || 0
+  if (data.task_type === 'history_similarity')
+    return data.history_similarity_count || data.history_similarity_domains?.length || 0
+  return data.malicious_count || data.malicious_domains?.length || 0
+})
+
+const impersonationGroups = computed(() => {
+  const rows = previewResult.value?.phishing_domains || []
+  const grouped = new Map<string, any[]>()
+  rows.forEach((item: any) => {
+    const label = unitGroupLabel(item)
+    if (!grouped.has(label))
+      grouped.set(label, [])
+    grouped.get(label)!.push(item)
+  })
+  return Array.from(grouped.entries()).map(([label, items]) => ({ label, items }))
+})
+
+function buildHeaders(extra: Record<string, string> = {}) {
+  const headers: Record<string, string> = { ...extra }
+  if (userId.value)
+    headers['X-User-Id'] = userId.value
+  if (token.value)
+    headers.Authorization = `Bearer ${token.value}`
+  return headers
+}
+
+function categoryLabel(category: string) {
+  if (category === 'impersonation')
+    return '仿冒域名检测'
+  if (category === 'dga')
+    return 'DGA域名检测'
+  if (category === 'history_similarity')
+    return '历史高度相似恶意域名检测'
+  return '域名检测'
+}
+
+function categoryModelLabel(category: ModelCategory) {
+  return MODEL_CATEGORIES.find(item => item.value === category)?.label || category
+}
+
+function chineseOrdinal(index: number) {
+  const numerals = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
+  if (index <= 10)
+    return numerals[index]
+  return String(index)
+}
+
+function normalizeText(value: any, fallback = '未知') {
+  const text = String(value ?? '').trim()
+  return text || fallback
+}
+
+const MATCH_TYPE_LABELS: Record<string, string> = {
+  typo: '拼写变体',
+  confusable: '视觉混淆',
+  brand_combo: '品牌组合',
+  prefix_suffix: '前后缀诱导',
+  pinyin_abbr: '拼音缩写',
+  service_entry: '服务入口仿冒',
+  hyphenation: '连字符变体',
+  tld_replace: '顶级域替换',
+}
+
+const RISK_LEVEL_LABELS: Record<string, string> = {
+  high: '高',
+  medium: '中',
+  low: '低',
+}
+
+function translateMultiValue(value: any, labels: Record<string, string>) {
+  const text = String(value ?? '').trim()
+  if (!text)
+    return '未知'
+  const parts = text.split(/[|\\/,，、]+/).map(item => item.trim()).filter(Boolean)
+  return Array.from(new Set(parts.map(item => labels[item] || labels[item.toLowerCase()] || item))).join('\\')
+}
+
+function riskLevel(value: any) {
+  const text = String(value ?? '').trim()
+  return RISK_LEVEL_LABELS[text] || RISK_LEVEL_LABELS[text.toLowerCase()] || text || '未知'
+}
+
+function getImpersonationDomain(item: any) {
+  return normalizeText(item.impersonation_domain || item.phishing_domain || item.仿冒域名 || item.钓鱼域名, '未知仿冒域名')
+}
+
+function getOfficialDomain(item: any) {
+  return normalizeText(item.official_domain || item.官方域名 || item.目标域名, '未知官方域名')
+}
+
+function getOfficialUnitName(item: any) {
+  return normalizeText(item.official_unit_name || item.官方单位名称 || item.公司名称, '未知单位')
+}
+
+function unitGroupLabel(item: any) {
+  const rawType = normalizeText(item.official_unit_type || item.单位类型 || item.target_type, '未知')
+  const subtype = normalizeText(item.official_unit_subtype || item.matched_target_subtype || item.target_subtype, '')
+  if (['政府', '金融', '教育'].includes(rawType))
+    return rawType
+  if (rawType === '品牌' && subtype && !['未知', '其他'].includes(subtype))
+    return `品牌-${subtype}`
+  return rawType
+}
+
+function dgaRows() {
+  return (previewResult.value?.dga_domains || []).slice(0, 20)
+}
+
+function historyRows() {
+  return (previewResult.value?.history_similarity_domains || []).slice(0, 20)
+}
+
+function scoreText(value: any) {
+  if (value === null || value === undefined || value === '')
+    return '未知'
+  const num = Number(value)
+  return Number.isFinite(num) ? num.toFixed(4) : String(value)
+}
 
 function disabledNewDomainDate(current: dayjs.Dayjs) {
   const today = dayjs().endOf('day')
   const cur = dayjs(current).startOf('day')
   if (cur.isBefore(MIN_START_DATE, 'day') || cur.isAfter(today, 'day'))
     return true
-  if (pickedAnchorDate.value) {
-    const anchor = pickedAnchorDate.value.startOf('day')
-    if (pickedAnchorType.value === 'start') {
-      if (cur.isBefore(anchor, 'day') || cur.isAfter(anchor.add(30, 'day'), 'day'))
-        return true
-    }
-    else if (pickedAnchorType.value === 'end') {
-      if (cur.isBefore(anchor.subtract(30, 'day'), 'day') || cur.isAfter(anchor, 'day'))
-        return true
-    }
-  }
+  if (!pickedAnchorDate.value)
+    return false
+  const anchor = pickedAnchorDate.value.startOf('day')
+  if (pickedAnchorType.value === 'start')
+    return cur.isBefore(anchor, 'day') || cur.isAfter(anchor.add(30, 'day'), 'day')
+  if (pickedAnchorType.value === 'end')
+    return cur.isBefore(anchor.subtract(30, 'day'), 'day') || cur.isAfter(anchor, 'day')
   return false
 }
 
@@ -78,41 +239,13 @@ function onOpenChange(open: boolean) {
   }
 }
 
-// 归因分析
-const withAttribution = ref(false)
-
-const submitLoading = ref(false)
-const manualDomains = ref('')
-const manualDomainItems = computed(() => {
-  return manualDomains.value
-    .split(/[\s,，;；]+/)
-    .map(item => item.trim())
-    .filter(Boolean)
-})
-
-const API_BASE = getApiBase()
-
-function buildHeaders(extra: Record<string, string> = {}) {
-  const headers: Record<string, string> = { ...extra }
-  if (userId.value)
-    headers['X-User-Id'] = userId.value
-  if (token.value)
-    headers['Authorization'] = `Bearer ${token.value}`
-  return headers
-}
-
 function formatDateList(dates: string[]) {
-  if (!dates.length)
-    return ''
   const visible = dates.slice(0, 5).join('、')
   return dates.length > 5 ? `${visible} 等 ${dates.length} 天` : visible
 }
 
 async function ensureNewDomainDataAvailable(range: [string, string]) {
-  const params = new URLSearchParams({
-    startDate: range[0],
-    endDate: range[1],
-  })
+  const params = new URLSearchParams({ startDate: range[0], endDate: range[1] })
   const resp = await fetch(`${API_BASE}/new-domain-data/availability?${params.toString()}`, {
     method: 'GET',
     headers: buildHeaders(),
@@ -128,36 +261,38 @@ async function ensureNewDomainDataAvailable(range: [string, string]) {
     return false
   }
   const unavailableDates = [...(json.missingDates || []), ...(json.invalidDates || [])]
-  if (unavailableDates.length > 0) {
+  if (unavailableDates.length > 0)
     message.warning(`部分日期暂无可用数据：${formatDateList(unavailableDates)}，将仅检测可用日期。`)
-  }
   return true
 }
 
-// 动态获取模型列表
 async function fetchAvailableModels() {
   modelListLoading.value = true
   try {
-    const resp = await fetch(`${API_BASE}/models/available?category=malicious`, {
-      method: 'GET',
-      headers: buildHeaders(),
-    })
-    
-    if (!resp.ok) {
-      const errorText = await resp.text()
-      throw new Error(errorText)
-    }
-    
-    const json = await resp.json()
-    if (json.code === 0 && json.data) {
-      modelList.value = json.data.map((item: any) => ({
-        id: item.id,
-        name: item.name,
-      }))
-    }
-    else {
-      throw new Error(json.message || '获取模型列表失败')
-    }
+    const allOptions: ModelOption[] = []
+    await Promise.all(MODEL_CATEGORIES.map(async (category) => {
+      const resp = await fetch(`${API_BASE}/models/available?category=${category.value}`, {
+        method: 'GET',
+        headers: buildHeaders(),
+      })
+      const json = await resp.json().catch(() => null)
+      if (!resp.ok)
+        throw new Error(json?.detail || json?.message || await resp.text())
+      if (json.code !== 0 || !Array.isArray(json.data))
+        throw new Error(json?.message || `${category.label}加载失败`)
+      json.data.forEach((item: any) => {
+        allOptions.push({
+          key: `${category.value}:${item.id}`,
+          id: item.id,
+          name: item.name,
+          category: category.value,
+          label: `${category.label}：${item.name}`,
+        })
+      })
+    }))
+    modelList.value = allOptions
+    if (!selectedModelKey.value && allOptions.length > 0)
+      selectedModelKey.value = allOptions[0].key
   }
   catch (e: any) {
     message.error(`模型列表加载失败：${e?.message || '未知错误'}`)
@@ -168,110 +303,98 @@ async function fetchAvailableModels() {
   }
 }
 
-onMounted(() => {
-  fetchAvailableModels()
-})
+onMounted(fetchAvailableModels)
+
+function setDataSource(source: DataSource) {
+  dataSource.value = source
+  previewResult.value = null
+}
 
 function beforeUpload(file: File) {
-  console.log('beforeUpload called, file:', file)
-  // 验证文件
   const fileExt = `.${file.name.split('.').pop()!.toLowerCase()}`
   const acceptedExts = fileRules.accept.split(',').map(ext => ext.trim().toLowerCase())
   const isValid = file.size <= fileRules.maxSize && acceptedExts.includes(fileExt)
-  
   if (!isValid) {
-    message.error('文件不符合要求，仅支持csv/txt/xlsx格式且不超过5MB')
-    return false // 阻止文件上传
+    message.error('文件不符合要求，仅支持CSV/TXT/XLSX格式且不超过5MB')
+    return false
   }
-  
-  // 验证通过，文件会通过 change 事件的 originFileObj 传递
-  console.log('✅ 文件验证通过:', file.name)
-  return false // 阻止自动上传，手动处理
+  return false
 }
+
 function handleUpload(info: any) {
-  // Ant Design Vue Upload 组件的 change 事件
-  const { file } = info
-  
-  console.log('handleUpload called, file:', file)
-  console.log('file.originFileObj:', file.originFileObj)
-  console.log('file.raw:', file.raw)
-  console.log('file.status:', file.status)
-  
-  // 如果文件被移除，清空
+  const file = info.file
   if (file.status === 'removed') {
     uploadFile.value = null
     return
   }
-  
-  // 尝试获取原生 File 对象
-  // Ant Design Vue 中，当 beforeUpload 返回 false 时，原始文件在 originFileObj 中
-  let originalFile: File | null = null
-  
-  // 优先使用 originFileObj（这是 beforeUpload 接收到的原始文件）
-  if (file.originFileObj && file.originFileObj instanceof File) {
-    originalFile = file.originFileObj
-    console.log('使用 originFileObj')
-  } 
-  // 其次尝试 raw
-  else if (file.raw && file.raw instanceof File) {
-    originalFile = file.raw
-    console.log('使用 raw')
+  const originalFile = file.originFileObj || file.raw || file
+  uploadFile.value = originalFile instanceof File ? originalFile : null
+  if (!uploadFile.value)
+    message.error('无法读取上传文件，请重新选择')
+}
+
+function validateBase() {
+  if (!selectedModel.value) {
+    message.warning('请选择检测模型')
+    return false
   }
-  // 最后尝试 file 本身（在某些情况下可能是 File 对象）
-  else if (file instanceof File) {
-    originalFile = file
-    console.log('使用 file 本身')
-  }
-  // 如果都没有，尝试从 beforeUpload 传入的文件（但这不应该在这里，因为 beforeUpload 是同步的）
-  else if (file.file && file.file instanceof File) {
-    originalFile = file.file
-    console.log('使用 file.file')
-  }
-  
-  if (originalFile && originalFile instanceof File) {
-    // 验证文件
-    const isValid = originalFile.size <= fileRules.maxSize && 
-                   fileRules.accept.split(',').some(ext => originalFile!.name.toLowerCase().endsWith(ext.trim()))
-    if (isValid) {
-      uploadFile.value = originalFile
-      console.log('✅ 文件已选择:', originalFile.name, originalFile.size, 'bytes', '类型:', originalFile.type, '构造函数:', originalFile.constructor.name)
-    } else {
-      console.warn('❌ 文件验证失败:', originalFile.name)
-      uploadFile.value = null
-    }
-  } else {
-    console.error('❌ 无法获取有效的文件对象')
-    console.error('file 对象详情:', {
-      type: typeof file,
-      keys: Object.keys(file),
-      originFileObj: file.originFileObj ? typeof file.originFileObj : 'null',
-      raw: file.raw ? typeof file.raw : 'null',
-      isFile: file instanceof File
+  return true
+}
+
+async function handleManualPreview() {
+  if (!validateBase())
+    return
+  if (manualDomainItems.value.length === 0)
+    return message.warning('请输入待检测域名或URL')
+
+  submitLoading.value = true
+  previewResult.value = null
+  try {
+    const fd = new FormData()
+    fd.append('model', String(selectedModel.value!.id))
+    fd.append('modelCategory', selectedModel.value!.category)
+    fd.append('manualDomains', manualDomains.value)
+    const resp = await fetch(`${API_BASE}/manual-domain-detection/preview`, {
+      method: 'POST',
+      body: fd,
+      headers: buildHeaders(),
     })
-    uploadFile.value = null
+    const json = await resp.json().catch(() => null)
+    if (!resp.ok)
+      throw new Error(json?.detail || json?.message || '检测失败')
+    previewResult.value = json
+    dataSource.value = 'manualInput'
+    message.success('手动输入域名检测完成')
+  }
+  catch (e: any) {
+    message.error(`检测失败：${e?.message || '未知错误'}`)
+  }
+  finally {
+    submitLoading.value = false
   }
 }
 
-async function handleSubmit() {
-  if (!selectedModel.value) {
-    return message.warning('请选择检测模型')
-  }
-  if (dataSource.value === 'upload' && !uploadFile.value) {
+function asyncEndpointForCategory(category: ModelCategory) {
+  if (category === 'impersonation')
+    return '/impersonation-unified-tasks'
+  if (category === 'dga')
+    return '/dga-tasks'
+  return '/history-similarity-tasks'
+}
+
+async function handleAsyncSubmit() {
+  if (!validateBase())
+    return
+  if (dataSource.value === 'upload' && !uploadFile.value)
     return message.warning('请上传待检测文件')
-  }
-  if (dataSource.value === 'newDomain' && !dateRange.value) {
+  if (dataSource.value === 'newDomain' && !dateRange.value)
     return message.warning('请选择日期范围')
-  }
-  if (dataSource.value === 'manualInput' && manualDomainItems.value.length === 0) {
-    return message.warning('请输入待检测域名或 URL')
-  }
   if (dataSource.value === 'newDomain' && dateRange.value) {
-    const [start, end] = dateRange.value
-    const days = dayjs(end).startOf('day').diff(dayjs(start).startOf('day'), 'day')
-    if (days > 30) {
+    const days = dayjs(dateRange.value[1]).startOf('day').diff(dayjs(dateRange.value[0]).startOf('day'), 'day')
+    if (days > 30)
       return message.warning('日期范围最多为一个月')
-    }
   }
+
   submitLoading.value = true
   try {
     if (dataSource.value === 'newDomain' && dateRange.value) {
@@ -281,103 +404,47 @@ async function handleSubmit() {
     }
 
     const fd = new FormData()
-    fd.append('model', String(selectedModel.value))
+    fd.append('model', String(selectedModel.value!.id))
     fd.append('dataSource', dataSource.value)
-    fd.append('withAttribution', String(withAttribution.value))
-    
-    if (dataSource.value === 'upload' && uploadFile.value) {
-      // 验证文件对象
-      if (!(uploadFile.value instanceof File)) {
-        console.error('❌ 文件对象类型错误:', {
-          type: typeof uploadFile.value,
-          constructor: uploadFile.value?.constructor?.name,
-          value: uploadFile.value,
-          keys: uploadFile.value ? Object.keys(uploadFile.value) : []
-        })
-        message.error('文件对象无效，请重新选择文件')
-        throw new Error('文件对象无效，请重新上传文件')
-      }
-      
-      // 再次验证文件确实是File实例
-      const file = uploadFile.value as File
-      console.log('✅ 准备上传文件:', {
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        lastModified: file.lastModified,
-        constructor: file.constructor.name,
-        isFile: file instanceof File,
-        isBlob: file instanceof Blob
-      })
-      
-      // 确保使用原生File对象添加到FormData
-      // FormData.append(name, value, filename?) - 第三个参数可选，但最好提供文件名
-      fd.append('file', file, file.name)
-      
-      // 验证FormData中的文件
-      if (fd.has('file')) {
-        console.log('✅ FormData中已包含file字段')
-      } else {
-        console.error('❌ FormData中未找到file字段')
-        throw new Error('文件添加失败')
-      }
-    }
-    
-    if (dataSource.value === 'newDomain' && dateRange.value) {
+    if (dataSource.value === 'upload' && uploadFile.value)
+      fd.append('file', uploadFile.value, uploadFile.value.name)
+    if (dataSource.value === 'newDomain' && dateRange.value)
       fd.append('dateRange', JSON.stringify(dateRange.value))
-    }
 
-    if (dataSource.value === 'manualInput') {
-      fd.append('manualDomains', manualDomains.value)
-    }
-    
-    // 调试：打印FormData内容
-    console.log('提交FormData:', {
-      model: selectedModel.value,
-      dataSource: dataSource.value,
-      withAttribution: withAttribution.value,
-      hasFile: dataSource.value === 'upload' && uploadFile.value !== null,
-      hasDateRange: dataSource.value === 'newDomain' && dateRange.value !== null,
-      manualInputCount: dataSource.value === 'manualInput' ? manualDomainItems.value.length : 0,
-    })
-    
-    const headers: HeadersInit = buildHeaders()
-    const resp = await fetch(`${API_BASE}/tasks`, { 
-      method: 'POST', 
+    const resp = await fetch(`${API_BASE}${asyncEndpointForCategory(selectedModel.value!.category)}`, {
+      method: 'POST',
       body: fd,
-      headers,
+      headers: buildHeaders(),
     })
-    if (!resp.ok) {
-      let errorText = ''
-      try {
-        const errorJson = await resp.json()
-        errorText = JSON.stringify(errorJson)
-        console.error('提交失败详情:', errorJson)
-      } catch {
-        errorText = await resp.text()
-        console.error('提交失败:', errorText)
-      }
-      throw new Error(`提交失败: ${resp.status} ${errorText}`)
-    }
-    const json = await resp.json()
-    message.success(`检测任务已提交！ task: ${json.task_id || ''}`)
-    resetForm()
+    const json = await resp.json().catch(() => null)
+    if (!resp.ok)
+      throw new Error(json?.detail || json?.message || '提交失败')
+
+    message.success(`检测任务已提交，可在“我的任务”查看结果。task: ${json.task_id || ''}`)
+    resetForm(false)
   }
   catch (e: any) {
-    console.error('提交错误:', e)
-    message.error(`提交失败: ${e.message || '未知错误'}`)
+    message.error(`提交失败：${e?.message || '未知错误'}`)
   }
   finally {
     submitLoading.value = false
   }
 }
-function resetForm() {
-  selectedModel.value = ''
-  dataSource.value = 'upload'
+
+function handleSubmit() {
+  if (dataSource.value === 'manualInput')
+    return handleManualPreview()
+  return handleAsyncSubmit()
+}
+
+function resetForm(clearModel = true) {
+  if (clearModel)
+    selectedModelKey.value = modelList.value[0]?.key || ''
+  dataSource.value = 'manualInput'
   uploadFile.value = null
   dateRange.value = null
   manualDomains.value = ''
-  withAttribution.value = false
+  previewResult.value = null
 }
 </script>
 
@@ -385,63 +452,64 @@ function resetForm() {
   <div class="task-layout">
     <a-row :gutter="[24, 24]">
       <a-col :xs="24" :xl="16">
-        <a-card class="form-card" :bordered="false">
+        <a-card v-if="!previewResult" class="form-card" :bordered="false">
           <div class="card-header">
-            <div class="card-title">
-              创建恶意性检测任务
-            </div>
+            <div class="card-title">创建域名检测任务</div>
             <div class="card-subtitle">
-              上传待检测域名文件、选择新注册域名时间窗，或手动输入域名进行批量检测。
+              选择仿冒域名、DGA 域名或历史高度相似恶意域名检测模型。手动输入会直接生成预览结果；上传文件和新注册域名创建异步任务。
             </div>
             <div class="header-tags">
-              <span class="mini-tag">风险识别</span>
-              <span class="mini-tag">批量检测</span>
-              <span class="mini-tag">组织分析</span>
+              <span class="mini-tag">仿冒检测</span>
+              <span class="mini-tag">DGA检测</span>
+              <span class="mini-tag">历史相似</span>
             </div>
           </div>
 
           <a-form layout="vertical" class="task-form">
             <div class="form-section">
-              <div class="section-title">
-                步骤 1：选择检测模型
-              </div>
+              <div class="section-title">步骤 1：选择检测模型</div>
               <a-form-item label="检测模型">
                 <a-select
-                  v-model:value="selectedModel"
-                  placeholder="请选择用于本次检测的模型"
-                  :options="modelList.map(m => ({ label: m.name, value: m.id }))"
+                  v-model:value="selectedModelKey"
+                  placeholder="请选择检测模型"
+                  :options="modelList.map(item => ({ label: item.label, value: item.key }))"
                   :loading="modelListLoading"
                   allow-clear
                 />
+                <div class="form-tip">
+                  当前模型类型：{{ selectedModelTypeLabel }}
+                </div>
               </a-form-item>
             </div>
 
             <div class="form-section">
-              <div class="section-title">
-                步骤 2：选择数据来源
+              <div class="section-title">步骤 2：选择数据来源</div>
+              <div class="source-toolbar">
+                <a-input-search
+                  v-model:value="manualDomains"
+                  class="manual-search"
+                  placeholder="手动输入域名，多个域名可用空格、逗号或换行分隔"
+                  enter-button="直接检测"
+                  :loading="submitLoading && dataSource === 'manualInput'"
+                  @focus="setDataSource('manualInput')"
+                  @search="handleManualPreview"
+                />
+                <a-button :type="dataSource === 'upload' ? 'primary' : 'default'" @click="setDataSource('upload')">
+                  上传文件
+                </a-button>
+                <a-button :type="dataSource === 'newDomain' ? 'primary' : 'default'" @click="setDataSource('newDomain')">
+                  选择新注册域名
+                </a-button>
               </div>
-              <a-form-item label="数据来源">
-                <a-radio-group v-model:value="dataSource" button-style="solid">
-                  <a-radio-button value="upload">
-                    上传文件
-                  </a-radio-button>
-                  <a-radio-button value="newDomain">
-                    选择新注册域名
-                  </a-radio-button>
-                  <a-radio-button value="manualInput">
-                    手动输入域名
-                  </a-radio-button>
-                </a-radio-group>
-              </a-form-item>
-              <a-form-item
-                v-if="dataSource === 'upload'"
-                label="待检测数据文件"
-              >
+              <div v-if="dataSource === 'manualInput'" class="manual-input-meta">
+                当前输入 {{ manualDomainItems.length }} 项
+              </div>
+
+              <a-form-item v-if="dataSource === 'upload'" label="待检测数据文件" class="source-panel">
                 <a-upload-dragger
                   :before-upload="beforeUpload"
                   :show-upload-list="false"
                   :accept="fileRules.accept"
-                  :disabled="uploadLoading"
                   :custom-request="() => {}"
                   class="upload-card"
                   @change="handleUpload"
@@ -452,12 +520,11 @@ function resetForm() {
                   <p class="upload-title">
                     {{ uploadFile ? uploadFile.name : '点击或拖拽上传待检测域名文件' }}
                   </p>
-                  <p class="upload-subtitle">
-                    支持 CSV / TXT / XLSX，单文件不超过 5MB
-                  </p>
+                  <p class="upload-subtitle">支持 CSV / TXT / XLSX，单文件不超过 5MB</p>
                 </a-upload-dragger>
               </a-form-item>
-              <a-form-item v-if="dataSource === 'newDomain'" label="新注册域名数据日期范围">
+
+              <a-form-item v-if="dataSource === 'newDomain'" label="新注册域名数据日期范围" class="source-panel">
                 <a-range-picker
                   v-model:value="dateRange"
                   :disabled-date="disabledNewDomainDate"
@@ -468,46 +535,88 @@ function resetForm() {
                   @open-change="onOpenChange"
                 />
               </a-form-item>
-              <a-form-item v-if="dataSource === 'manualInput'" label="待检测域名或 URL">
-                <a-textarea
-                  v-model:value="manualDomains"
-                  class="manual-input"
-                  :rows="8"
-                  :maxlength="20000"
-                  placeholder="每行输入一个域名或 URL，例如：&#10;example.com&#10;https://login.example.org/path"
-                  show-count
-                />
-                <div class="manual-input-meta">
-                  当前输入 {{ manualDomainItems.length }} 项，提交后后端会自动提取域名、去重并过滤无效内容。
-                </div>
-              </a-form-item>
-            </div>
-
-            <div class="form-section">
-              <div class="attribution-box">
-                <a-checkbox v-model:checked="withAttribution">
-                  输出组织关联分析
-                </a-checkbox>
-                <div class="attribution-tip">
-                  勾选后，系统将结合历史 IOC 特征生成疑似关联组织与证据摘要。
-                </div>
-              </div>
             </div>
 
             <div class="action-footer">
-              <a-button
-                type="primary"
-                :loading="submitLoading"
-                class="submit-btn"
-                @click="handleSubmit"
-              >
-                提交任务
+              <a-button type="primary" :loading="submitLoading" class="submit-btn" @click="handleSubmit">
+                {{ dataSource === 'manualInput' ? '直接检测并查看结果' : '提交任务' }}
               </a-button>
-              <a-button @click="resetForm">
-                重置
-              </a-button>
+              <a-button @click="resetForm()">重置</a-button>
             </div>
           </a-form>
+        </a-card>
+
+        <a-card v-else class="result-card" :bordered="false">
+          <div class="result-header">
+            <div>
+              <div class="card-title">{{ previewTitle }}</div>
+              <div class="card-subtitle">
+                手动输入域名检测结果，仅展示核心命中信息；上传文件和新注册域名任务请到“我的任务”查看完整结果。
+              </div>
+            </div>
+            <a-button @click="previewResult = null">返回创建任务</a-button>
+          </div>
+
+          <div class="result-table">
+            <div class="result-row result-title-row">
+              <div class="result-cell label">检测类型</div>
+              <div class="result-cell">{{ categoryLabel(previewResult.task_type) }}</div>
+            </div>
+            <div class="result-row">
+              <div class="result-cell label">检测模型</div>
+              <div class="result-cell">{{ previewResult.model?.name || selectedModel?.name || '-' }}</div>
+            </div>
+            <div class="result-row">
+              <div class="result-cell label">输入域名数</div>
+              <div class="result-cell">{{ previewResult.manual_domain_stats?.valid_count || manualDomainItems.length }}</div>
+            </div>
+            <div class="result-row">
+              <div class="result-cell label">命中数量</div>
+              <div class="result-cell">
+                <a-tag :color="previewMainCount > 0 ? 'red' : 'green'">{{ previewMainCount }}</a-tag>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="previewResult.task_type === 'impersonation'" class="report-block">
+            <div class="report-line">检测类型：仿冒域名检测</div>
+            <div class="report-line">仿冒域名数量：{{ previewMainCount }}</div>
+            <template v-if="previewMainCount > 0">
+              <div v-for="(group, groupIndex) in impersonationGroups" :key="group.label" class="report-group">
+                <div class="report-group-title">{{ chineseOrdinal(groupIndex + 1) }}、单位类型：{{ group.label }}</div>
+                <div v-for="(item, itemIndex) in group.items.slice(0, 20)" :key="`${group.label}-${itemIndex}`" class="report-item">
+                  <div>{{ itemIndex + 1 }}. 仿冒域名：{{ getImpersonationDomain(item) }}</div>
+                  <div>   官方域名：{{ getOfficialDomain(item) }}</div>
+                  <div>   官方单位名称：{{ getOfficialUnitName(item) }}</div>
+                  <div>   匹配类型：{{ translateMultiValue(item.match_type || item.匹配类型, MATCH_TYPE_LABELS) }}</div>
+                  <div>   风险等级：{{ riskLevel(item.risk_level || item.风险等级) }}</div>
+                </div>
+              </div>
+            </template>
+            <a-empty v-else description="未发现中高风险仿冒域名" />
+          </div>
+
+          <div v-else-if="previewResult.task_type === 'dga'" class="report-block">
+            <div class="report-line">检测类型：DGA域名检测</div>
+            <div class="report-line">DGA-like 域名数量：{{ previewMainCount }}</div>
+            <div v-for="(item, index) in dgaRows()" :key="index" class="report-item">
+              <div>{{ index + 1 }}. 域名：{{ item.域名 || item.domain || '未知域名' }}</div>
+              <div>   DGA评分：{{ scoreText(item.DGA_score || item.dga_score) }}</div>
+              <div>   判定结果：{{ item.预测结果 || 'DGA-like' }}</div>
+            </div>
+            <a-empty v-if="previewMainCount === 0" description="未发现DGA-like候选域名" />
+          </div>
+
+          <div v-else class="report-block">
+            <div class="report-line">检测类型：历史高度相似恶意域名检测</div>
+            <div class="report-line">历史高度相似域名数量：{{ previewMainCount }}</div>
+            <div v-for="(item, index) in historyRows()" :key="index" class="report-item">
+              <div>{{ index + 1 }}. 待检测域名：{{ item.域名 || item.domain || '未知域名' }}</div>
+              <div>   匹配历史恶意域名：{{ item.匹配历史恶意域名 || item.matched_domain || '未知' }}</div>
+              <div>   综合相似度：{{ scoreText(item.综合相似度 || item.score) }}</div>
+            </div>
+            <a-empty v-if="previewMainCount === 0" description="未发现历史高度相似恶意域名" />
+          </div>
         </a-card>
       </a-col>
 
@@ -515,24 +624,16 @@ function resetForm() {
         <div class="side-panel">
           <a-card title="填写说明" class="guide-card" :bordered="false">
             <ul class="guide-list">
-              <li><span class="dot">1</span><span>选择模型后再选择数据来源。</span></li>
-              <li><span class="dot">2</span><span>文件支持 CSV、TXT、XLSX，大小不超过 5MB。</span></li>
-              <li><span class="dot">3</span><span>手动输入支持域名或 URL，提交后统一清洗为域名。</span></li>
-              <li><span class="dot">4</span><span>新注册域名模式下，日期跨度最多 30 天。</span></li>
+              <li><span class="dot">1</span><span>模型下拉中包含仿冒、DGA、历史高度相似三类检测模型。</span></li>
+              <li><span class="dot">2</span><span>手动输入会立即返回预览结果，适合少量域名快速核查。</span></li>
+              <li><span class="dot">3</span><span>上传文件和新注册域名会创建任务，结果在“我的任务”中展示。</span></li>
             </ul>
           </a-card>
-          <a-card title="推荐流程" class="guide-card" :bordered="false">
+          <a-card title="默认策略" class="guide-card" :bordered="false">
             <ul class="guide-list">
-              <li><span class="dot">1</span><span>选择与任务类型匹配的模型。</span></li>
-              <li><span class="dot">2</span><span>优先使用结构化域名文件。</span></li>
-              <li><span class="dot">3</span><span>提交后在“我的任务”中查看进度。</span></li>
-            </ul>
-          </a-card>
-          <a-card title="输出结果" class="guide-card" :bordered="false">
-            <ul class="guide-list">
-              <li><span class="dot">1</span><span>风险等级与高风险域名列表。</span></li>
-              <li><span class="dot">2</span><span>可选组织关联分析。</span></li>
-              <li><span class="dot">3</span><span>结果可用于预警订阅与后续核查。</span></li>
+              <li><span class="dot">1</span><span>仿冒域名检测默认加载系统全量白名单。</span></li>
+              <li><span class="dot">2</span><span>DGA检测使用当前DGA模型输出DGA-like候选。</span></li>
+              <li><span class="dot">3</span><span>历史相似检测按历史恶意样本相似度进行排序。</span></li>
             </ul>
           </a-card>
         </div>
@@ -552,17 +653,23 @@ function resetForm() {
   margin: 0 auto;
 }
 
-.form-card {
+.form-card,
+.result-card {
   border-radius: 16px;
   border: 1px solid rgba(220, 226, 235, 0.9);
   box-shadow: 0 8px 24px rgba(15, 35, 80, 0.06);
-  min-height: 700px;
-  display: flex;
-  flex-direction: column;
+  min-height: 620px;
 }
 
-.card-header {
-  margin-bottom: 12px;
+.card-header,
+.result-header {
+  margin-bottom: 16px;
+}
+
+.result-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .card-title {
@@ -572,7 +679,9 @@ function resetForm() {
   color: #1f2937;
 }
 
-.card-subtitle {
+.card-subtitle,
+.form-tip,
+.manual-input-meta {
   margin-top: 6px;
   color: #667085;
   line-height: 1.65;
@@ -599,7 +708,6 @@ function resetForm() {
 .task-form {
   display: flex;
   flex-direction: column;
-  flex: 1;
 }
 
 .form-section {
@@ -616,6 +724,20 @@ function resetForm() {
   margin-bottom: 10px;
 }
 
+.source-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.manual-search {
+  flex: 1;
+}
+
+.source-panel {
+  margin-top: 14px;
+}
+
 .upload-card {
   border-radius: 12px;
 }
@@ -624,10 +746,6 @@ function resetForm() {
   min-height: 152px;
   border-color: #dbe7ff;
   background: #f9fbff;
-}
-
-:deep(.upload-card.ant-upload-wrapper .ant-upload-drag:hover) {
-  border-color: #1677ff;
 }
 
 .upload-icon {
@@ -646,33 +764,7 @@ function resetForm() {
   margin-bottom: 0;
 }
 
-.manual-input {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-}
-
-.manual-input-meta {
-  margin-top: 8px;
-  color: #667085;
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.attribution-box {
-  border-radius: 10px;
-  background: #f8fafc;
-  border: 1px solid #e5e7eb;
-  padding: 10px 12px;
-}
-
-.attribution-tip {
-  margin-top: 6px;
-  color: #667085;
-  font-size: 13px;
-  line-height: 1.6;
-}
-
 .action-footer {
-  margin-top: auto;
   border-top: 1px solid #e5e7eb;
   padding-top: 16px;
   display: flex;
@@ -680,7 +772,7 @@ function resetForm() {
 }
 
 .submit-btn {
-  min-width: 150px;
+  min-width: 160px;
 }
 
 .side-panel {
@@ -722,5 +814,82 @@ function resetForm() {
   text-align: center;
   flex-shrink: 0;
   margin-top: 4px;
+}
+
+.result-table {
+  border: 1px solid #d9dfe7;
+  border-bottom: none;
+  margin-bottom: 18px;
+}
+
+.result-row {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  border-bottom: 1px solid #d9dfe7;
+}
+
+.result-title-row {
+  background: #c8eef6;
+}
+
+.result-cell {
+  padding: 10px 12px;
+  min-height: 42px;
+}
+
+.result-cell.label {
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.03);
+  border-right: 1px solid #d9dfe7;
+}
+
+.report-block {
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  padding: 16px;
+  white-space: pre-wrap;
+}
+
+.report-line {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.report-group {
+  margin-top: 14px;
+}
+
+.report-group-title {
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 8px;
+}
+
+.report-item {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  margin-bottom: 10px;
+  color: #344054;
+  line-height: 1.7;
+}
+
+@media (max-width: 768px) {
+  .source-toolbar,
+  .result-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .result-row {
+    grid-template-columns: 1fr;
+  }
+
+  .result-cell.label {
+    border-right: none;
+    border-bottom: 1px solid #d9dfe7;
+  }
 }
 </style>

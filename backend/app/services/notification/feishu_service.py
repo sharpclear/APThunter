@@ -231,6 +231,7 @@ def send_alert_notification(
     detail_page_url: str,
     risk_summary: str,
     suspected_association_text: Optional[str] = None,
+    impersonation_matches: Optional[List[Dict[str, Any]]] = None,
     phishing_matches: Optional[List[Dict[str, Any]]] = None,
     history_similarity_records: Optional[List[Dict[str, Any]]] = None,
     dga_records: Optional[List[Dict[str, Any]]] = None,
@@ -259,7 +260,11 @@ def send_alert_notification(
     lines.append([{"tag": "text", "text": f"预警策略：{summary_text}\n"}])
 
     if task_type == "impersonation":
-        return _send_impersonation_alert_posts(title, lines, phishing_matches or [])
+        return _send_impersonation_alert_posts(
+            title,
+            lines,
+            impersonation_matches or phishing_matches or [],
+        )
     if task_type == "history_similarity":
         return send_post(
             title,

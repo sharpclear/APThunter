@@ -22,8 +22,9 @@ except ImportError:  # pragma: no cover - used when run as python feature_extrac
 
 
 READ_ENCODINGS = ("utf-8-sig", "utf-8", "gbk")
-DEFAULT_KEYWORDS_PATH = Path("configs/keywords.yaml")
-DEFAULT_TEMPLATES_PATH = Path("configs/templates.yaml")
+PACKAGE_DIR = Path(__file__).resolve().parent
+DEFAULT_KEYWORDS_PATH = PACKAGE_DIR / "configs/keywords.yaml"
+DEFAULT_TEMPLATES_PATH = PACKAGE_DIR / "configs/templates.yaml"
 
 CATEGORY_COLUMNS = [
     "category_brand_combo",

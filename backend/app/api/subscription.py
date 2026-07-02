@@ -86,6 +86,10 @@ def beijing_datetime_to_naive(dt: datetime) -> datetime:
 # 添加models目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'models'))
 # 从 entities / main / db / core 导入必要的依赖
+MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models"))
+if MODELS_DIR not in sys.path:
+    sys.path.insert(0, MODELS_DIR)
+
 from app.entities import AlertFile, Task, Model, StoredFile, User
 from app.infra.minio_client import minio_client
 from app.db.session import SessionLocal, engine
@@ -109,9 +113,10 @@ from app.api.detection import (
     RESULTS_BUCKET,
 )
 from malicious_detection_daily import predict_from_domains, predict_from_domains_subscription
-from phishing_detector import (
+from impersonation_detector import (
     read_official_domains_from_file,
     predict_from_domains as phishing_predict_from_domains,
+    predict_from_domains_with_report as phishing_predict_from_domains_with_report,
 )
 from history_similarity_detection import (
     alert_rows_to_score_records as history_alert_rows_to_score_records,
@@ -809,6 +814,7 @@ def execute_subscription(subscription_id: str):
         results_malicious_subscription = None
         results_history_similarity_subscription = None
         results_dga_subscription = None
+        word_report_content = None
 
         # 根据模型类型执行不同的检测
         if model.model_category == "impersonation":
@@ -867,7 +873,7 @@ def execute_subscription(subscription_id: str):
             # 将阈值从0-100转换为0-1（相似度阈值范围）
             similarity_threshold = subscription.threshold / 100.0 if subscription.threshold is not None else None
             
-            excel_content, statistics = phishing_predict_from_domains(
+            excel_content, statistics, word_report_content = phishing_predict_from_domains_with_report(
                 official_domains,
                 detection_domains,
                 similarity_threshold=similarity_threshold
@@ -1016,15 +1022,32 @@ def execute_subscription(subscription_id: str):
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             bucket=RESULTS_BUCKET
         )
+        word_report_key = None
+        word_report_filename = None
+        if model.model_category == "impersonation" and word_report_content:
+            word_report_filename = f"prediction_report_{task_id}_{beijing_now().strftime('%Y%m%d_%H%M%S')}.docx"
+            word_report_key = upload_file_content_to_minio(
+                word_report_content,
+                word_report_filename,
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                bucket=RESULTS_BUCKET
+            )
         
         # 更新任务extra
-        task.extra.update({
+        extra_update = {
             "result_file_key": result_key,
             "result_bucket": RESULTS_BUCKET,
             "result_filename": result_filename,
             "statistics": statistics,
             "completed_at": beijing_now().isoformat(),
-        })
+        }
+        if word_report_key:
+            extra_update.update({
+                "word_report_file_key": word_report_key,
+                "word_report_bucket": RESULTS_BUCKET,
+                "word_report_filename": word_report_filename,
+            })
+        task.extra.update(extra_update)
         db.commit()
         db.refresh(task)
 
@@ -1233,7 +1256,7 @@ def execute_subscription(subscription_id: str):
                 high_risk_domains=high_risk_domains,
                 match_results=match_results_by_domain,
                 results_malicious_subscription=risk_score_records,
-                phishing_matches=phishing_alert_items,
+                impersonation_matches=phishing_alert_items,
                 detected_count=total_count,
                 high_risk_count=high_risk_count,
                 alert_time=alert.created_at or beijing_now(),
@@ -1352,7 +1375,7 @@ def execute_subscription(subscription_id: str):
                 created_at=alert.created_at.isoformat() if alert.created_at else beijing_now().isoformat(),
                 high_risk_domains=high_risk_domains,
                 match_results_by_domain=match_results_by_domain,
-                phishing_matches=phishing_alert_items,
+                impersonation_matches=phishing_alert_items,
                 history_similarity_records=(
                     results_history_similarity_subscription
                     if task.task_type == "history_similarity"

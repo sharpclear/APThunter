@@ -17,12 +17,14 @@ try:
     from app.models.impersonation_v1.runtime import (
         detect_impersonation_domains as detect_impersonation_domains_v1,
         predict_from_domains as predict_from_domains_v1,
+        predict_from_domains_with_report as predict_from_domains_with_report_v1,
     )
 except ImportError:  # pragma: no cover - direct import from models directory
     from impersonation_opus_llm_judge import KEEP_RECOMMENDATIONS, MODEL_NAME as LLM_MODEL_NAME, build_candidate_items, judge_batch
     from impersonation_v1.runtime import (
         detect_impersonation_domains as detect_impersonation_domains_v1,
         predict_from_domains as predict_from_domains_v1,
+        predict_from_domains_with_report as predict_from_domains_with_report_v1,
     )
 
 
@@ -2302,6 +2304,18 @@ def predict_from_domains(
     )
 
 
+def predict_from_domains_with_report(
+    official_domains: List[Tuple[str, str]],
+    detection_domains: List[str],
+    similarity_threshold: Optional[float] = None,
+) -> Tuple[bytes, dict, bytes]:
+    return predict_from_domains_with_report_v1(
+        official_domains,
+        detection_domains,
+        similarity_threshold=similarity_threshold,
+    )
+
+
 def predict_from_file(
     official_file_content: bytes,
     official_filename: str,
@@ -2316,6 +2330,26 @@ def predict_from_file(
             raise ValueError("必须提供待检测域名文件或域名列表")
         detection_domains = read_detection_domains_from_file(detection_file_content, detection_filename)
     return predict_from_domains(official_domains, detection_domains, similarity_threshold=similarity_threshold)
+
+
+def predict_from_file_with_report(
+    official_file_content: bytes,
+    official_filename: str,
+    detection_file_content: bytes | None = None,
+    detection_filename: str | None = None,
+    detection_domains: List[str] | None = None,
+    similarity_threshold: Optional[float] = None,
+) -> Tuple[bytes, dict, bytes]:
+    official_domains = read_official_domains_from_file(official_file_content, official_filename)
+    if detection_domains is None:
+        if detection_file_content is None or detection_filename is None:
+            raise ValueError("必须提供待检测域名文件或域名列表")
+        detection_domains = read_detection_domains_from_file(detection_file_content, detection_filename)
+    return predict_from_domains_with_report(
+        official_domains,
+        detection_domains,
+        similarity_threshold=similarity_threshold,
+    )
 
 
 # =========================================================

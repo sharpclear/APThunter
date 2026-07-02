@@ -30,12 +30,13 @@
 | `MINIO_BUCKET` | MinIO 存储桶名称 | `uploads` | 是 |
 | `MYSQL_URL` | MySQL 连接字符串 | `mysql+pymysql://apthunter:4CyUhr2zu6!@mysql:3306/apthunter_new` | 是 |
 | `IMPERSONATION_MODEL_NAME` | 仿冒检测模型名称 | `impersonation_detector` | 否 |
+| `IMPERSONATION_FULL_WHITELIST_PATH` | 仿冒检测系统全量官方白名单路径；订阅未上传官方域名文件时使用 | `/app/app/data/official_domains/full_whitelist.csv` | 否 |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | 登录 JWT 有效期（分钟） | `1440`（24 小时） | 否 |
 | `DEEPSEEK_API_KEY` | DeepSeek API Key，用于官方域名解析和仿冒域名 LLM 研判 | 空 | 是（使用事件名/单位名创建仿冒检测时） |
 | `DEEPSEEK_MODEL` | DeepSeek 模型名称 | `deepseek-v4-flash` | 否 |
 | `DEEPSEEK_API_URL` | DeepSeek Chat Completions API 地址 | `https://api.deepseek.com/chat/completions` | 否 |
 | `OFFICIAL_DOMAIN_RESOLVER_MAX_DOMAINS` | 事件名/单位名最多解析的官方域名数 | `20` | 否 |
-| `PHISHING_LLM_MAX_RETRIES` | 仿冒域名 LLM 调用最大重试次数 | `3` | 否 |
+| `IMPERSONATION_LLM_MAX_RETRIES` | 仿冒域名 LLM 调用最大重试次数 | `3` | 否 |
 
 ### 前端服务
 
@@ -78,6 +79,7 @@ MINIO_SECRET_KEY=your_minio_password
 MINIO_BUCKET=uploads
 MYSQL_URL=mysql+pymysql://apthunter:your_secure_password@mysql:3306/apthunter_new
 IMPERSONATION_MODEL_NAME=impersonation_detector
+IMPERSONATION_FULL_WHITELIST_PATH=/app/app/data/official_domains/full_whitelist.csv
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
 DEEPSEEK_API_KEY=your_deepseek_api_key
 DEEPSEEK_MODEL=deepseek-v4-flash

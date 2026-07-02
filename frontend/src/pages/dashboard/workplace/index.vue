@@ -9,6 +9,13 @@ defineOptions({
   name: 'Workplace',
 })
 
+function formatIocCount(count?: number | string | null) {
+  const value = Number(count ?? 0)
+  if (!Number.isFinite(value))
+    return 0
+  return value === 100 ? '100+' : value
+}
+
 // 选中的事件
 const selectedEvent = ref<AptEvent | null>(null)
 // 选中的组织
@@ -690,7 +697,7 @@ watch(
                         关联IOC：
                       </a-typography-text>
                       <a-typography-text strong>
-                        {{ org.iocCount ?? 0 }} 个
+                        {{ formatIocCount(org.iocCount) }} 个
                       </a-typography-text>
                     </span>
                     <span>

@@ -157,6 +157,10 @@ function resetFilters() {
   currentPage.value = 1
 }
 
+function isImpersonationTask(record: TaskItem) {
+  return record.taskType.includes('仿冒')
+}
+
 function handleSearch() {
   currentPage.value = 1
 }
@@ -211,7 +215,10 @@ async function downloadResult(record: TaskItem) {
     const blob = await resp.blob()
     const disposition = resp.headers.get('content-disposition') || ''
     const match = disposition.match(/filename\*=utf-8''(.+)/i)
-    const filename = decodeURIComponent(match?.[1] || record.resultFileName || `${record.id}.xlsx`)
+    const fallbackFilename = isImpersonationTask(record)
+      ? `${record.id}_prediction_report.docx`
+      : (record.resultFileName || `${record.id}.xlsx`)
+    const filename = decodeURIComponent(match?.[1] || fallbackFilename)
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -446,7 +453,7 @@ function handleModalDownload(taskId: string) {
                 :disabled="record.status !== '已完成' || !record.resultFileKey"
                 @click="() => downloadResult(record)"
               >
-                下载
+                {{ isImpersonationTask(record) ? '下载报告' : '下载' }}
               </a-button>
               <a-button size="small" danger @click="() => confirmDelete(record)">
                 删除

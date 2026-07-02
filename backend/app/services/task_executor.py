@@ -17,14 +17,21 @@ from app.services.domain_infra_collector import collect_missing_domain_infra
 
 # 添加models目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "models"))
+MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models"))
+if MODELS_DIR not in sys.path:
+    sys.path.insert(0, MODELS_DIR)
+
 from malicious_detection import predict_from_file, predict_from_domains
 from dga_domain_detection import (
     predict_from_file as dga_predict_from_file,
     predict_from_domains as dga_predict_from_domains,
 )
-from phishing_detector import (
+from impersonation_detector import (
     predict_from_file as phishing_predict_from_file,
+    predict_from_file_with_report as phishing_predict_from_file_with_report,
     predict_from_domains as phishing_predict_from_domains,
+    predict_from_domains_with_report as phishing_predict_from_domains_with_report,
+    read_detection_domains_from_file,
     read_official_domains_from_file,
 )
 from history_similarity_detection import (
@@ -612,18 +619,35 @@ def execute_impersonation_task(task_id: str):
         official_domains = extra_data.get("official_domains") or []
         official_key = extra_data.get("official_file_object_key")
         official_bucket = extra_data.get("official_file_bucket") or MINIO_BUCKET
+        official_file_path = extra_data.get("official_file_path")
         official_file_content = None
         official_filename = extra_data.get("official_file_filename") or official_key
+        loaded_from_full_whitelist_path = False
         if not official_domains and official_key:
             official_file_content = _download_file_from_minio(official_key, official_bucket)
             official_domains = read_official_domains_from_file(
                 official_file_content,
                 official_filename,
             )
-            extra_data["official_domains"] = [
-                {"单位名称": str(company or ""), "官方域名": str(domain or "")}
-                for company, domain, *rest in official_domains
-            ]
+        elif not official_domains and official_file_path:
+            official_file_path = os.path.abspath(os.path.expanduser(str(official_file_path)))
+            if not os.path.isfile(official_file_path):
+                raise ValueError(f"系统全量白名单不存在: {official_file_path}")
+            with open(official_file_path, "rb") as file_handle:
+                official_file_content = file_handle.read()
+            official_filename = official_filename or os.path.basename(official_file_path)
+            official_domains = read_official_domains_from_file(
+                official_file_content,
+                official_filename,
+            )
+            loaded_from_full_whitelist_path = True
+
+        if official_domains:
+            if not loaded_from_full_whitelist_path:
+                extra_data["official_domains"] = [
+                    {"单位名称": str(company or ""), "官方域名": str(domain or "")}
+                    for company, domain, *rest in official_domains
+                ]
             extra_data["official_domain_count"] = len(official_domains)
         if not official_domains:
             extra_data["official_domain_resolution_status"] = "pending"
@@ -652,22 +676,33 @@ def execute_impersonation_task(task_id: str):
             detection_key = extra_data.get("detection_file_object_key")
             if not detection_key:
                 raise ValueError("upload 模式缺少 detection_file_object_key")
-            if official_file_content is None:
-                raise ValueError("upload 模式缺少 official_file_object_key")
-            detection_file_content = _download_file_from_minio(detection_key, MINIO_BUCKET)
+            detection_bucket = extra_data.get("detection_file_bucket") or MINIO_BUCKET
+            detection_filename = extra_data.get("detection_file_filename") or detection_key
+            detection_file_content = _download_file_from_minio(detection_key, detection_bucket)
             _set_task_progress(db, task, extra_data, 45, "仿冒域名检测中")
-            excel_content, statistics = phishing_predict_from_file(
-                official_file_content,
-                official_filename,
-                detection_file_content,
-                detection_key,
-                similarity_threshold=similarity_threshold,
-            )
+            if official_file_content is not None:
+                excel_content, statistics, word_report_content = phishing_predict_from_file_with_report(
+                    official_file_content,
+                    official_filename,
+                    detection_file_content,
+                    detection_filename,
+                    similarity_threshold=similarity_threshold,
+                )
+            else:
+                detection_domains = read_detection_domains_from_file(
+                    detection_file_content,
+                    detection_filename,
+                )
+                excel_content, statistics, word_report_content = phishing_predict_from_domains_with_report(
+                    official_domains,
+                    detection_domains,
+                    similarity_threshold=similarity_threshold,
+                )
         elif detection_source == "newDomain":
             _set_task_progress(db, task, extra_data, 25, "收集新注册域名")
             detection_domains, missing_dates = _collect_daily_domains(extra_data.get("dateRange") or [])
             _set_task_progress(db, task, extra_data, 45, "仿冒域名检测中")
-            excel_content, statistics = phishing_predict_from_domains(
+            excel_content, statistics, word_report_content = phishing_predict_from_domains_with_report(
                 official_domains,
                 detection_domains,
                 similarity_threshold=similarity_threshold,
@@ -684,11 +719,21 @@ def execute_impersonation_task(task_id: str):
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             bucket=RESULTS_BUCKET,
         )
+        word_report_filename = f"prediction_report_{task_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+        word_report_key = _upload_file_content_to_minio(
+            word_report_content,
+            word_report_filename,
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            bucket=RESULTS_BUCKET,
+        )
 
         task.status = "completed"
         extra_data["result_file_key"] = result_key
         extra_data["result_bucket"] = RESULTS_BUCKET
         extra_data["result_filename"] = result_filename
+        extra_data["word_report_file_key"] = word_report_key
+        extra_data["word_report_bucket"] = RESULTS_BUCKET
+        extra_data["word_report_filename"] = word_report_filename
         extra_data["statistics"] = statistics
         extra_data["completed_at"] = datetime.utcnow().isoformat()
         extra_data["progress"] = 100

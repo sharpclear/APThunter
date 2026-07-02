@@ -18,12 +18,17 @@ interface MaliciousResultItem {
 }
 
 interface PhishingResultItem {
-  钓鱼域名: string
-  官方域名: string
+  仿冒域名?: string
+  钓鱼域名?: string
+  官方域名?: string
   目标域名?: string
-  公司名称: string
-  相似度: string
-  匹配类型: string
+  官方域名单位名称?: string
+  公司名称?: string
+  单位类型?: string
+  单位小类?: string
+  相似度?: string
+  匹配类型?: string
+  风险等级?: string
   LLM研判标签?: string
   LLM研判分数?: string | number
   LLM处置结果?: string
@@ -71,6 +76,8 @@ interface MaliciousStatistics {
 interface PhishingStatistics {
   总域名数?: string | number
   算法候选数?: string | number
+  仿冒域名数?: string | number
+  仿冒域名占比?: string
   钓鱼域名数?: string | number
   正常域名数?: string | number
   钓鱼域名占比?: string
@@ -110,6 +117,7 @@ interface ResultData {
   dga_domains?: ResultItem[]
   history_similarity_domains?: ResultItem[]
   result_filename: string
+  word_report_filename?: string
   total_count: number
   malicious_count?: number
   phishing_count?: number
@@ -238,6 +246,36 @@ function displayLlmScore(item: Partial<PhishingResultItem>) {
   return item.LLM研判分数 || '未知'
 }
 
+function getImpersonationDomain(item: Partial<PhishingResultItem>) {
+  return item.仿冒域名 || item.钓鱼域名 || '未知域名'
+}
+
+function getOfficialDomain(item: Partial<PhishingResultItem>) {
+  return item.官方域名 || item.目标域名 || '未知'
+}
+
+function getOfficialUnitName(item: Partial<PhishingResultItem>) {
+  return item.官方域名单位名称 || item.公司名称 || '未知单位'
+}
+
+function getUnitType(item: Partial<PhishingResultItem>) {
+  return item.单位类型 || item.单位小类 || '未分类'
+}
+
+function getRiskLevel(item: Partial<PhishingResultItem>) {
+  return item.风险等级 || '未知'
+}
+
+function riskLevelColor(level?: string) {
+  if (level === '高')
+    return 'red'
+  if (level === '中')
+    return 'orange'
+  if (level === '低')
+    return 'blue'
+  return 'default'
+}
+
 function riskStatTitle(taskType?: string) {
   if (taskType === 'impersonation')
     return '仿冒域名'
@@ -250,7 +288,7 @@ function riskStatTitle(taskType?: string) {
 
 function riskStatValue(data: ResultData) {
   if (data.task_type === 'impersonation')
-    return data.statistics['钓鱼域名数']
+    return data.statistics['仿冒域名数'] || data.statistics['钓鱼域名数']
   if (data.task_type === 'dga')
     return data.statistics['DGA域名数']
   if (data.task_type === 'history_similarity')
@@ -270,7 +308,7 @@ function riskRateTitle(taskType?: string) {
 
 function riskRateValue(data: ResultData) {
   if (data.task_type === 'impersonation')
-    return data.statistics['钓鱼域名占比'] || '0%'
+    return data.statistics['仿冒域名占比'] || data.statistics['钓鱼域名占比'] || '0%'
   if (data.task_type === 'dga')
     return data.statistics['DGA域名占比'] || '0%'
   if (data.task_type === 'history_similarity')
@@ -390,7 +428,7 @@ const resultColumns = computed(() => {
     return [
       {
         title: '检测出的仿冒域名',
-        dataIndex: '钓鱼域名',
+        dataIndex: '仿冒域名',
         key: 'phishing_domain',
         width: '24%',
         ellipsis: true,
@@ -404,31 +442,31 @@ const resultColumns = computed(() => {
       },
       {
         title: '官方域名单位名称',
-        dataIndex: '公司名称',
+        dataIndex: '官方域名单位名称',
         key: 'company_name',
         width: '18%',
         ellipsis: true,
       },
       {
-        title: 'LLM风险分',
-        dataIndex: 'LLM研判分数',
-        key: 'llm_score',
+        title: '单位类型',
+        dataIndex: '单位类型',
+        key: 'unit_type',
         width: '12%',
         align: 'center' as const,
       },
       {
-        title: 'LLM处置结果',
-        dataIndex: 'LLM处置结果',
-        key: 'llm_disposition',
+        title: '匹配类型',
+        dataIndex: '匹配类型',
+        key: 'match_type',
         width: '14%',
-        align: 'center' as const,
+        ellipsis: true,
       },
       {
-        title: 'LLM研判原因',
-        dataIndex: '研判原因',
-        key: 'llm_reason',
-        width: '22%',
-        ellipsis: true,
+        title: '风险等级',
+        dataIndex: '风险等级',
+        key: 'risk_level',
+        width: '12%',
+        align: 'center' as const,
       },
     ]
   } else {
@@ -535,7 +573,10 @@ async function handleDownload() {
     const blob = await resp.blob()
     const disposition = resp.headers.get('content-disposition') || ''
     const match = disposition.match(/filename\*=utf-8''(.+)/i)
-    const filename = decodeURIComponent(match?.[1] || resultData.value?.result_filename || `${taskId.value}.xlsx`)
+    const fallbackFilename = resultData.value?.task_type === 'impersonation'
+      ? (resultData.value?.word_report_filename || `${taskId.value}_prediction_report.docx`)
+      : (resultData.value?.result_filename || `${taskId.value}.xlsx`)
+    const filename = decodeURIComponent(match?.[1] || fallbackFilename)
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -663,7 +704,7 @@ onMounted(() => {
                 pageSizeOptions: ['20', '50', '100', '200']
               }"
               size="middle"
-              :row-key="resultData.task_type === 'impersonation' ? '钓鱼域名' : '域名'"
+              :row-key="resultData.task_type === 'impersonation' ? '仿冒域名' : '域名'"
               :scroll="{ y: 500 }"
               bordered
             >
@@ -705,18 +746,16 @@ onMounted(() => {
                   <a-list-item-meta>
                     <template #title>
                       <span style="color: #cf1322; font-weight: bold; font-size: 16px;">
-                        {{ resultData.task_type === 'impersonation' ? item.钓鱼域名 : item.域名 }}
+                        {{ resultData.task_type === 'impersonation' ? getImpersonationDomain(item) : item.域名 }}
                       </span>
                     </template>
                     <template v-if="resultData.task_type === 'impersonation'" #description>
                       <div>
-                        <span>官方域名: {{ item.官方域名 || item.目标域名 }}</span><br>
-                        <span>官方域名单位名称: {{ item.公司名称 || '未知单位' }}</span>
-                        <span> | LLM风险分: {{ displayLlmScore(item) }}</span>
-                        <span> | LLM处置结果: {{ displayLlmDisposition(item) }}</span>
-                        <div v-if="item.研判原因" style="margin-top: 4px; color: #667085;">
-                          LLM研判原因: {{ item.研判原因 }}
-                        </div>
+                        <div>官方域名: {{ getOfficialDomain(item) }}</div>
+                        <div>官方域名单位名称: {{ getOfficialUnitName(item) }}</div>
+                        <span>单位类型: {{ getUnitType(item) }}</span>
+                        <span> | 匹配类型: {{ item.匹配类型 || '未知' }}</span>
+                        <a-tag :color="riskLevelColor(getRiskLevel(item))">风险等级: {{ getRiskLevel(item) }}</a-tag>
                       </div>
                     </template>
                     <template v-else-if="resultData.task_type === 'dga'" #description>

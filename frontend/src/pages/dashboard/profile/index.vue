@@ -14,6 +14,13 @@ import AptTimeline, { type AptEvent } from '~/components/apt-timeline/index.vue'
 
 defineOptions({ name: 'DashboardProfile' })
 
+function formatIocCount(count?: number | string | null) {
+  const value = Number(count ?? 0)
+  if (!Number.isFinite(value))
+    return 0
+  return value === 100 ? '100+' : value
+}
+
 // 搜索关键词
 const searchKeyword = ref<string>('')
 const loading = ref(false)
@@ -672,7 +679,7 @@ watch(
                       关联IOC：
                     </a-typography-text>
                     <a-typography-text strong>
-                      {{ org.iocCount ?? 0 }} 个
+                      {{ formatIocCount(org.iocCount) }} 个
                     </a-typography-text>
                   </span>
                   <span>
@@ -835,7 +842,7 @@ watch(
                 <a-space :size="24">
                   <span>
                     <a-typography-text type="secondary">关联IOC：</a-typography-text>
-                    <a-typography-text strong>{{ selectedOrganization.iocCount ?? 0 }} 个</a-typography-text>
+                    <a-typography-text strong>{{ formatIocCount(selectedOrganization.iocCount) }} 个</a-typography-text>
                   </span>
                   <span>
                     <a-typography-text type="secondary">关联事件：</a-typography-text>

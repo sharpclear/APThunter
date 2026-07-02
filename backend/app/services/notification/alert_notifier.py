@@ -241,7 +241,11 @@ def dispatch_alert_notifications(
     threshold = _safe_optional_int(alert_data.get("threshold"))
     created_at = alert_data.get("created_at", "")
     domains = alert_data.get("high_risk_domains") or []
-    phishing_matches = alert_data.get("phishing_matches") or []
+    impersonation_matches = (
+        alert_data.get("impersonation_matches")
+        or alert_data.get("phishing_matches")
+        or []
+    )
     history_similarity_records = alert_data.get("history_similarity_records") or []
     dga_records = alert_data.get("dga_records") or []
 
@@ -281,7 +285,7 @@ def dispatch_alert_notifications(
             detail_page_url=detail,
             risk_summary=risk_summary,
             suspected_association_text=suspected_association_text,
-            phishing_matches=phishing_matches if isinstance(phishing_matches, list) else [],
+            impersonation_matches=impersonation_matches if isinstance(impersonation_matches, list) else [],
             history_similarity_records=history_similarity_records if isinstance(history_similarity_records, list) else [],
             dga_records=dga_records if isinstance(dga_records, list) else [],
         )
@@ -312,10 +316,16 @@ def build_alert_data_dict(
     created_at: str,
     high_risk_domains: list,
     match_results_by_domain: Optional[dict] = None,
+    impersonation_matches: Optional[list] = None,
     phishing_matches: Optional[list] = None,
     history_similarity_records: Optional[list] = None,
     dga_records: Optional[list] = None,
 ) -> dict:
+    normalized_impersonation_matches = (
+        impersonation_matches
+        if impersonation_matches is not None
+        else phishing_matches
+    ) or []
     return {
         "alert_id": alert_id,
         "model_name": model_name,
@@ -326,7 +336,8 @@ def build_alert_data_dict(
         "created_at": created_at,
         "high_risk_domains": high_risk_domains,
         "match_results_by_domain": match_results_by_domain or {},
-        "phishing_matches": phishing_matches or [],
+        "impersonation_matches": normalized_impersonation_matches,
+        "phishing_matches": normalized_impersonation_matches,
         "history_similarity_records": history_similarity_records or [],
         "dga_records": dga_records or [],
     }

@@ -55,8 +55,9 @@ CONTEXT_FIELDS = [
 ]
 
 READ_ENCODINGS = ("utf-8-sig", "utf-8", "gbk")
-DEFAULT_KEYWORDS_PATH = Path("configs/keywords.yaml")
-DEFAULT_TOKEN_POLICY_PATH = Path("configs/token_policy.yaml")
+PACKAGE_DIR = Path(__file__).resolve().parent
+DEFAULT_KEYWORDS_PATH = PACKAGE_DIR / "configs/keywords.yaml"
+DEFAULT_TOKEN_POLICY_PATH = PACKAGE_DIR / "configs/token_policy.yaml"
 MIN_TOKEN_LEN = 2
 SHORT_RECALL_MIN_LEN = 3
 FUZZY_RATIO_MIN = 88

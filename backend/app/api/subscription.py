@@ -97,6 +97,17 @@ from app.db.base import Base
 from app.core.config import MINIO_BUCKET, IMPERSONATION_MODEL_NAME, IMPERSONATION_FULL_WHITELIST_PATH
 from sqlalchemy import Column, BigInteger, String, DateTime, ForeignKey, Enum as SqlEnum, Integer, JSON, text, Boolean
 from app.services.notification.alert_notifier import build_alert_data_dict, dispatch_alert_notifications
+from app.services.domain_monitor import register_monitor_targets
+from app.services.apt_template_nrd_report import (
+    build_apt_template_nrd_result_json,
+    build_apt_template_nrd_result_payload,
+    generate_apt_template_nrd_pdf_report,
+)
+from app.services.history_similarity_report import (
+    build_history_similarity_result_json,
+    build_history_similarity_result_payload,
+    generate_history_similarity_pdf_report,
+)
 from app.services.actor_matcher import (
     AlertResultStorageError,
     build_alert_result_json,
@@ -655,7 +666,7 @@ def _extract_dga_alert_items(rows) -> List[dict]:
 
 def _extract_apt_template_nrd_alert_items(rows) -> List[dict]:
     """
-    从 APT 模板新注册域名检测结果 DataFrame 提取订阅预警明细。
+    从模板化APT域名检测结果 DataFrame 提取订阅预警明细。
     兼容列：域名、score、risk_level、风险等级、匹配模板、reason、命中原因。
     """
     items: List[dict] = []
@@ -677,7 +688,7 @@ def _extract_apt_template_nrd_alert_items(rows) -> List[dict]:
         score = _safe_optional_float(row.get("score") or row.get("risk_score"))
         label_text = _clean_optional_text(row.get("预测标签"))
         result_text = _clean_optional_text(row.get("预测结果"))
-        if label_text not in {"1", "1.0"} and result_text != "APT模板命中" and not (score is not None and score > 0):
+        if label_text not in {"1", "1.0"} and result_text not in {"模板化APT命中", "APT模板命中"} and not (score is not None and score > 0):
             continue
         seen.add(domain_key)
         items.append(
@@ -687,7 +698,7 @@ def _extract_apt_template_nrd_alert_items(rows) -> List[dict]:
                 "risk_score": score,
                 "risk_level": _clean_optional_text(row.get("risk_level") or row.get("风险等级")),
                 "matched_template": _clean_optional_text(row.get("匹配模板") or row.get("matched_template")),
-                "reason": _clean_optional_text(row.get("reason") or row.get("命中原因")) or "命中APT注册模板",
+                "reason": _clean_optional_text(row.get("reason") or row.get("命中原因")) or "命中模板化APT域名模板",
                 "raw": dict(row),
             }
         )
@@ -735,7 +746,7 @@ def _build_alert_attachment_excel(
                     "高风险域名": domain,
                     "风险等级": "",
                     "最终风险分": "",
-                    "命中原因": "与历史恶意域名高度相似",
+                    "命中原因": "与历史APT域名高度相似",
                 }
             )
     elif task_type == "dga":
@@ -761,27 +772,27 @@ def _build_alert_attachment_excel(
                     }
                 )
     elif task_type == "apt_template_nrd":
-        columns = ["APT模板命中域名", "风险分", "风险等级", "匹配模板", "命中原因"]
+        columns = ["模板化APT域名", "风险分", "风险等级", "匹配模板", "命中原因"]
         for item in apt_template_nrd_alert_items or []:
             score = item.get("score")
             rows.append(
                 {
-                    "APT模板命中域名": item.get("domain", ""),
+                    "模板化APT域名": item.get("domain", ""),
                     "风险分": "" if score is None else f"{float(score):.6f}",
                     "风险等级": item.get("risk_level", ""),
                     "匹配模板": item.get("matched_template", ""),
-                    "命中原因": item.get("reason") or "命中APT注册模板",
+                    "命中原因": item.get("reason") or "命中模板化APT域名模板",
                 }
             )
         if not rows:
             for domain in high_risk_domains:
                 rows.append(
                     {
-                        "APT模板命中域名": domain,
+                        "模板化APT域名": domain,
                         "风险分": "",
                         "风险等级": "",
                         "匹配模板": "",
-                        "命中原因": "命中APT注册模板",
+                        "命中原因": "命中模板化APT域名模板",
                     }
                 )
     else:
@@ -983,7 +994,7 @@ def execute_subscription(subscription_id: str):
                 return
 
             source_label = f"subscription_{subscription_id}"
-            min_score = float(subscription.threshold) / 100.0 if subscription.threshold is not None else 0.55
+            min_score = float(subscription.threshold) / 100.0 if subscription.threshold is not None else 0.65
             excel_content, statistics, history_meta, history_alert_rows = history_similarity_predict_from_domains(
                 domains,
                 source_label,
@@ -1133,40 +1144,204 @@ def execute_subscription(subscription_id: str):
             db.add(task)
             db.flush()
         
-        # 上传结果文件
-        result_filename = f"result_{task_id}_{beijing_now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-        result_key = upload_file_content_to_minio(
-            excel_content,
-            result_filename,
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            bucket=RESULTS_BUCKET
-        )
+        # 上传结果文件。报告型检测以 PDF 报告作为主结果文件，
+        # 同时保存 JSON 辅助结果给在线查看接口使用。
+        result_content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        result_file_id = None
+        result_data_file_id = None
+        result_data_key = None
+        result_data_filename = None
+        result_data_content_type = None
         word_report_key = None
         word_report_filename = None
-        if model.model_category == "impersonation" and word_report_content:
-            word_report_filename = f"prediction_report_{task_id}_{beijing_now().strftime('%Y%m%d_%H%M%S')}.docx"
-            word_report_key = upload_file_content_to_minio(
-                word_report_content,
-                word_report_filename,
-                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        if model.model_category == "history_similarity":
+            timestamp = beijing_now().strftime("%Y%m%d_%H%M%S")
+            result_filename = f"history_apt_similarity_report_{task_id}_{timestamp}.pdf"
+            result_data_filename = f"history_apt_similarity_result_{task_id}_{timestamp}.json"
+            result_payload = build_history_similarity_result_payload(
+                excel_content,
+                task_id=task_id,
+                history_meta=task.extra.get("history_similarity_detection") or {},
+            )
+            report_content = generate_history_similarity_pdf_report(
+                result_payload,
+                task_id=task_id,
+                model_name=(
+                    str(model.name or "")
+                    .replace("历史高度相似检测", "历史APT域名相似性检测")
+                    .replace("历史高度相似", "历史APT域名相似")
+                ),
+                data_source="newDomain",
+                min_score=float(task.extra.get("min_score") or 0.65),
+                top_k=int(task.extra.get("top_k") or 10),
+                date_range=date_range,
+                generated_at=beijing_now().replace(tzinfo=None),
+            )
+            result_key = upload_file_content_to_minio(
+                report_content,
+                result_filename,
+                content_type="application/pdf",
+                bucket=RESULTS_BUCKET,
+            )
+            result_payload["result_file_key"] = result_key
+            result_payload["result_filename"] = result_filename
+            result_data_content = build_history_similarity_result_json(result_payload)
+            result_data_key = upload_file_content_to_minio(
+                result_data_content,
+                result_data_filename,
+                content_type="application/json",
+                bucket=RESULTS_BUCKET,
+            )
+            result_content_type = "application/pdf"
+            result_data_content_type = "application/json"
+
+            report_file_record = StoredFile(
+                bucket=RESULTS_BUCKET,
+                object_key=result_key,
+                filename=result_filename,
+                content_type=result_content_type,
+                size=len(report_content),
+                uploaded_by=str(subscription.user_id),
+                metadata_json={
+                    "source": "history_similarity_pdf_report",
+                    "task_id": task_id,
+                    "task_type": "history_similarity",
+                    "subscription_id": subscription_id,
+                },
+            )
+            db.add(report_file_record)
+            db.flush()
+            result_file_id = report_file_record.id
+            result_data_file_record = StoredFile(
+                bucket=RESULTS_BUCKET,
+                object_key=result_data_key,
+                filename=result_data_filename,
+                content_type=result_data_content_type,
+                size=len(result_data_content),
+                uploaded_by=str(subscription.user_id),
+                metadata_json={
+                    "source": "history_similarity_result_json",
+                    "task_id": task_id,
+                    "task_type": "history_similarity",
+                    "subscription_id": subscription_id,
+                },
+            )
+            db.add(result_data_file_record)
+            db.flush()
+            result_data_file_id = result_data_file_record.id
+        elif model.model_category == "apt_template_nrd":
+            timestamp = beijing_now().strftime("%Y%m%d_%H%M%S")
+            result_filename = f"apt_template_nrd_report_{task_id}_{timestamp}.pdf"
+            result_data_filename = f"apt_template_nrd_result_{task_id}_{timestamp}.json"
+            result_payload = build_apt_template_nrd_result_payload(
+                excel_content,
+                task_id=task_id,
+                apt_meta=task.extra.get("apt_template_nrd_detection") or {},
+            )
+            report_content = generate_apt_template_nrd_pdf_report(
+                result_payload,
+                task_id=task_id,
+                model_name=str(model.name or "").replace("APT模板新注册域名检测", "模板化APT域名检测"),
+                data_source="newDomain",
+                score_threshold=float(task.extra.get("score_threshold") or 0.90),
+                date_range=date_range,
+                generated_at=beijing_now().replace(tzinfo=None),
+            )
+            result_key = upload_file_content_to_minio(
+                report_content,
+                result_filename,
+                content_type="application/pdf",
+                bucket=RESULTS_BUCKET,
+            )
+            result_payload["result_file_key"] = result_key
+            result_payload["result_filename"] = result_filename
+            result_data_content = build_apt_template_nrd_result_json(result_payload)
+            result_data_key = upload_file_content_to_minio(
+                result_data_content,
+                result_data_filename,
+                content_type="application/json",
+                bucket=RESULTS_BUCKET,
+            )
+            result_content_type = "application/pdf"
+            result_data_content_type = "application/json"
+
+            report_file_record = StoredFile(
+                bucket=RESULTS_BUCKET,
+                object_key=result_key,
+                filename=result_filename,
+                content_type=result_content_type,
+                size=len(report_content),
+                uploaded_by=str(subscription.user_id),
+                metadata_json={
+                    "source": "apt_template_nrd_pdf_report",
+                    "task_id": task_id,
+                    "task_type": "apt_template_nrd",
+                    "subscription_id": subscription_id,
+                },
+            )
+            db.add(report_file_record)
+            db.flush()
+            result_file_id = report_file_record.id
+            result_data_file_record = StoredFile(
+                bucket=RESULTS_BUCKET,
+                object_key=result_data_key,
+                filename=result_data_filename,
+                content_type=result_data_content_type,
+                size=len(result_data_content),
+                uploaded_by=str(subscription.user_id),
+                metadata_json={
+                    "source": "apt_template_nrd_result_json",
+                    "task_id": task_id,
+                    "task_type": "apt_template_nrd",
+                    "subscription_id": subscription_id,
+                },
+            )
+            db.add(result_data_file_record)
+            db.flush()
+            result_data_file_id = result_data_file_record.id
+        else:
+            result_filename = f"result_{task_id}_{beijing_now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            result_key = upload_file_content_to_minio(
+                excel_content,
+                result_filename,
+                content_type=result_content_type,
                 bucket=RESULTS_BUCKET
             )
+            if model.model_category == "impersonation" and word_report_content:
+                word_report_filename = f"prediction_report_{task_id}_{beijing_now().strftime('%Y%m%d_%H%M%S')}.docx"
+                word_report_key = upload_file_content_to_minio(
+                    word_report_content,
+                    word_report_filename,
+                    content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    bucket=RESULTS_BUCKET,
+                )
         
         # 更新任务extra
-        extra_update = {
+        result_extra = {
             "result_file_key": result_key,
             "result_bucket": RESULTS_BUCKET,
             "result_filename": result_filename,
+            "result_content_type": result_content_type,
             "statistics": statistics,
             "completed_at": beijing_now().isoformat(),
         }
         if word_report_key:
-            extra_update.update({
+            result_extra.update({
                 "word_report_file_key": word_report_key,
                 "word_report_bucket": RESULTS_BUCKET,
                 "word_report_filename": word_report_filename,
             })
-        task.extra.update(extra_update)
+        if result_file_id is not None:
+            result_extra["result_file_id"] = result_file_id
+        if result_data_key:
+            result_extra.update({
+                "result_data_file_id": result_data_file_id,
+                "result_data_file_key": result_data_key,
+                "result_data_bucket": RESULTS_BUCKET,
+                "result_data_filename": result_data_filename,
+                "result_data_content_type": result_data_content_type,
+            })
+        task.extra = {**(task.extra or {}), **result_extra}
         db.commit()
         db.refresh(task)
 
@@ -1287,7 +1462,11 @@ def execute_subscription(subscription_id: str):
                 if not apt_template_nrd_alert_items:
                     try:
                         excel_file.seek(0)
-                        apt_df = pd.read_excel(excel_file, sheet_name="APT模板命中域名列表")
+                        try:
+                            apt_df = pd.read_excel(excel_file, sheet_name="模板化APT域名列表")
+                        except Exception:
+                            excel_file.seek(0)
+                            apt_df = pd.read_excel(excel_file, sheet_name="APT模板命中域名列表")
                         apt_template_nrd_alert_items = _extract_apt_template_nrd_alert_items(apt_df)
                     except Exception:
                         try:
@@ -1295,7 +1474,7 @@ def execute_subscription(subscription_id: str):
                             results_df = pd.read_excel(excel_file, sheet_name="预测结果")
                             apt_template_nrd_alert_items = _extract_apt_template_nrd_alert_items(results_df)
                         except Exception as apt_extract_error:
-                            logger.warning(f"从APT模板检测结果中提取预警域名失败: {apt_extract_error}")
+                            logger.warning(f"从模板化APT域名检测结果中提取预警域名失败: {apt_extract_error}")
 
                 high_risk_domains = []
                 seen = set()
@@ -1316,7 +1495,7 @@ def execute_subscription(subscription_id: str):
                             "risk_score": item.get("risk_score") or item.get("score"),
                             "risk_level": item.get("risk_level"),
                             "matched_template": item.get("matched_template"),
-                            "reason": item.get("reason") or "命中APT注册模板",
+                            "reason": item.get("reason") or "命中模板化APT域名模板",
                             "raw": item.get("raw") or {},
                         }
                     )
@@ -1515,6 +1694,41 @@ def execute_subscription(subscription_id: str):
             task.status = "completed"
             db.commit()
             db.refresh(alert)
+
+            if task.task_type in {"malicious", "impersonation"}:
+                try:
+                    monitor_risk_records = (
+                        phishing_alert_items
+                        if task.task_type == "impersonation"
+                        else risk_score_records
+                    )
+                    monitor_summary = register_monitor_targets(
+                        db,
+                        user_id=subscription.user_id,
+                        domains=high_risk_domains,
+                        source_type="subscription_alert",
+                        task_id=task_id,
+                        task_type=task.task_type,
+                        model_id=model.id,
+                        subscription_id=subscription_id,
+                        alert_id=alert_id,
+                        risk_records=monitor_risk_records,
+                        detected_at=alert.created_at or beijing_now().replace(tzinfo=None),
+                    )
+                    db.commit()
+                    logger.info(
+                        "订阅预警域名已注册持续监控 alert_id=%s subscription_id=%s summary=%s",
+                        alert_id,
+                        subscription_id,
+                        monitor_summary,
+                    )
+                except Exception:
+                    db.rollback()
+                    logger.exception(
+                        "订阅预警域名注册持续监控失败（不影响预警主流程） alert_id=%s subscription_id=%s",
+                        alert_id,
+                        subscription_id,
+                    )
             
             logger.info(f"创建预警: {alert_id}, {high_risk_count} 个高风险域名，高风险比例: {risk_ratio:.2f}%")
             
@@ -1676,8 +1890,18 @@ def init_scheduler():
             id='subscription_scheduler_hourly',
             replace_existing=True,
         )
+        monitor_interval_minutes = int(os.getenv("DOMAIN_MONITOR_SCHEDULER_INTERVAL_MINUTES", "60"))
+        if monitor_interval_minutes > 0:
+            from app.services.domain_monitor import dispatch_due_monitor_targets
+
+            scheduler.add_job(
+                dispatch_due_monitor_targets,
+                trigger=IntervalTrigger(minutes=monitor_interval_minutes),
+                id="domain_monitor_scheduler_interval",
+                replace_existing=True,
+            )
         scheduler.start()
-        logger.info("订阅调度器已启动（每天9:00执行 + 每小时检查）")
+        logger.info("订阅调度器已启动（每天9:00执行 + 每小时检查 + 域名持续监控检查）")
         return scheduler
 
 

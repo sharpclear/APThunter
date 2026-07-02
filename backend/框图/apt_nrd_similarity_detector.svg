@@ -1,12 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1040" viewBox="0 0 1900 1040" role="img" aria-label="APT历史域名与新注册域名相似度检测算法框图">
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1040" viewBox="0 0 1900 1040" role="img" aria-label="APT历史域名与新注册域名相似筛查流程图">
   <defs>
-    <marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
-      <path d="M1,1 L11,6 L1,11 Z" fill="#000"/>
-    </marker>
-    <marker id="smallArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
-      <path d="M1,1 L9,5 L1,9 Z" fill="#111"/>
-    </marker>
     <style>
       .title { font-family: Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 30px; font-weight: 700; fill: #000; }
       .phase-title { font-family: Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 24px; font-weight: 700; fill: #000; }
@@ -14,216 +8,188 @@
       .small { font-family: Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 17px; fill: #111; }
       .tiny { font-family: Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 14px; fill: #111; }
       .bold { font-weight: 700; }
-      .outer { fill: #fff; stroke: #000; stroke-width: 3; }
-      .dash { fill: #fff; stroke: #5b5b5b; stroke-width: 2.5; stroke-dasharray: 8 9; }
-      .solid { fill: #fff; stroke: #000; stroke-width: 2; }
-      .soft-green { fill: #dcefd7; stroke: #8bb880; stroke-width: 1.5; }
-      .soft-blue { fill: #e3f0fb; stroke: #7fb4df; stroke-width: 1.5; }
-      .soft-red { fill: #fee5e6; stroke: #ee8d92; stroke-width: 1.5; }
-      .soft-purple { fill: #eaddec; stroke: #a983ad; stroke-width: 1.5; }
-      .soft-yellow { fill: #fff3d8; stroke: #d7a84a; stroke-width: 1.5; }
-      .soft-gray { fill: #f6f6f6; stroke: #222; stroke-width: 1.6; }
-      .arrow { stroke: #000; stroke-width: 4; fill: none; marker-end: url(#arrow); }
-      .thin-arrow { stroke: #111; stroke-width: 2.7; fill: none; marker-end: url(#smallArrow); }
-      .mini-red { fill: #ff646b; }
-      .mini-blue { fill: #5aaeea; }
-      .mini-green { fill: #28a745; }
-      .mini-purple { fill: #8b51d6; }
-      .mini-yellow { fill: #f2b84b; }
+      .outer { fill: #ffffff; stroke: #4b5563; stroke-width: 3; }
+      .dash { fill: #ffffff; stroke: #9ca3af; stroke-width: 2.5; stroke-dasharray: 8 9; }
+      .solid { fill: #f3f4f6; stroke: #4b5563; stroke-width: 2; }
+      .soft-green { fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5; }
+      .soft-blue { fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5; }
+      .soft-red { fill: #fee2e2; stroke: #b91c1c; stroke-width: 1.5; }
+      .soft-purple { fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5; }
+      .soft-yellow { fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5; }
+      .soft-gray { fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.6; }
+      .arrow-line { stroke: #4b5563; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+      .arrow-head { fill: #4b5563; stroke: none; }
+      .thin-arrow-line { stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+      .thin-arrow-head { fill: #4b5563; stroke: none; }
     </style>
   </defs>
 
   <rect x="0" y="0" width="1900" height="1040" fill="#fff"/>
 
-  <!-- Column titles -->
-  <circle cx="82" cy="54" r="23" fill="#000"/>
+  <circle cx="82" cy="54" r="23" fill="#4b5563"/>
   <text x="82" y="63" text-anchor="middle" class="title" fill="#fff" style="font-size:28px;">1</text>
-  <text x="118" y="65" class="title">历史 APT 域名种子构建</text>
+  <text x="118" y="65" class="title">历史域名种子准备</text>
 
-  <circle cx="689" cy="54" r="23" fill="#000"/>
+  <circle cx="689" cy="54" r="23" fill="#4b5563"/>
   <text x="689" y="63" text-anchor="middle" class="title" fill="#fff" style="font-size:28px;">2</text>
-  <text x="725" y="65" class="title">NRD 相似检索与重排</text>
+  <text x="725" y="65" class="title">新注册域名相似筛查</text>
 
-  <circle cx="1296" cy="54" r="23" fill="#000"/>
+  <circle cx="1296" cy="54" r="23" fill="#4b5563"/>
   <text x="1296" y="63" text-anchor="middle" class="title" fill="#fff" style="font-size:28px;">3</text>
-  <text x="1332" y="65" class="title">候选筛选与解释输出</text>
+  <text x="1332" y="65" class="title">候选结果筛选输出</text>
 
-  <!-- Outer panels -->
-  <rect x="60" y="95" width="540" height="770" rx="78" class="outer"/>
-  <rect x="680" y="95" width="540" height="770" rx="78" class="outer"/>
-  <rect x="1300" y="95" width="540" height="770" rx="78" class="outer"/>
+  <path d="M138 95 H522 Q600 95 600 173 V787 Q600 865 522 865 H138 Q60 865 60 787 V173 Q60 95 138 95 Z" class="outer" style="fill: #ffffff; stroke: #4b5563; stroke-width: 3;"/>
+  <path d="M758 95 H1142 Q1220 95 1220 173 V787 Q1220 865 1142 865 H758 Q680 865 680 787 V173 Q680 95 758 95 Z" class="outer" style="fill: #ffffff; stroke: #4b5563; stroke-width: 3;"/>
+  <path d="M1378 95 H1762 Q1840 95 1840 173 V787 Q1840 865 1762 865 H1378 Q1300 865 1300 787 V173 Q1300 95 1378 95 Z" class="outer" style="fill: #ffffff; stroke: #4b5563; stroke-width: 3;"/>
 
-  <path d="M610 480 H668" class="arrow"/>
-  <path d="M1230 480 H1288" class="arrow"/>
+  <path d="M610 480 H650" class="arrow-line" style="stroke: #4b5563; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="650,489 668,480 650,471" class="arrow-head" style="fill: #4b5563; stroke: none;"/>
+  <path d="M1230 480 H1270" class="arrow-line" style="stroke: #4b5563; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="1270,489 1288,480 1270,471" class="arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <!-- Column 1: positive seed index -->
-  <text x="330" y="145" text-anchor="middle" class="phase-title">Positive Seed Preparation</text>
+  <text x="330" y="145" text-anchor="middle" class="phase-title">域名来源与清洗</text>
 
-  <rect x="112" y="174" width="196" height="78" rx="14" class="soft-red"/>
-  <text x="210" y="204" text-anchor="middle" class="label bold">历史 APT 域名</text>
-  <text x="210" y="231" text-anchor="middle" class="small">训练黑数据.xlsx</text>
+  <path d="M126 174 H294 Q308 174 308 188 V238 Q308 252 294 252 H126 Q112 252 112 238 V188 Q112 174 126 174 Z" class="soft-red" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="210" y="221" text-anchor="middle" class="label bold">历史 APT 域名</text>
 
-  <rect x="352" y="174" width="196" height="78" rx="14" class="soft-blue"/>
-  <text x="450" y="204" text-anchor="middle" class="label bold">多格式数据读取</text>
-  <text x="450" y="231" text-anchor="middle" class="small">TXT / CSV / XLSX / ZIP</text>
+  <path d="M366 174 H534 Q548 174 548 188 V238 Q548 252 534 252 H366 Q352 252 352 238 V188 Q352 174 366 174 Z" class="soft-blue" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="450" y="221" text-anchor="middle" class="label bold">多格式读取</text>
 
-  <path d="M210 254 V278 H330" class="thin-arrow"/>
-  <path d="M450 254 V278 H330" class="thin-arrow"/>
+  <path d="M210 254 V278 H318" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="318,285 330,278 318,271" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
+  <path d="M450 254 V278 H342" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="342,271 330,278 342,285" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <rect x="112" y="288" width="436" height="74" rx="16" class="soft-gray"/>
-  <text x="330" y="316" text-anchor="middle" class="label bold">域名规范化与结构解析</text>
-  <text x="330" y="342" text-anchor="middle" class="small">domain · SLD · suffix · subdomain</text>
+  <path d="M128 288 H532 Q548 288 548 304 V346 Q548 362 532 362 H128 Q112 362 112 346 V304 Q112 288 128 288 Z" class="soft-gray" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.6;"/>
+  <text x="330" y="333" text-anchor="middle" class="label bold">域名规范化、校验和去重</text>
 
-  <path d="M330 364 V382" class="thin-arrow"/>
+  <path d="M330 364 V371.2" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="323,371.2 330,382 337,371.2" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <rect x="112" y="390" width="436" height="266" rx="36" class="dash"/>
-  <text x="330" y="422" text-anchor="middle" class="phase-title">Infrastructure Route Classification</text>
+  <path d="M148 390 H512 Q548 390 548 426 V592 Q548 628 512 628 H148 Q112 628 112 592 V426 Q112 390 148 390 Z" class="dash" style="fill: #ffffff; stroke: #9ca3af; stroke-width: 2.5; stroke-dasharray: 8 9;"/>
+  <text x="330" y="423" text-anchor="middle" class="phase-title">历史域名分流</text>
 
-  <rect x="132" y="446" width="180" height="56" rx="10" class="soft-green"/>
-  <text x="222" y="470" text-anchor="middle" class="small bold">A · 注册域名种子</text>
-  <text x="222" y="490" text-anchor="middle" class="tiny">registered domain</text>
+  <path d="M142 448 H302 Q312 448 312 458 V494 Q312 504 302 504 H142 Q132 504 132 494 V458 Q132 448 142 448 Z" class="soft-green" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="222" y="484" text-anchor="middle" class="label bold">直接注册域名</text>
 
-  <rect x="348" y="446" width="180" height="56" rx="10" class="soft-gray"/>
-  <text x="438" y="470" text-anchor="middle" class="small bold">B · 共享平台</text>
-  <text x="438" y="490" text-anchor="middle" class="tiny">pages / workers / DDNS</text>
+  <path d="M358 448 H518 Q528 448 528 458 V494 Q528 504 518 504 H358 Q348 504 348 494 V458 Q348 448 358 448 Z" class="soft-yellow" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="438" y="484" text-anchor="middle" class="label bold">仿冒诱导域名</text>
 
-  <rect x="132" y="520" width="180" height="56" rx="10" class="soft-blue"/>
-  <text x="222" y="544" text-anchor="middle" class="small bold">C · 子域/疑似失陷</text>
-  <text x="222" y="564" text-anchor="middle" class="tiny">subdomain / business-like</text>
+  <path d="M142 532 H302 Q312 532 312 542 V578 Q312 588 302 588 H142 Q132 588 132 578 V542 Q132 532 142 532 Z" class="soft-gray" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.6;"/>
+  <text x="222" y="568" text-anchor="middle" class="label bold">共享平台域名</text>
 
-  <rect x="348" y="520" width="180" height="56" rx="10" class="soft-red"/>
-  <text x="438" y="544" text-anchor="middle" class="small bold">D · DGA / 随机串</text>
-  <text x="438" y="564" text-anchor="middle" class="tiny">dga_score ≥ 0.68</text>
+  <path d="M358 532 H518 Q528 532 528 542 V578 Q528 588 518 588 H358 Q348 588 348 578 V542 Q348 532 358 532 Z" class="soft-blue" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="438" y="568" text-anchor="middle" class="label bold">子域或受控域名</text>
 
-  <rect x="240" y="594" width="180" height="48" rx="10" class="soft-yellow"/>
-  <text x="330" y="624" text-anchor="middle" class="small bold">E · 仿冒诱导词</text>
+  <path d="M330 630 V640" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="323,640 330,652 337,640" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <path d="M330 658 V680" class="thin-arrow"/>
+  <path d="M156 662 H504 Q518 662 518 676 V726 Q518 740 504 740 H156 Q142 740 142 726 V676 Q142 662 156 662 Z" class="soft-purple" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="330" y="710" text-anchor="middle" class="label bold">构建相似检索种子库</text>
 
-  <rect x="154" y="690" width="352" height="56" rx="12" class="soft-purple"/>
-  <text x="330" y="714" text-anchor="middle" class="label bold">仅 A / E 路由进入相似度索引</text>
-  <text x="330" y="736" text-anchor="middle" class="tiny">INDEX_ROUTES</text>
+  <path d="M330 742 V760" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="323,760 330,772 337,760" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <path d="M330 748 V772" class="thin-arrow"/>
+  <path d="M156 782 H504 Q518 782 518 796 V826 Q518 840 504 840 H156 Q142 840 142 826 V796 Q142 782 156 782 Z" class="solid" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 2;"/>
+  <text x="330" y="818" text-anchor="middle" class="label bold">形成历史域名对比库</text>
 
-  <rect x="142" y="782" width="376" height="58" rx="14" class="solid"/>
-  <text x="330" y="807" text-anchor="middle" class="label bold">字符 3–5 gram TF-IDF 索引</text>
-  <text x="330" y="830" text-anchor="middle" class="tiny">IDF · 稀疏向量 · 倒排表</text>
+  <text x="950" y="145" text-anchor="middle" class="phase-title">相似检索与综合评分</text>
 
-  <!-- Column 2: retrieval and scoring -->
-  <text x="950" y="145" text-anchor="middle" class="phase-title">Retrieval, Re-ranking &amp; DGA Fusion</text>
+  <path d="M756 174 H1144 Q1158 174 1158 188 V238 Q1158 252 1144 252 H756 Q742 252 742 238 V188 Q742 174 756 174 Z" class="soft-gray" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.6;"/>
+  <text x="950" y="221" text-anchor="middle" class="label bold">新注册域名输入</text>
 
-  <rect x="742" y="174" width="416" height="78" rx="14" class="soft-gray"/>
-  <text x="950" y="204" text-anchor="middle" class="label bold">新注册域名 NRD 输入</text>
-  <text x="950" y="231" text-anchor="middle" class="small">文件 / 目录 · 去重 · max_nrd</text>
+  <path d="M950 254 V266" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="943,266 950,278 957,266" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <path d="M950 254 V278" class="thin-arrow"/>
+  <path d="M758 288 H1142 Q1158 288 1158 304 V346 Q1158 362 1142 362 H758 Q742 362 742 346 V304 Q742 288 758 288 Z" class="soft-blue" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="950" y="333" text-anchor="middle" class="label bold">规范化、校验和去重</text>
 
-  <rect x="742" y="288" width="416" height="74" rx="16" class="soft-blue"/>
-  <text x="950" y="316" text-anchor="middle" class="label bold">规范化、合法性校验与 SLD 解析</text>
-  <text x="950" y="342" text-anchor="middle" class="small">normalize_domain · is_domain_like</text>
+  <path d="M950 364 V376" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="943,376 950,388 957,376" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <path d="M950 364 V388" class="thin-arrow"/>
+  <path d="M758 398 H1142 Q1158 398 1158 414 V468 Q1158 484 1142 484 H758 Q742 484 742 468 V414 Q742 398 758 398 Z" class="soft-green" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="950" y="450" text-anchor="middle" class="label bold">与历史种子库进行相似检索</text>
 
-  <rect x="730" y="398" width="440" height="270" rx="34" class="dash"/>
-  <text x="950" y="430" text-anchor="middle" class="phase-title">Transparent Similarity Scoring</text>
+  <path d="M950 486 V498" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="943,498 950,510 957,498" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <rect x="750" y="450" width="190" height="64" rx="10" class="soft-blue"/>
-  <text x="845" y="475" text-anchor="middle" class="small bold">TF-IDF Top-K 召回</text>
-  <text x="845" y="498" text-anchor="middle" class="tiny">cosine · top_k = 10</text>
+  <path d="M764 520 H1136 Q1170 520 1170 554 V700 Q1170 734 1136 734 H764 Q730 734 730 700 V554 Q730 520 764 520 Z" class="dash" style="fill: #ffffff; stroke: #9ca3af; stroke-width: 2.5; stroke-dasharray: 8 9;"/>
+  <text x="950" y="553" text-anchor="middle" class="phase-title">综合相似特征</text>
 
-  <rect x="960" y="450" width="190" height="64" rx="10" class="soft-red"/>
-  <text x="1055" y="475" text-anchor="middle" class="small bold">启发式 DGA 分数</text>
-  <text x="1055" y="498" text-anchor="middle" class="tiny">entropy · digit · vowel · runs</text>
+  <path d="M760 580 H930 Q940 580 940 590 V624 Q940 634 930 634 H760 Q750 634 750 624 V590 Q750 580 760 580 Z" class="soft-blue" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="845" y="615" text-anchor="middle" class="label bold">字符形态相似</text>
 
-  <path d="M845 516 V536" class="thin-arrow"/>
+  <path d="M970 580 H1140 Q1150 580 1150 590 V624 Q1150 634 1140 634 H970 Q960 634 960 624 V590 Q960 580 970 580 Z" class="soft-yellow" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="1055" y="615" text-anchor="middle" class="label bold">公共前后缀</text>
 
-  <rect x="750" y="542" width="190" height="108" rx="10" class="soft-green"/>
-  <text x="845" y="568" text-anchor="middle" class="small bold">域名对特征</text>
-  <text x="845" y="590" text-anchor="middle" class="tiny">Levenshtein · Jaro-Winkler</text>
-  <text x="845" y="611" text-anchor="middle" class="tiny">3-gram Jaccard · prefix/suffix</text>
-  <text x="845" y="632" text-anchor="middle" class="tiny">token · length · digit position</text>
+  <path d="M760 656 H930 Q940 656 940 666 V700 Q940 710 930 710 H760 Q750 710 750 700 V666 Q750 656 760 656 Z" class="soft-purple" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="845" y="691" text-anchor="middle" class="label bold">关键词重合</text>
 
-  <path d="M942 596 H956" class="thin-arrow"/>
+  <path d="M970 656 H1140 Q1150 656 1150 666 V700 Q1150 710 1140 710 H970 Q960 710 960 700 V666 Q960 656 970 656 Z" class="soft-red" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="1055" y="691" text-anchor="middle" class="label bold">数字和结构变化</text>
 
-  <rect x="960" y="542" width="190" height="108" rx="10" class="soft-purple"/>
-  <text x="1055" y="568" text-anchor="middle" class="small bold">加权重排分数</text>
-  <text x="1055" y="590" text-anchor="middle" class="tiny">0.42 TF-IDF + 0.15 Lev</text>
-  <text x="1055" y="611" text-anchor="middle" class="tiny">+ JW / Jaccard / token / prefix</text>
-  <text x="1055" y="632" text-anchor="middle" class="tiny">hyphen 与数字位置惩罚</text>
+  <path d="M950 736 V748" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="943,748 950,760 957,748" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <path d="M1055 516 V532 H1144 V674 H1068" class="thin-arrow"/>
-  <path d="M1055 652 V680" class="thin-arrow"/>
+  <path d="M772 770 H1128 Q1142 770 1142 784 V826 Q1142 840 1128 840 H772 Q758 840 758 826 V784 Q758 770 772 770 Z" class="solid" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 2;"/>
+  <text x="950" y="814" text-anchor="middle" class="label bold">生成候选相似分数</text>
 
-  <rect x="820" y="690" width="260" height="62" rx="13" class="soft-yellow"/>
-  <text x="950" y="716" text-anchor="middle" class="small bold">相似度与 DGA 信号融合</text>
-  <text x="950" y="738" text-anchor="middle" class="tiny">final = max(rerank, 0.75 × DGA)</text>
+  <text x="1570" y="145" text-anchor="middle" class="phase-title">候选筛选与结果解释</text>
 
-  <path d="M950 754 V772" class="thin-arrow"/>
+  <path d="M1380 178 H1760 Q1776 178 1776 194 V250 Q1776 266 1760 266 H1380 Q1364 266 1364 250 V194 Q1364 178 1380 178 Z" class="soft-yellow" style="fill: #fee2e2; stroke: #b91c1c; stroke-width: 1.5;"/>
+  <text x="1570" y="231" text-anchor="middle" class="label bold">按分数阈值筛选候选</text>
 
-  <rect x="758" y="782" width="384" height="58" rx="14" class="soft-red"/>
-  <text x="950" y="807" text-anchor="middle" class="label bold">阈值过滤：final_score ≥ 0.55</text>
-  <text x="950" y="830" text-anchor="middle" class="tiny">DGA threshold 0.72 · boost floor 0.35</text>
+  <path d="M1570 268 V280" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="1563,280 1570,292 1577,280" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <!-- Column 3: candidate outputs -->
-  <text x="1570" y="145" text-anchor="middle" class="phase-title">Candidate Screening &amp; Explainability</text>
+  <path d="M1376 302 H1764 Q1798 302 1798 336 V498 Q1798 532 1764 532 H1376 Q1342 532 1342 498 V336 Q1342 302 1376 302 Z" class="dash" style="fill: #ffffff; stroke: #9ca3af; stroke-width: 2.5; stroke-dasharray: 8 9;"/>
+  <text x="1570" y="336" text-anchor="middle" class="phase-title">候选记录内容</text>
 
-  <rect x="1342" y="166" width="456" height="420" rx="12" class="dash"/>
-  <text x="1368" y="206" class="phase-title">1. 候选判定与解释</text>
+  <path d="M1383 366 H1537 Q1548 366 1548 377 V413 Q1548 424 1537 424 H1383 Q1372 424 1372 413 V377 Q1372 366 1383 366 Z" class="soft-green" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="1460" y="402" text-anchor="middle" class="label bold">候选域名</text>
 
-  <rect x="1378" y="236" width="170" height="64" rx="10" class="soft-purple"/>
-  <text x="1463" y="262" text-anchor="middle" class="small bold">相似度候选</text>
-  <text x="1463" y="284" text-anchor="middle" class="tiny">matched_positive</text>
+  <path d="M1603 366 H1757 Q1768 366 1768 377 V413 Q1768 424 1757 424 H1603 Q1592 424 1592 413 V377 Q1592 366 1603 366 Z" class="soft-blue" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="1680" y="402" text-anchor="middle" class="label bold">匹配历史域名</text>
 
-  <rect x="1592" y="236" width="170" height="64" rx="10" class="soft-red"/>
-  <text x="1677" y="262" text-anchor="middle" class="small bold">DGA-only 候选</text>
-  <text x="1677" y="284" text-anchor="middle" class="tiny">可选独立输出分支</text>
+  <path d="M1383 448 H1537 Q1548 448 1548 459 V495 Q1548 506 1537 506 H1383 Q1372 506 1372 495 V459 Q1372 448 1383 448 Z" class="soft-purple" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="1460" y="484" text-anchor="middle" class="label bold">候选分数</text>
 
-  <path d="M1463 302 V324 H1570" class="thin-arrow"/>
-  <path d="M1677 302 V324 H1570" class="thin-arrow"/>
+  <path d="M1603 448 H1757 Q1768 448 1768 459 V495 Q1768 506 1757 506 H1603 Q1592 506 1592 495 V459 Q1592 448 1603 448 Z" class="soft-red" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="1680" y="484" text-anchor="middle" class="label bold">命中原因</text>
 
-  <rect x="1386" y="336" width="368" height="98" rx="12" class="soft-gray"/>
-  <text x="1570" y="362" text-anchor="middle" class="label bold">可解释原因标签</text>
-  <text x="1570" y="387" text-anchor="middle" class="small">similar_to_history · token_overlap</text>
-  <text x="1570" y="410" text-anchor="middle" class="small">common_prefix / suffix · same_suffix · dga_like</text>
+  <path d="M1570 534 V546" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="1563,546 1570,558 1577,546" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <path d="M1570 436 V456" class="thin-arrow"/>
+  <path d="M1378 568 H1762 Q1776 568 1776 582 V636 Q1776 650 1762 650 H1378 Q1364 650 1364 636 V582 Q1364 568 1378 568 Z" class="soft-green" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="1570" y="618" text-anchor="middle" class="label bold">输出候选明细</text>
 
-  <rect x="1386" y="464" width="368" height="84" rx="12" class="soft-blue"/>
-  <text x="1570" y="490" text-anchor="middle" class="label bold">候选记录与特征明细</text>
-  <text x="1570" y="514" text-anchor="middle" class="small">route · matched_positive · final_score</text>
-  <text x="1570" y="536" text-anchor="middle" class="tiny">tfidf / rerank / dga / reasons / features_json</text>
+  <path d="M1570 652 V664" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="1563,664 1570,676 1577,664" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <text x="1570" y="568" text-anchor="middle" class="small bold" fill="#b4232c">候选筛查 ≠ APT 归因或恶意性最终判决</text>
+  <path d="M1378 686 H1762 Q1776 686 1776 700 V754 Q1776 768 1762 768 H1378 Q1364 768 1364 754 V700 Q1364 686 1378 686 Z" class="soft-purple" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="1570" y="736" text-anchor="middle" class="label bold">输出统计摘要</text>
 
-  <rect x="1342" y="606" width="456" height="216" rx="12" class="dash"/>
-  <text x="1368" y="646" class="phase-title">2. 输出文件</text>
+  <path d="M1570 770 V780" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="1563,780 1570,792 1577,780" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <rect x="1370" y="674" width="400" height="62" rx="12" class="soft-green"/>
-  <text x="1570" y="700" text-anchor="middle" class="label bold">候选 CSV</text>
-  <text x="1570" y="723" text-anchor="middle" class="tiny">apt_nrd_similarity_candidates.csv</text>
+  <path d="M1378 802 H1762 Q1776 802 1776 816 V840 Q1776 854 1762 854 H1378 Q1364 854 1364 840 V816 Q1364 802 1378 802 Z" class="soft-red" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="1570" y="836" text-anchor="middle" class="label bold">相似候选结果</text>
 
-  <path d="M1570 738 V752" class="thin-arrow"/>
-
-  <rect x="1370" y="760" width="400" height="54" rx="12" class="soft-purple"/>
-  <text x="1570" y="783" text-anchor="middle" class="small bold">运行摘要 JSON</text>
-  <text x="1570" y="804" text-anchor="middle" class="tiny">路由计数 · 参数 · 输入/输出数量 · 运行耗时</text>
-
-  <!-- Legend -->
-  <line x1="82" y1="910" x2="1818" y2="910" stroke="#000" stroke-width="2"/>
+  <line x1="82" y1="910" x2="1818" y2="910" stroke="#4b5563" stroke-width="2"/>
   <text x="82" y="968" class="label bold">图例</text>
 
-  <rect x="150" y="944" width="28" height="28" rx="5" class="soft-red"/>
-  <rect x="188" y="944" width="28" height="28" rx="5" class="soft-blue"/>
-  <text x="240" y="967" class="label">输入数据与独立检测分支</text>
+  <path d="M155 944 H173 Q178 944 178 949 V967 Q178 972 173 972 H155 Q150 972 150 967 V949 Q150 944 155 944 Z" class="soft-red" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <path d="M193 944 H211 Q216 944 216 949 V967 Q216 972 211 972 H193 Q188 972 188 967 V949 Q188 944 193 944 Z" class="soft-blue" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="240" y="967" class="label">输入数据与清洗处理</text>
 
-  <rect x="540" y="944" width="72" height="34" rx="10" class="dash"/>
-  <text x="636" y="968" class="label">虚线框：算法阶段边界</text>
+  <path d="M550 944 H602 Q612 944 612 954 V968 Q612 978 602 978 H550 Q540 978 540 968 V954 Q540 944 550 944 Z" class="dash" style="fill: #ffffff; stroke: #9ca3af; stroke-width: 2.5; stroke-dasharray: 8 9;"/>
+  <text x="636" y="968" class="label">虚线框表示一组核心处理步骤</text>
 
-  <rect x="992" y="944" width="32" height="32" rx="7" class="soft-purple"/>
-  <rect x="1032" y="944" width="32" height="32" rx="7" class="soft-yellow"/>
-  <text x="1090" y="968" class="label">评分、融合与阈值模块</text>
+  <path d="M1071 944 H1089 Q1096 944 1096 951 V969 Q1096 976 1089 976 H1071 Q1064 976 1064 969 V951 Q1064 944 1071 944 Z" class="soft-purple" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <path d="M1111 944 H1129 Q1136 944 1136 951 V969 Q1136 976 1129 976 H1111 Q1104 976 1104 969 V951 Q1104 944 1111 944 Z" class="soft-yellow" style="fill: #fee2e2; stroke: #b91c1c; stroke-width: 1.5;"/>
+  <text x="1162" y="968" class="label">相似特征、筛选和解释信息</text>
 
-  <path d="M1482 960 H1554" class="arrow"/>
-  <text x="1584" y="968" class="label">数据流与决策流</text>
+  <path d="M1526 960 H1580" class="arrow-line" style="stroke: #4b5563; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="1580,969 1598,960 1580,951" class="arrow-head" style="fill: #4b5563; stroke: none;"/>
+  <text x="1628" y="968" class="label">数据流向</text>
 </svg>

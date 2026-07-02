@@ -71,7 +71,7 @@ async def get_menu(authorization: str | None = Header(None)):
             "parentId": 3,
             "title": "创建检测任务",
             "component": "RouteView",
-            "redirect": "/detection/malicious-domain-detection",
+            "redirect": "/detection/impersonation-domain-detection",
             "path": "/detection/create-task",
             "name": "CreateDetectionTask",
             "keepAlive": False,
@@ -86,6 +86,7 @@ async def get_menu(authorization: str | None = Header(None)):
             "name": "MaliciousDomainDetection",
             "keepAlive": False,
             "locale": "menu.detection.malicious-domain-detection",
+            "hideInMenu": True,
         },
         {
             "id": 52,
@@ -106,6 +107,7 @@ async def get_menu(authorization: str | None = Header(None)):
             "name": "MaliciousIpDetection",
             "keepAlive": False,
             "locale": "menu.detection.malicious-ip-detection",
+            "hideInMenu": True,
         },
         {
             "id": 54,
@@ -120,7 +122,7 @@ async def get_menu(authorization: str | None = Header(None)):
         {
             "id": 55,
             "parentId": 4,
-            "title": "历史高度相似",
+            "title": "历史APT域名相似性检测",
             "component": "/detection/history-similarity-detection/index",
             "path": "/detection/history-similarity-detection",
             "name": "HistorySimilarityDetection",
@@ -130,7 +132,7 @@ async def get_menu(authorization: str | None = Header(None)):
         {
             "id": 56,
             "parentId": 4,
-            "title": "APT模板新注册域名",
+            "title": "模板化APT域名检测",
             "component": "/detection/apt-template-nrd-detection/index",
             "path": "/detection/apt-template-nrd-detection",
             "name": "AptTemplateNrdDetection",

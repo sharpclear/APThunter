@@ -37,10 +37,10 @@ ALERT_PROFILES: Dict[str, AlertProfile] = {
     ),
     "history_similarity": AlertProfile(
         task_type="history_similarity",
-        type_label="历史高度相似检测",
-        domain_label="历史高度相似域名",
+        type_label="历史APT域名相似性检测",
+        domain_label="历史APT相似域名",
         attachment_prefix="history_similarity",
-        default_reason="与历史恶意域名高度相似",
+        default_reason="与历史APT域名高度相似",
     ),
     "dga": AlertProfile(
         task_type="dga",
@@ -51,10 +51,10 @@ ALERT_PROFILES: Dict[str, AlertProfile] = {
     ),
     "apt_template_nrd": AlertProfile(
         task_type="apt_template_nrd",
-        type_label="APT模板新注册域名检测",
-        domain_label="APT模板命中域名",
+        type_label="模板化APT域名检测",
+        domain_label="模板化APT域名",
         attachment_prefix="apt_template_nrd",
-        default_reason="命中APT注册模板",
+        default_reason="命中模板化APT域名模板",
     ),
 }
 

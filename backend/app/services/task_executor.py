@@ -8,12 +8,22 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Tuple
 
 import pandas as pd
-from app.entities import Model, Task
+from app.entities import Model, StoredFile, Task
 from app.infra.minio_client import minio_client
 from app.db.session import SessionLocal
 from app.core.config import MINIO_BUCKET
 from app.services.actor_matcher import match_domain_to_actors_v2_infra
+from app.services.apt_template_nrd_report import (
+    build_apt_template_nrd_result_json,
+    build_apt_template_nrd_result_payload,
+    generate_apt_template_nrd_pdf_report,
+)
 from app.services.domain_infra_collector import collect_missing_domain_infra
+from app.services.history_similarity_report import (
+    build_history_similarity_result_json,
+    build_history_similarity_result_payload,
+    generate_history_similarity_pdf_report,
+)
 
 # 添加models目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "models"))
@@ -515,9 +525,11 @@ def execute_history_similarity_task(task_id: str):
 
         data_source = extra_data.get("dataSource")
         model_path_to_use = model_record.model_path or None
-        min_score = float(extra_data.get("min_score") or 0.55)
+        min_score = float(extra_data.get("min_score") or 0.65)
         top_k = int(extra_data.get("top_k") or 10)
-        result_filename = f"result_{task_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        result_filename = f"history_apt_similarity_report_{task_id}_{timestamp}.pdf"
+        result_data_filename = f"history_apt_similarity_result_{task_id}_{timestamp}.json"
 
         if data_source == "upload":
             _set_task_progress(db, task, extra_data, 20, "读取上传文件")
@@ -526,7 +538,7 @@ def execute_history_similarity_task(task_id: str):
             if not file_key:
                 raise ValueError("上传文件任务缺少 file_object_key")
             file_content = _download_file_from_minio(file_key, file_bucket)
-            _set_task_progress(db, task, extra_data, 45, "历史相似性匹配中")
+            _set_task_progress(db, task, extra_data, 45, "历史APT域名相似性匹配中")
             excel_content, statistics, history_meta, alert_rows = history_similarity_predict_from_file(
                 file_content,
                 file_key,
@@ -541,7 +553,7 @@ def execute_history_similarity_task(task_id: str):
             if not date_range or len(date_range) < 2:
                 raise ValueError("newDomain 任务缺少 dateRange")
             domains, missing_dates = _collect_daily_domains(date_range)
-            _set_task_progress(db, task, extra_data, 45, "历史相似性匹配中")
+            _set_task_progress(db, task, extra_data, 45, "历史APT域名相似性匹配中")
             excel_content, statistics, history_meta, alert_rows = history_similarity_predict_from_domains(
                 domains,
                 f"daily_{task_id}",
@@ -557,7 +569,7 @@ def execute_history_similarity_task(task_id: str):
             domains = extra_data.get("manual_domains") or []
             if not isinstance(domains, list) or not domains:
                 raise ValueError("manualInput 任务缺少有效域名")
-            _set_task_progress(db, task, extra_data, 45, "历史相似性匹配中")
+            _set_task_progress(db, task, extra_data, 45, "历史APT域名相似性匹配中")
             excel_content, statistics, history_meta, alert_rows = history_similarity_predict_from_domains(
                 domains,
                 f"manual_{task_id}",
@@ -572,18 +584,85 @@ def execute_history_similarity_task(task_id: str):
         extra_data["history_similarity_detection"] = history_meta
         extra_data["history_similarity_alert_rows"] = history_alert_rows_to_score_records(alert_rows)
 
-        _set_task_progress(db, task, extra_data, 85, "上传结果文件")
-        result_key = _upload_file_content_to_minio(
+        result_payload = build_history_similarity_result_payload(
             excel_content,
+            task_id=task_id,
+            history_meta=history_meta,
+        )
+        report_content = generate_history_similarity_pdf_report(
+            result_payload,
+            task_id=task_id,
+            model_name=(
+                str(model_record.name or "")
+                .replace("历史高度相似检测", "历史APT域名相似性检测")
+                .replace("历史高度相似", "历史APT域名相似")
+            ),
+            data_source=str(data_source or ""),
+            min_score=min_score,
+            top_k=top_k,
+            date_range=extra_data.get("dateRange") if isinstance(extra_data.get("dateRange"), list) else None,
+            generated_at=datetime.utcnow(),
+        )
+
+        _set_task_progress(db, task, extra_data, 85, "上传PDF报告")
+        result_key = _upload_file_content_to_minio(
+            report_content,
             result_filename,
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content_type="application/pdf",
+            bucket=RESULTS_BUCKET,
+        )
+        result_payload["result_file_key"] = result_key
+        result_payload["result_filename"] = result_filename
+        result_data_content = build_history_similarity_result_json(result_payload)
+        result_data_key = _upload_file_content_to_minio(
+            result_data_content,
+            result_data_filename,
+            content_type="application/json",
             bucket=RESULTS_BUCKET,
         )
 
+        report_file_record = StoredFile(
+            bucket=RESULTS_BUCKET,
+            object_key=result_key,
+            filename=result_filename,
+            content_type="application/pdf",
+            size=len(report_content),
+            uploaded_by=str(task.created_by) if task.created_by is not None else None,
+            metadata_json={
+                "source": "history_similarity_pdf_report",
+                "task_id": task_id,
+                "task_type": "history_similarity",
+            },
+        )
+        db.add(report_file_record)
+        db.flush()
+        result_data_file_record = StoredFile(
+            bucket=RESULTS_BUCKET,
+            object_key=result_data_key,
+            filename=result_data_filename,
+            content_type="application/json",
+            size=len(result_data_content),
+            uploaded_by=str(task.created_by) if task.created_by is not None else None,
+            metadata_json={
+                "source": "history_similarity_result_json",
+                "task_id": task_id,
+                "task_type": "history_similarity",
+            },
+        )
+        db.add(result_data_file_record)
+        db.flush()
+
         task.status = "completed"
+        extra_data["result_file_id"] = report_file_record.id
         extra_data["result_file_key"] = result_key
         extra_data["result_bucket"] = RESULTS_BUCKET
         extra_data["result_filename"] = result_filename
+        extra_data["result_content_type"] = "application/pdf"
+        extra_data["result_data_file_id"] = result_data_file_record.id
+        extra_data["result_data_file_key"] = result_data_key
+        extra_data["result_data_bucket"] = RESULTS_BUCKET
+        extra_data["result_data_filename"] = result_data_filename
+        extra_data["result_data_content_type"] = "application/json"
         extra_data["statistics"] = statistics
         extra_data["completed_at"] = datetime.utcnow().isoformat()
         extra_data["progress"] = 100
@@ -592,7 +671,7 @@ def execute_history_similarity_task(task_id: str):
         task.extra = extra_data
         db.commit()
     except Exception as exc:
-        logger.exception("执行历史高度相似检测任务失败 %s: %s", task_id, exc)
+        logger.exception("执行历史APT域名相似性检测任务失败 %s: %s", task_id, exc)
         task = db.query(Task).filter(Task.task_id == task_id).first()
         if task:
             extra_data = dict(task.extra or {})
@@ -628,7 +707,9 @@ def execute_apt_template_nrd_task(task_id: str):
         data_source = extra_data.get("dataSource")
         model_path_to_use = model_record.model_path or None
         score_threshold = float(extra_data.get("score_threshold") or 0.90)
-        result_filename = f"result_{task_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        result_filename = f"apt_template_nrd_report_{task_id}_{timestamp}.pdf"
+        result_data_filename = f"apt_template_nrd_result_{task_id}_{timestamp}.json"
 
         if data_source == "upload":
             _set_task_progress(db, task, extra_data, 20, "读取上传文件")
@@ -637,7 +718,7 @@ def execute_apt_template_nrd_task(task_id: str):
             if not file_key:
                 raise ValueError("上传文件任务缺少 file_object_key")
             file_content = _download_file_from_minio(file_key, file_bucket)
-            _set_task_progress(db, task, extra_data, 45, "APT模板匹配中")
+            _set_task_progress(db, task, extra_data, 45, "模板化APT域名匹配中")
             excel_content, statistics, apt_meta, alert_rows = apt_template_nrd_predict_from_file(
                 file_content,
                 file_key,
@@ -651,7 +732,7 @@ def execute_apt_template_nrd_task(task_id: str):
             if not date_range or len(date_range) < 2:
                 raise ValueError("newDomain 任务缺少 dateRange")
             domains, missing_dates = _collect_daily_domains(date_range)
-            _set_task_progress(db, task, extra_data, 45, "APT模板匹配中")
+            _set_task_progress(db, task, extra_data, 45, "模板化APT域名匹配中")
             excel_content, statistics, apt_meta, alert_rows = apt_template_nrd_predict_from_domains(
                 domains,
                 f"daily_{task_id}",
@@ -666,7 +747,7 @@ def execute_apt_template_nrd_task(task_id: str):
             domains = extra_data.get("manual_domains") or []
             if not isinstance(domains, list) or not domains:
                 raise ValueError("manualInput 任务缺少有效域名")
-            _set_task_progress(db, task, extra_data, 45, "APT模板匹配中")
+            _set_task_progress(db, task, extra_data, 45, "模板化APT域名匹配中")
             excel_content, statistics, apt_meta, alert_rows = apt_template_nrd_predict_from_domains(
                 domains,
                 f"manual_{task_id}",
@@ -680,18 +761,80 @@ def execute_apt_template_nrd_task(task_id: str):
         extra_data["apt_template_nrd_detection"] = apt_meta
         extra_data["apt_template_nrd_alert_rows"] = apt_template_nrd_alert_rows_to_score_records(alert_rows)
 
-        _set_task_progress(db, task, extra_data, 85, "上传结果文件")
-        result_key = _upload_file_content_to_minio(
+        result_payload = build_apt_template_nrd_result_payload(
             excel_content,
+            task_id=task_id,
+            apt_meta=apt_meta,
+        )
+        report_content = generate_apt_template_nrd_pdf_report(
+            result_payload,
+            task_id=task_id,
+            model_name=str(model_record.name or "").replace("APT模板新注册域名检测", "模板化APT域名检测"),
+            data_source=str(data_source or ""),
+            score_threshold=score_threshold,
+            date_range=extra_data.get("dateRange") if isinstance(extra_data.get("dateRange"), list) else None,
+            generated_at=datetime.utcnow(),
+        )
+
+        _set_task_progress(db, task, extra_data, 85, "上传PDF报告")
+        result_key = _upload_file_content_to_minio(
+            report_content,
             result_filename,
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content_type="application/pdf",
+            bucket=RESULTS_BUCKET,
+        )
+        result_payload["result_file_key"] = result_key
+        result_payload["result_filename"] = result_filename
+        result_data_content = build_apt_template_nrd_result_json(result_payload)
+        result_data_key = _upload_file_content_to_minio(
+            result_data_content,
+            result_data_filename,
+            content_type="application/json",
             bucket=RESULTS_BUCKET,
         )
 
+        report_file_record = StoredFile(
+            bucket=RESULTS_BUCKET,
+            object_key=result_key,
+            filename=result_filename,
+            content_type="application/pdf",
+            size=len(report_content),
+            uploaded_by=str(task.created_by) if task.created_by is not None else None,
+            metadata_json={
+                "source": "apt_template_nrd_pdf_report",
+                "task_id": task_id,
+                "task_type": "apt_template_nrd",
+            },
+        )
+        db.add(report_file_record)
+        db.flush()
+        result_data_file_record = StoredFile(
+            bucket=RESULTS_BUCKET,
+            object_key=result_data_key,
+            filename=result_data_filename,
+            content_type="application/json",
+            size=len(result_data_content),
+            uploaded_by=str(task.created_by) if task.created_by is not None else None,
+            metadata_json={
+                "source": "apt_template_nrd_result_json",
+                "task_id": task_id,
+                "task_type": "apt_template_nrd",
+            },
+        )
+        db.add(result_data_file_record)
+        db.flush()
+
         task.status = "completed"
+        extra_data["result_file_id"] = report_file_record.id
         extra_data["result_file_key"] = result_key
         extra_data["result_bucket"] = RESULTS_BUCKET
         extra_data["result_filename"] = result_filename
+        extra_data["result_content_type"] = "application/pdf"
+        extra_data["result_data_file_id"] = result_data_file_record.id
+        extra_data["result_data_file_key"] = result_data_key
+        extra_data["result_data_bucket"] = RESULTS_BUCKET
+        extra_data["result_data_filename"] = result_data_filename
+        extra_data["result_data_content_type"] = "application/json"
         extra_data["statistics"] = statistics
         extra_data["completed_at"] = datetime.utcnow().isoformat()
         extra_data["progress"] = 100
@@ -700,7 +843,7 @@ def execute_apt_template_nrd_task(task_id: str):
         task.extra = extra_data
         db.commit()
     except Exception as exc:
-        logger.exception("执行APT模板新注册域名检测任务失败 %s: %s", task_id, exc)
+        logger.exception("执行模板化APT域名检测任务失败 %s: %s", task_id, exc)
         task = db.query(Task).filter(Task.task_id == task_id).first()
         if task:
             extra_data = dict(task.extra or {})

@@ -9,14 +9,16 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
 BACKEND_VENV_DIR="$BACKEND_DIR/venv"
+APP_NAME="APTHunter"
 
 BACKEND_PORT="${BACKEND_PORT:-8001}"
 FRONTEND_PORT="${FRONTEND_PORT:-6678}"
 START_REDIS="${START_REDIS:-1}"
+DOTENV_OVERRIDE="${DOTENV_OVERRIDE:-0}"
 
-if [[ -x "$BACKEND_VENV_DIR/bin/uvicorn" && -x "$BACKEND_VENV_DIR/bin/celery" ]]; then
-    DEFAULT_UVICORN_CMD="$BACKEND_VENV_DIR/bin/uvicorn app.main:app --host 0.0.0.0 --port ${BACKEND_PORT}"
-    DEFAULT_CELERY_CMD="$BACKEND_VENV_DIR/bin/celery -A celery_worker worker --loglevel=info"
+if [[ -x "$BACKEND_VENV_DIR/bin/python" ]]; then
+    DEFAULT_UVICORN_CMD="$BACKEND_VENV_DIR/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port ${BACKEND_PORT}"
+    DEFAULT_CELERY_CMD="$BACKEND_VENV_DIR/bin/python -m celery -A celery_worker worker --loglevel=info"
 else
     DEFAULT_UVICORN_CMD="uvicorn app.main:app --host 0.0.0.0 --port ${BACKEND_PORT}"
     DEFAULT_CELERY_CMD="celery -A celery_worker worker --loglevel=info"
@@ -63,6 +65,9 @@ load_env_file() {
         value="${value%"${value##*[![:space:]]}"}"
 
         [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+        if [[ "$DOTENV_OVERRIDE" != "1" && -v "$key" ]]; then
+            continue
+        fi
 
         if [[ "$value" == \"*\" && "$value" == *\" ]]; then
             value="${value:1:${#value}-2}"
@@ -76,20 +81,32 @@ load_env_file() {
     log "loaded env: ${env_file#$ROOT_DIR/}"
 }
 
+set_dev_env() {
+    local key="$1"
+    local value="$2"
+
+    if [[ -v "$key" && -n "${!key}" ]]; then
+        export "$key=${!key}"
+        return 0
+    fi
+
+    export "$key=$value"
+}
+
 set_local_defaults() {
-    export MINIO_ENDPOINT="${MINIO_ENDPOINT:-127.0.0.1:9000}"
+    set_dev_env MINIO_ENDPOINT "localhost:9000"
     export MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minioadmin}"
     export MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-123456789}"
     export MINIO_BUCKET="${MINIO_BUCKET:-uploads}"
 
-    # docker-compose exposes MySQL on 127.0.0.1:3307 for host-side development.
-    export MYSQL_URL="${MYSQL_URL:-mysql+pymysql://apthunter:4CyUhr2zu6!@127.0.0.1:3307/apthunter_new}"
+    set_dev_env MYSQL_URL "mysql+pymysql://apthunter:4CyUhr2zu6!@localhost:3306/apthunter_new"
 
-    export REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379/0}"
-    export CELERY_BROKER_URL="${CELERY_BROKER_URL:-$REDIS_URL}"
-    export CELERY_RESULT_BACKEND="${CELERY_RESULT_BACKEND:-$REDIS_URL}"
+    set_dev_env REDIS_URL "redis://localhost:6379/0"
+    set_dev_env CELERY_BROKER_URL "$REDIS_URL"
+    set_dev_env CELERY_RESULT_BACKEND "$REDIS_URL"
 
-    export VITE_API_PROXY_TARGET="${VITE_API_PROXY_TARGET:-http://127.0.0.1:${BACKEND_PORT}}"
+    set_dev_env VITE_API_PROXY_TARGET "http://127.0.0.1:${BACKEND_PORT}"
+    set_dev_env VITE_ENABLE_H3_MOCK "false"
 }
 
 check_requirements() {
@@ -101,12 +118,15 @@ check_requirements() {
 
     if [[ -d "$BACKEND_VENV_DIR" ]]; then
         [[ -x "$BACKEND_VENV_DIR/bin/python" ]] || die "backend venv exists but python is not executable: $BACKEND_VENV_DIR/bin/python"
-        [[ -x "$BACKEND_VENV_DIR/bin/uvicorn" ]] || die "uvicorn is not installed in backend venv; run: cd backend && source venv/bin/activate && pip install -r requirements.txt"
-        [[ -x "$BACKEND_VENV_DIR/bin/celery" ]] || die "celery is not installed in backend venv; run: cd backend && source venv/bin/activate && pip install -r requirements.txt"
+        "$BACKEND_VENV_DIR/bin/python" -c "import uvicorn, celery" >/dev/null 2>&1 || die "uvicorn or celery is not importable in backend venv; run: cd backend && source venv/bin/activate && pip install -r requirements.txt"
     else
         command -v uvicorn >/dev/null 2>&1 || die "uvicorn is not available; create backend/venv or install backend requirements"
         command -v celery >/dev/null 2>&1 || die "celery is not available; create backend/venv or install backend requirements"
     fi
+}
+
+redis_ready() {
+    redis-cli -u "$REDIS_URL" ping >/dev/null 2>&1 || redis-cli ping >/dev/null 2>&1
 }
 
 ensure_redis() {
@@ -115,7 +135,7 @@ ensure_redis() {
         return 0
     fi
 
-    if redis-cli ping >/dev/null 2>&1; then
+    if redis_ready; then
         log "Redis: PONG"
         return 0
     fi
@@ -127,7 +147,7 @@ ensure_redis() {
     sudo service redis-server start
     sleep 1
 
-    if redis-cli ping >/dev/null 2>&1; then
+    if redis_ready; then
         log "Redis: PONG"
         return 0
     fi
@@ -192,9 +212,9 @@ main() {
     check_requirements
     ensure_redis
 
-    log "starting local development services"
-    log "FastAPI:  http://localhost:${BACKEND_PORT}/docs"
-    log "Frontend: http://localhost:${FRONTEND_PORT}"
+    log "starting $APP_NAME local development services"
+    log "FastAPI:  http://127.0.0.1:${BACKEND_PORT}/docs"
+    log "Frontend: http://127.0.0.1:${FRONTEND_PORT}"
     log "API proxy target: $VITE_API_PROXY_TARGET"
     if [[ -x "$BACKEND_VENV_DIR/bin/python" ]]; then
         log "Backend venv: $BACKEND_VENV_DIR"

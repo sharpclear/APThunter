@@ -119,9 +119,11 @@ interface HistorySimilarityStatistics {
 
 interface AptTemplateNrdStatistics {
   总域名数?: string | number
+  模板化APT域名数?: string | number
   APT模板命中域名数?: string | number
   高风险域名数?: string | number
   正常域名数?: string | number
+  模板化APT域名占比?: string
   APT模板命中域名占比?: string
   高风险域名占比?: string
   预警阈值?: string | number
@@ -308,9 +310,9 @@ function riskStatTitle(taskType?: string) {
   if (taskType === 'dga')
     return 'DGA域名'
   if (taskType === 'history_similarity')
-    return '历史相似域名'
+    return '历史APT相似域名'
   if (taskType === 'apt_template_nrd')
-    return 'APT模板命中域名'
+    return '模板化APT域名'
   return '恶意域名'
 }
 
@@ -322,7 +324,7 @@ function riskStatValue(data: ResultData) {
   if (data.task_type === 'history_similarity')
     return data.statistics['历史相似域名数']
   if (data.task_type === 'apt_template_nrd')
-    return data.statistics['高风险域名数'] || data.statistics['APT模板命中域名数']
+    return data.statistics['高风险域名数'] || data.statistics['模板化APT域名数'] || data.statistics['APT模板命中域名数']
   return data.statistics['恶意域名数']
 }
 
@@ -332,7 +334,7 @@ function riskRateTitle(taskType?: string) {
   if (taskType === 'dga')
     return 'DGA域名占比'
   if (taskType === 'history_similarity')
-    return '历史相似域名占比'
+    return '历史APT相似域名占比'
   if (taskType === 'apt_template_nrd')
     return '高风险域名占比'
   return '恶意域名占比'
@@ -346,7 +348,7 @@ function riskRateValue(data: ResultData) {
   if (data.task_type === 'history_similarity')
     return data.statistics['历史相似域名占比'] || '0%'
   if (data.task_type === 'apt_template_nrd')
-    return data.statistics['高风险域名占比'] || data.statistics['APT模板命中域名占比'] || '0%'
+    return data.statistics['高风险域名占比'] || data.statistics['模板化APT域名占比'] || data.statistics['APT模板命中域名占比'] || '0%'
   return data.statistics['恶意域名占比'] || '0%'
 }
 
@@ -364,9 +366,9 @@ function riskListTitle(taskType?: string) {
   if (taskType === 'dga')
     return 'DGA域名列表'
   if (taskType === 'history_similarity')
-    return '历史相似域名列表'
+    return '历史APT相似域名列表'
   if (taskType === 'apt_template_nrd')
-    return 'APT模板命中域名列表'
+    return '模板化APT域名列表'
   return '恶意域名列表'
 }
 
@@ -447,7 +449,7 @@ const resultColumns = computed(() => {
         ellipsis: true,
       },
       {
-        title: '匹配历史恶意域名',
+        title: '匹配历史APT域名',
         dataIndex: '匹配历史恶意域名',
         key: 'matched_positive',
         width: '22%',
@@ -795,7 +797,7 @@ onMounted(() => {
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'result'">
-                  <a-tag :color="record['预测结果'] === '恶意' || record['预测结果'] === 'DGA-like' || record['预测结果'] === '历史高度相似' || record['预测结果'] === 'APT模板命中' ? 'red' : 'green'">
+                  <a-tag :color="record['预测结果'] === '恶意' || record['预测结果'] === 'DGA-like' || record['预测结果'] === '历史高度相似' || record['预测结果'] === '模板化APT命中' || record['预测结果'] === 'APT模板命中' ? 'red' : 'green'">
                     {{ record['预测结果'] }}
                   </a-tag>
                 </template>
@@ -848,15 +850,15 @@ onMounted(() => {
                       <span>DGA_score: {{ item.DGA_score }}</span>
                     </template>
                     <template v-else-if="resultData.task_type === 'history_similarity'" #description>
-                      <a-tag color="red">历史高度相似</a-tag>
+                      <a-tag color="red">历史APT相似</a-tag>
                       <span>综合相似度: {{ displaySimilarityScore(item) }}</span>
-                      <span> | 匹配历史恶意域名: {{ item.匹配历史恶意域名 || '未知' }}</span>
+                      <span> | 匹配历史APT域名: {{ item.匹配历史恶意域名 || '未知' }}</span>
                       <div v-if="item.命中原因" style="margin-top: 4px; color: #667085;">
                         命中原因: {{ item.命中原因 }}
                       </div>
                     </template>
                     <template v-else-if="resultData.task_type === 'apt_template_nrd'" #description>
-                      <a-tag color="red">APT模板命中</a-tag>
+                      <a-tag color="red">模板化APT命中</a-tag>
                       <span>风险分: {{ displayAptScore(item) }}</span>
                       <span> | 风险等级: {{ item.风险等级 || item.risk_level || '未知' }}</span>
                       <span> | 匹配模板: {{ item.匹配模板 || '未知' }}</span>
@@ -894,7 +896,7 @@ onMounted(() => {
                 <template #icon>
                   <DownloadOutlined />
                 </template>
-                下载Excel结果
+                {{ ['history_similarity', 'apt_template_nrd'].includes(resultData.task_type) ? '下载PDF报告' : '下载Excel结果' }}
               </a-button>
               <a-button size="large" @click="router.back()">
                 返回任务列表

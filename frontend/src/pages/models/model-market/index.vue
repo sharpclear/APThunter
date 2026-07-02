@@ -5,7 +5,7 @@ import { useAuthorization } from '~/composables/authorization'
 import { useUserId } from '~/composables/user-id'
 import { getApiBase } from '~/utils/api-public'
 
-type ModelDisplayType = '恶意性检测' | '仿冒域名检测' | 'DGA域名检测' | '历史高度相似检测' | 'APT模板新注册域名检测'
+type ModelDisplayType = '恶意性检测' | '仿冒域名检测' | 'DGA域名检测' | '历史APT域名相似性检测' | '模板化APT域名检测'
 
 interface MyModel {
   id: number
@@ -150,10 +150,10 @@ async function fetchMarketModels() {
     else if (filterCategory.value === 'DGA域名检测') {
       url.searchParams.set('category', 'dga')
     }
-    else if (filterCategory.value === '历史高度相似检测') {
+    else if (filterCategory.value === '历史APT域名相似性检测') {
       url.searchParams.set('category', 'history_similarity')
     }
-    else if (filterCategory.value === 'APT模板新注册域名检测') {
+    else if (filterCategory.value === '模板化APT域名检测') {
       url.searchParams.set('category', 'apt_template_nrd')
     }
     // 其他类型不设置category，后端会返回所有类型
@@ -290,14 +290,14 @@ const filteredMarket = computed(() => {
       else if (filterCategory.value === 'DGA域名检测') {
         return m.type === 'DGA域名检测'
       }
-      else if (filterCategory.value === '历史高度相似检测') {
-        return m.type === '历史高度相似检测'
+      else if (filterCategory.value === '历史APT域名相似性检测') {
+        return m.type === '历史APT域名相似性检测'
       }
-      else if (filterCategory.value === 'APT模板新注册域名检测') {
-        return m.type === 'APT模板新注册域名检测'
+      else if (filterCategory.value === '模板化APT域名检测') {
+        return m.type === '模板化APT域名检测'
       }
       else if (filterCategory.value === '其他') {
-        return m.type === null || !['恶意性检测', '仿冒域名检测', 'DGA域名检测', '历史高度相似检测', 'APT模板新注册域名检测'].includes(m.type)
+        return m.type === null || !['恶意性检测', '仿冒域名检测', 'DGA域名检测', '历史APT域名相似性检测', '模板化APT域名检测'].includes(m.type)
       }
       return true
     })
@@ -466,11 +466,11 @@ function mapTypeLabel(t: ModelDisplayType | null) {
               <a-radio-button value="DGA域名检测">
                 DGA域名检测
               </a-radio-button>
-              <a-radio-button value="历史高度相似检测">
-                历史高度相似检测
+              <a-radio-button value="历史APT域名相似性检测">
+                历史APT域名相似性检测
               </a-radio-button>
-              <a-radio-button value="APT模板新注册域名检测">
-                APT模板新注册域名检测
+              <a-radio-button value="模板化APT域名检测">
+                模板化APT域名检测
               </a-radio-button>
               <a-radio-button value="其他">
                 其他

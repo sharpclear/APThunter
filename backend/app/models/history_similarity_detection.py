@@ -36,7 +36,7 @@ CURRENT_DIR = Path(__file__).resolve().parent
 APP_DIR = CURRENT_DIR.parent
 PROJECT_DIR = APP_DIR.parent.parent
 DEFAULT_HISTORY_PATH = CURRENT_DIR / "dataset" / "history_data" / "训练黑数据.xlsx"
-DEFAULT_MIN_SCORE = float(os.getenv("HISTORY_SIMILARITY_MIN_SCORE", "0.55"))
+DEFAULT_MIN_SCORE = float(os.getenv("HISTORY_SIMILARITY_MIN_SCORE", "0.65"))
 DEFAULT_TOP_K = int(os.getenv("HISTORY_SIMILARITY_TOP_K", "10"))
 
 

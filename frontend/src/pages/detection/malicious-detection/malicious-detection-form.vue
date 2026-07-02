@@ -117,10 +117,6 @@ function categoryLabel(category: string) {
   return '域名检测'
 }
 
-function categoryModelLabel(category: ModelCategory) {
-  return MODEL_CATEGORIES.find(item => item.value === category)?.label || category
-}
-
 function chineseOrdinal(index: number) {
   const numerals = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
   if (index <= 10)

@@ -50,7 +50,7 @@ export default [
     children: [
       {
         path: '/detection/create-task',
-        redirect: '/detection/malicious-domain-detection',
+        redirect: '/detection/impersonation-domain-detection',
         name: 'CreateDetectionTask',
         component: basicRouteMap.RouteView,
         meta: {
@@ -65,6 +65,7 @@ export default [
             meta: {
               title: '恶意域名检测',
               locale: 'menu.detection.malicious-domain-detection',
+              hideInMenu: true,
             },
           },
           {
@@ -90,7 +91,7 @@ export default [
             name: 'HistorySimilarityDetection',
             component: () => import('~/pages/detection/history-similarity-detection/index.vue'),
             meta: {
-              title: '历史高度相似',
+              title: '历史APT域名相似性检测',
               locale: 'menu.detection.history-similarity-detection',
             },
           },
@@ -99,7 +100,7 @@ export default [
             name: 'AptTemplateNrdDetection',
             component: () => import('~/pages/detection/apt-template-nrd-detection/index.vue'),
             meta: {
-              title: 'APT模板新注册域名',
+              title: '模板化APT域名检测',
               locale: 'menu.detection.apt-template-nrd-detection',
             },
           },
@@ -110,6 +111,7 @@ export default [
             meta: {
               title: '恶意IP检测',
               locale: 'menu.detection.malicious-ip-detection',
+              hideInMenu: true,
             },
           },
         ],

@@ -19,7 +19,7 @@ WHERE NOT EXISTS (
   SELECT 1 FROM users WHERE username = 'admin'
 );
 
--- 2) 创建官方模型（恶意检测 + 仿冒检测 + DGA检测 + 历史高度相似检测 + APT模板新注册域名检测）
+-- 2) 创建官方模型（恶意检测 + 仿冒检测 + DGA检测 + 历史APT域名相似性检测 + 模板化APT域名检测）
 -- 注意：malicious 模型需要确保 model_path 指向的文件在容器内可读取，否则执行恶意检测时会报模型文件不存在。
 INSERT INTO models (
   name, version, description, model_path, file_size, accuracy_metrics,
@@ -107,12 +107,12 @@ INSERT INTO models (
   model_type, model_category, is_public, is_official, created_by, status
 )
 SELECT
-  '历史高度相似检测模型',
+  '历史APT域名相似性检测模型',
   'v1.0',
   '基于历史恶意域名样本的字符相似度与重排序特征筛选模型',
   'dataset/history_data/训练黑数据.xlsx',
   NULL,
-  JSON_OBJECT('note', '官方历史恶意域名相似性种子模型', 'default_min_score', 0.55),
+  JSON_OBJECT('note', '官方历史APT域名相似性种子模型', 'default_min_score', 0.65),
   'official',
   'history_similarity',
   1,
@@ -122,9 +122,9 @@ SELECT
 WHERE NOT EXISTS (
   SELECT 1
   FROM models
-  WHERE name = '历史高度相似检测模型'
-    AND version = 'v1.0'
+  WHERE model_category = 'history_similarity'
     AND model_type = 'official'
+    AND status = 'active'
 );
 
 INSERT INTO models (
@@ -132,12 +132,12 @@ INSERT INTO models (
   model_type, model_category, is_public, is_official, created_by, status
 )
 SELECT
-  'APT模板新注册域名检测模型',
+  '模板化APT域名检测模型',
   'v1.0',
-  '基于APT注册模板库匹配新注册域名的官方规则模型',
-  'dataset/APTdomains/疑似模板化注册域名_筛选结果.xlsx',
+  '基于模板化APT域名模板库匹配待检测域名的官方规则模型',
+  'dataset/history_data/APTdomain_templates.xlsx',
   NULL,
-  JSON_OBJECT('note', '官方APT模板新注册域名匹配模型', 'default_score_threshold', 0.90),
+  JSON_OBJECT('note', '官方模板化APT域名匹配模型', 'template_source', 'dataset/history_data/APTdomain_templates.xlsx', 'default_score_threshold', 0.90),
   'official',
   'apt_template_nrd',
   1,
@@ -147,7 +147,7 @@ SELECT
 WHERE NOT EXISTS (
   SELECT 1
   FROM models
-  WHERE name = 'APT模板新注册域名检测模型'
+  WHERE name = '模板化APT域名检测模型'
     AND version = 'v1.0'
     AND model_type = 'official'
 );

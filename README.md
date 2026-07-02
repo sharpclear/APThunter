@@ -57,6 +57,24 @@ docker-compose ps
   - 用户名: `minioadmin`
   - 密码: `123456789`
 
+## 本地开发一键启动
+
+如果需要以前后端源码热更新方式联调，可直接在项目根目录执行：
+
+```bash
+./dev.sh
+```
+
+脚本会按当前 APTHunter 目录自动定位 `backend` 和 `frontend`，加载根目录或 `backend` 目录下的 `.env`，并启动 FastAPI、Celery worker 和 Vite。执行前请确认本机 MySQL、Redis、MinIO 已按 `.env` 或脚本默认值可访问。默认访问地址：
+
+- **前端开发服务**: http://localhost:6678
+- **后端 API 文档**: http://localhost:8001/docs
+- **MySQL**: `localhost:3306`
+- **Redis**: `localhost:6379`
+- **MinIO**: `localhost:9000`
+
+如需跳过 Redis 检查，可使用 `START_REDIS=0 ./dev.sh`；如需调整连接地址，可在 `.env` 中设置 `MYSQL_URL`、`REDIS_URL`、`MINIO_ENDPOINT` 等变量。
+
 ## 服务说明
 
 | 服务 | 端口 | 说明 |
@@ -387,4 +405,3 @@ apthunter/
 - 初始版本
 - 支持恶意性检测和仿冒域名检测
 - Docker Compose 一键部署
-

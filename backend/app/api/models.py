@@ -75,10 +75,20 @@ def map_model_category_to_type(category: Optional[str]) -> Optional[str]:
     elif category == "dga":
         return "DGA域名检测"
     elif category == "history_similarity":
-        return "历史高度相似检测"
+        return "历史APT域名相似性检测"
     elif category == "apt_template_nrd":
         return "模板化APT域名检测"
     return None
+
+
+def normalize_model_display_name(name: Optional[str], category: Optional[str]) -> str:
+    if category != "history_similarity":
+        return str(name or "")
+    return (
+        str(name or "")
+        .replace("历史高度相似检测", "历史APT域名相似性检测")
+        .replace("历史高度相似", "历史APT域名相似")
+    )
 
 
 def format_datetime(dt: Optional[datetime]) -> str:
@@ -117,7 +127,7 @@ async def get_available_models(
         # 已认证用户：从user_models表查询
         query = text("""
             SELECT 
-                m.id, m.name
+                m.id, m.name, m.model_category
             FROM user_models um
             INNER JOIN models m ON um.model_id = m.id
             WHERE um.user_id = :user_id
@@ -137,7 +147,7 @@ async def get_available_models(
         # 未认证或token过期：只返回官方模型
         query = text("""
             SELECT 
-                m.id, m.name
+                m.id, m.name, m.model_category
             FROM models m
             WHERE m.status = 'active' AND m.model_type = 'official'
               AND (:category IS NULL OR m.model_category = :category)
@@ -152,7 +162,7 @@ async def get_available_models(
     for row in rows:
         models.append({
             "id": row["id"],
-            "name": row["name"],
+            "name": normalize_model_display_name(row["name"], row["model_category"]),
         })
     
     return {"code": 0, "message": "ok", "data": models}
@@ -256,7 +266,7 @@ async def get_my_models(
         
         model_data = {
             "id": row["id"],
-            "name": row["name"],
+            "name": normalize_model_display_name(row["name"], row["model_category"]),
             "version": row["version"],
             "description": row["description"] or "",
             "model_path": row["model_path"],
@@ -464,7 +474,7 @@ async def get_publishable_models(
     for row in rows:
         models.append({
             "id": row["id"],
-            "name": row["name"],
+            "name": normalize_model_display_name(row["name"], row["model_category"]),
             "version": row["version"],
             "description": row["description"] or "",
             "model_path": row["model_path"],
@@ -548,7 +558,7 @@ async def get_market_models(
         creator_name = row.get("creator_username") or row["created_by"] or "未知"
         models.append({
             "id": row["id"],
-            "name": row["name"],
+            "name": normalize_model_display_name(row["name"], row["model_category"]),
             "version": row["version"],
             "description": row["description"] or "",
             "model_path": row["model_path"],

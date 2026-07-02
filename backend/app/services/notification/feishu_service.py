@@ -490,7 +490,7 @@ def _build_apt_template_nrd_alert_lines(
                 "_score_value": _coerce_score(score),
                 "risk_level": _safe_text(item.get("risk_level") or raw.get("risk_level") or raw.get("风险等级"), "高"),
                 "matched_template": _safe_text(item.get("matched_template") or raw.get("匹配模板")),
-                "reason": _safe_text(item.get("reason") or raw.get("reason") or raw.get("命中原因"), "命中APT注册模板"),
+                "reason": _safe_text(item.get("reason") or raw.get("reason") or raw.get("命中原因"), "命中模板化APT域名模板"),
             }
         )
 
@@ -505,7 +505,7 @@ def _build_apt_template_nrd_alert_lines(
                         "_score_value": None,
                         "risk_level": "高",
                         "matched_template": "",
-                        "reason": "命中APT注册模板",
+                        "reason": "命中模板化APT域名模板",
                     }
                 )
 
@@ -519,8 +519,8 @@ def _build_apt_template_nrd_alert_lines(
     preview_records = normalized_records[:30]
 
     detail_lines = [
-        f"检测结果：命中APT模板新注册域名 {high_risk_count} 个 / 检测总数 {detected_count} 个",
-        "APT模板命中明细（按风险分降序，仅展示前30个）：",
+        f"检测结果：命中模板化APT域名 {high_risk_count} 个 / 检测总数 {detected_count} 个",
+        "模板化APT域名明细（按风险分降序，仅展示前30个）：",
     ]
     for index, item in enumerate(preview_records, start=1):
         detail_lines.append(
@@ -532,7 +532,7 @@ def _build_apt_template_nrd_alert_lines(
         )
     if len(normalized_records) > len(preview_records):
         detail_lines.append(
-            f"仅展示评分排名前30的APT模板命中域名，其余 {len(normalized_records) - len(preview_records)} 个请查看预警附件或结果文件。"
+            f"仅展示评分排名前30的模板化APT域名，其余 {len(normalized_records) - len(preview_records)} 个请查看预警附件或结果文件。"
         )
 
     return [[{"tag": "text", "text": "\n".join(detail_lines) + "\n"}]]
@@ -585,7 +585,7 @@ def _build_history_similarity_alert_lines(
                 )
 
     detail_lines = [
-        f"检测结果：命中历史高度相似域名 {high_risk_count} 个 / 检测总数 {detected_count} 个",
+        f"检测结果：命中历史APT相似域名 {high_risk_count} 个 / 检测总数 {detected_count} 个",
         "检测明细：",
     ]
     for index, item in enumerate(normalized_records, start=1):
@@ -593,7 +593,7 @@ def _build_history_similarity_alert_lines(
         detail_lines.append(
             f"{index}. 域名：{item.get('domain', '')}\n"
             f"   评分：{_format_similarity_score(item.get('score'))}\n"
-            f"   匹配历史恶意域名：{matched_positive}"
+            f"   匹配历史APT域名：{matched_positive}"
         )
 
     return [[{"tag": "text", "text": "\n".join(detail_lines) + "\n"}]]

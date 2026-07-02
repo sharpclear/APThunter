@@ -1,17 +1,5 @@
-ALTER TABLE models
-  MODIFY COLUMN model_category ENUM('malicious','impersonation','dga','history_similarity','apt_template_nrd') DEFAULT NULL;
-
-ALTER TABLE tasks
-  MODIFY COLUMN task_type ENUM('malicious','impersonation','malicious_ip','dga','history_similarity','apt_template_nrd') NOT NULL COMMENT '任务类型';
-
-ALTER TABLE training_tasks
-  MODIFY COLUMN model_category ENUM('malicious','impersonation','dga','history_similarity','apt_template_nrd') NOT NULL DEFAULT 'malicious';
-
 ALTER TABLE alerts
   MODIFY COLUMN task_type ENUM('malicious', 'impersonation', 'malicious_ip', 'dga', 'history_similarity', 'apt_template_nrd') NOT NULL COMMENT '任务类型：恶意域名检测/仿冒域名检测/恶意IP检测/DGA域名检测/历史高度相似检测/模板化APT域名检测';
-
-ALTER TABLE alert_files
-  MODIFY COLUMN task_type ENUM('malicious', 'impersonation', 'malicious_ip', 'dga', 'history_similarity', 'apt_template_nrd') NOT NULL COMMENT '任务类型';
 
 INSERT INTO models (
   name, version, description, model_path, file_size, accuracy_metrics,
@@ -42,7 +30,10 @@ SET
   name = '模板化APT域名检测模型',
   model_path = 'dataset/history_data/APTdomain_templates.xlsx',
   description = '基于模板化APT域名模板库匹配待检测域名的官方规则模型',
-  accuracy_metrics = JSON_OBJECT('note', '官方模板化APT域名匹配模型', 'template_source', 'dataset/history_data/APTdomain_templates.xlsx', 'default_score_threshold', 0.90)
+  accuracy_metrics = JSON_OBJECT('note', '官方模板化APT域名匹配模型', 'template_source', 'dataset/history_data/APTdomain_templates.xlsx', 'default_score_threshold', 0.90),
+  is_public = 1,
+  is_official = 1,
+  status = 'active'
 WHERE model_category = 'apt_template_nrd'
   AND model_type = 'official';
 

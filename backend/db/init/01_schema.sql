@@ -150,7 +150,7 @@ CREATE TABLE IF NOT EXISTS alerts (
     user_id BIGINT UNSIGNED NOT NULL COMMENT '用户ID（冗余字段，便于查询）',
     model_id BIGINT UNSIGNED NOT NULL COMMENT '模型ID（冗余字段）',
     model_name VARCHAR(255) NOT NULL COMMENT '模型名称（冗余字段，避免关联查询）',
-    task_type ENUM('malicious', 'impersonation', 'malicious_ip', 'dga', 'history_similarity', 'apt_template_nrd') NOT NULL COMMENT '任务类型：恶意域名检测/仿冒域名检测/恶意IP检测/DGA域名检测/历史高度相似检测/APT模板新注册域名检测',
+    task_type ENUM('malicious', 'impersonation', 'malicious_ip', 'dga', 'history_similarity', 'apt_template_nrd') NOT NULL COMMENT '任务类型：恶意域名检测/仿冒域名检测/恶意IP检测/DGA域名检测/历史APT域名相似性检测/模板化APT域名检测',
     detected_count INT NOT NULL DEFAULT 0 COMMENT '检测到的域名总数',
     high_risk_count INT NOT NULL DEFAULT 0 COMMENT '高风险域名数量',
     high_risk_domains JSON NULL COMMENT '高风险域名列表（JSON数组）',
@@ -197,3 +197,70 @@ CREATE TABLE IF NOT EXISTS alert_files (
     CONSTRAINT fk_alert_files_alert_id FOREIGN KEY (alert_id) REFERENCES alerts(alert_id) ON DELETE CASCADE,
     CONSTRAINT fk_alert_files_file_id FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='预警文件索引表';
+
+-- 创建域名持续监控目标表
+CREATE TABLE IF NOT EXISTS domain_monitor_targets (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL COMMENT '用户ID',
+    domain VARCHAR(255) NOT NULL COMMENT '展示域名',
+    normalized_domain VARCHAR(255) NOT NULL COMMENT '规范化域名',
+    is_active TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用监控',
+    monitor_interval_hours INT NOT NULL DEFAULT 24 COMMENT '监控间隔小时',
+    next_check_at DATETIME NOT NULL COMMENT '下次检查时间',
+    last_checked_at DATETIME NULL COMMENT '最近检查时间',
+    status VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT '监控状态',
+    consecutive_failures INT NOT NULL DEFAULT 0 COMMENT '连续失败次数',
+    last_error TEXT NULL COMMENT '最近错误',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uniq_domain_monitor_user_domain (user_id, normalized_domain),
+    INDEX idx_domain_monitor_user_id (user_id),
+    INDEX idx_domain_monitor_domain (normalized_domain),
+    INDEX idx_domain_monitor_due (is_active, next_check_at),
+    INDEX idx_domain_monitor_status (status),
+    CONSTRAINT fk_domain_monitor_targets_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='域名持续监控目标';
+
+-- 创建域名持续监控来源表
+CREATE TABLE IF NOT EXISTS domain_monitor_sources (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    target_id BIGINT UNSIGNED NOT NULL COMMENT '监控目标ID',
+    source_type VARCHAR(32) NOT NULL COMMENT '来源类型：subscription_alert/detection_task/manual',
+    task_id VARCHAR(64) NULL COMMENT '检测任务ID',
+    task_type VARCHAR(64) NULL COMMENT '检测任务类型',
+    model_id BIGINT UNSIGNED NULL COMMENT '模型ID',
+    subscription_id VARCHAR(64) NULL COMMENT '订阅ID',
+    alert_id VARCHAR(64) NULL COMMENT '预警ID',
+    risk_score DECIMAL(10,6) NULL COMMENT '检测风险分',
+    risk_level VARCHAR(32) NULL COMMENT '检测风险等级',
+    risk_record JSON NULL COMMENT '检测来源记录',
+    detected_at DATETIME NULL COMMENT '来源检测时间',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_domain_monitor_source_target (target_id),
+    INDEX idx_domain_monitor_source_type (source_type),
+    INDEX idx_domain_monitor_source_task (task_id),
+    INDEX idx_domain_monitor_source_alert (alert_id),
+    INDEX idx_domain_monitor_source_subscription (subscription_id),
+    INDEX idx_domain_monitor_source_model (model_id),
+    CONSTRAINT fk_domain_monitor_sources_target FOREIGN KEY (target_id) REFERENCES domain_monitor_targets(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='域名监控来源';
+
+-- 创建域名持续监控快照表
+CREATE TABLE IF NOT EXISTS domain_monitor_snapshots (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    target_id BIGINT UNSIGNED NOT NULL COMMENT '监控目标ID',
+    status VARCHAR(32) NOT NULL DEFAULT 'success' COMMENT '采集状态：success/partial/failed',
+    collected_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '采集时间',
+    whois_snapshot JSON NULL COMMENT 'WHOIS快照',
+    dns_snapshot JSON NULL COMMENT 'DNS快照',
+    certificate_snapshot JSON NULL COMMENT '证书快照',
+    web_snapshot JSON NULL COMMENT '网页快照',
+    changed_fields JSON NULL COMMENT '与上次快照相比的变化字段',
+    raw_lookup_errors JSON NULL COMMENT '原始查询错误',
+    error_message TEXT NULL COMMENT '错误信息',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_domain_monitor_snapshot_target (target_id),
+    INDEX idx_domain_monitor_snapshot_collected (target_id, collected_at),
+    INDEX idx_domain_monitor_snapshot_status (status),
+    CONSTRAINT fk_domain_monitor_snapshots_target FOREIGN KEY (target_id) REFERENCES domain_monitor_targets(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='域名持续监控快照';

@@ -72,7 +72,7 @@ TASK_TYPE_LABEL_MAP = {
     "impersonation": "仿冒域名检测",
     "malicious_ip": "恶意IP检测",
     "dga": "DGA域名检测",
-    "history_similarity": "历史高度相似检测",
+    "history_similarity": "历史APT域名相似性检测",
     "apt_template_nrd": "模板化APT域名检测",
 }
 DATA_SOURCE_LABEL_MAP = {
@@ -86,6 +86,14 @@ STATUS_PROGRESS_MAP = {
     "completed": 100,
     "failed": 0,
 }
+
+
+def _history_similarity_display_text(value: Optional[str]) -> str:
+    return (
+        str(value or "")
+        .replace("历史高度相似检测", "历史APT域名相似性检测")
+        .replace("历史高度相似", "历史APT域名相似")
+    )
 
 
 def upload_file_content_to_minio(file_content: bytes, filename: str, content_type: Optional[str] = None, bucket: str = MINIO_BUCKET) -> str:
@@ -696,7 +704,7 @@ def _parse_similarity_threshold(use_custom_threshold: str, threshold: Optional[s
 
 def _parse_history_similarity_min_score(value: Optional[str]) -> Tuple[float, int]:
     if value is None or str(value).strip() == "":
-        return 0.55, 55
+        return 0.65, 65
     try:
         threshold_percent = float(str(value).strip())
     except ValueError as exc:
@@ -1759,7 +1767,7 @@ async def create_history_similarity_task(
     manualDomains: Optional[str] = Form(None),
     minScore: Optional[str] = Form(None),
 ):
-    """创建历史高度相似检测任务。"""
+    """创建历史APT域名相似性检测任务。"""
     try:
         created_by_user_id: Optional[int] = _extract_user_id(request)
         uploaded_by_header = request.headers.get("X-User-Name") or request.headers.get("X-User")
@@ -1872,7 +1880,7 @@ async def create_history_similarity_task(
                 if not user_model_result:
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
-                        detail=f"您没有权限使用模型 {model_record.name}",
+                        detail=f"您没有权限使用模型 {_history_similarity_display_text(model_record.name)}",
                     )
 
             file_record = None
@@ -2237,11 +2245,14 @@ async def list_tasks(
             elif data_source_type == "manualInput":
                 manual_stats = extra_data.get("manual_domain_stats") or {}
                 data_source_payload["domainCount"] = manual_stats.get("valid_count") or len(extra_data.get("manual_domains") or [])
+            model_name = model.name if model else ""
+            if task.task_type == "history_similarity":
+                model_name = _history_similarity_display_text(model_name)
             items.append({
                 "id": task.task_id,
                 "createdAt": task.created_at.isoformat() if task.created_at else "",
                 "taskType": task_type_label,
-                "model": model.name if model else "",
+                "model": model_name,
                 "dataSource": data_source_payload,
                 "status": status_label,
                 "progress": progress,
@@ -2306,6 +2317,48 @@ async def get_task_result_json(task_id: str, request: Request):
             )
 
         result_bucket = extra_data.get("result_bucket") or RESULTS_BUCKET
+
+        if task.task_type == "history_similarity" and extra_data.get("result_data_file_key"):
+            try:
+                result_data_bytes = download_file_from_minio(
+                    extra_data.get("result_data_file_key"),
+                    extra_data.get("result_data_bucket") or RESULTS_BUCKET,
+                )
+                result_payload = json.loads(result_data_bytes.decode("utf-8"))
+                result_payload["result_file_key"] = result_key
+                result_payload["result_filename"] = extra_data.get("result_filename") or result_payload.get("result_filename") or f"{task.task_id}_report.pdf"
+                result_payload["history_similarity_detection"] = extra_data.get("history_similarity_detection") or result_payload.get("history_similarity_detection") or {}
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content=_json_safe_value(result_payload),
+                )
+            except Exception as exc:
+                logger.exception("读取历史APT域名相似性检测JSON结果失败 task_id=%s: %s", task.task_id, exc)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to parse history similarity result data",
+                ) from exc
+
+        if task.task_type == "apt_template_nrd" and extra_data.get("result_data_file_key"):
+            try:
+                result_data_bytes = download_file_from_minio(
+                    extra_data.get("result_data_file_key"),
+                    extra_data.get("result_data_bucket") or RESULTS_BUCKET,
+                )
+                result_payload = json.loads(result_data_bytes.decode("utf-8"))
+                result_payload["result_file_key"] = result_key
+                result_payload["result_filename"] = extra_data.get("result_filename") or result_payload.get("result_filename") or f"{task.task_id}_report.pdf"
+                result_payload["apt_template_nrd_detection"] = extra_data.get("apt_template_nrd_detection") or result_payload.get("apt_template_nrd_detection") or {}
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content=_json_safe_value(result_payload),
+                )
+            except Exception as exc:
+                logger.exception("读取模板化APT域名检测JSON结果失败 task_id=%s: %s", task.task_id, exc)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to parse apt template result data",
+                ) from exc
         
         try:
             # 从MinIO下载Excel文件
@@ -2333,7 +2386,11 @@ async def get_task_result_json(task_id: str, request: Request):
                 apt_list = []
                 try:
                     excel_file.seek(0)
-                    apt_df = pd.read_excel(excel_file, sheet_name='模板化APT域名列表')
+                    try:
+                        apt_df = pd.read_excel(excel_file, sheet_name='模板化APT域名列表')
+                    except Exception:
+                        excel_file.seek(0)
+                        apt_df = pd.read_excel(excel_file, sheet_name='APT模板命中域名列表')
                     apt_list = apt_df.to_dict('records')
                 except Exception:
                     try:
@@ -2351,8 +2408,7 @@ async def get_task_result_json(task_id: str, request: Request):
                     apt_list = [
                         row for row in results_list
                         if row.get('预测标签') == 1
-                        or row.get('预测结果') == '模板化APT命中'
-                        or row.get('预测结果') == 'APT模板命中'
+                        or row.get('预测结果') in {'模板化APT命中', 'APT模板命中'}
                         or str(row.get('risk_level') or '').lower() == 'high'
                     ]
 
@@ -2626,16 +2682,21 @@ async def download_task_result(task_id: str, request: Request):
             filename = extra_data.get("word_report_filename") or f"{task.task_id}_prediction_report.docx"
             media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             is_word_report_download = True
+        result_content_type = extra_data.get("result_content_type") or (
+            "application/pdf" if str(filename).lower().endswith(".pdf") else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        if not is_word_report_download:
+            media_type = result_content_type
         try:
             file_bytes = download_file_from_minio(result_key, result_bucket)
         except Exception as exc:
             logger.exception("下载结果文件失败: %s", exc)
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch result file")
-        if task.task_type == "history_similarity" and not is_word_report_download:
+        if task.task_type == "history_similarity" and not is_word_report_download and media_type != "application/pdf":
             try:
                 file_bytes = _dedupe_history_similarity_sheet(file_bytes)
             except Exception:
-                logger.exception("历史高度相似结果Sheet去重失败 task_id=%s", task.task_id)
+                logger.exception("历史APT域名相似性检测结果Sheet去重失败 task_id=%s", task.task_id)
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Failed to deduplicate history similarity sheet",

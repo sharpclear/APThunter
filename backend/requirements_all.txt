@@ -84,4 +84,4 @@ redis>=5.0.0
 beautifulsoup4>=4.12.0
 cloudscraper>=1.2.71
 gensim>=4.4.0
-
+reportlab>=4.2.0

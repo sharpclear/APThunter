@@ -18,7 +18,7 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="Asia/Shanghai",
     enable_utc=False,
-    imports=("app.tasks.detection_tasks",),
+    imports=("app.tasks.detection_tasks", "app.tasks.domain_monitor_tasks"),
 )
 
 # 多队列扩展预留：默认不启用，避免影响现有 worker 的队列消费行为。

@@ -143,9 +143,11 @@ interface HistorySimilarityStatistics {
 
 interface AptTemplateNrdStatistics {
   总域名数?: string | number
+  模板化APT域名数?: string | number
   APT模板命中域名数?: string | number
   高风险域名数?: string | number
   正常域名数?: string | number
+  模板化APT域名占比?: string
   APT模板命中域名占比?: string
   高风险域名占比?: string
   预警阈值?: string | number
@@ -324,25 +326,6 @@ function displayBinaryConfidence(value?: number) {
   return `${(Number(value) * 100).toFixed(2)}%`
 }
 
-function displayLlmDisposition(item: Partial<PhishingResultItem>) {
-  if (item.LLM处置结果)
-    return item.LLM处置结果
-  const labelMap: Record<string, string> = {
-    likely_impersonation: '保留高危告警',
-    suspicious_impersonation: '保留人工复核',
-    unlikely_impersonation: '建议剔除',
-    uncertain: '降低优先级',
-    likely_phishing: '保留高危告警',
-    suspicious_phishing: '保留人工复核',
-    unlikely_phishing: '建议剔除',
-  }
-  return labelMap[item.LLM研判标签 || ''] || '未知'
-}
-
-function displayLlmScore(item: Partial<PhishingResultItem>) {
-  return item.LLM研判分数 || '未知'
-}
-
 function getImpersonationDomain(item: Partial<PhishingResultItem>) {
   return item.仿冒域名 || item.钓鱼域名 || '未知域名'
 }
@@ -379,9 +362,9 @@ function riskStatTitle(taskType?: string) {
   if (taskType === 'dga')
     return 'DGA域名'
   if (taskType === 'history_similarity')
-    return '历史相似域名'
+    return '历史APT相似域名'
   if (taskType === 'apt_template_nrd')
-    return 'APT模板命中域名'
+    return '模板化APT域名'
   return '恶意域名'
 }
 
@@ -393,7 +376,7 @@ function riskStatValue(data: ResultData) {
   if (data.task_type === 'history_similarity')
     return data.statistics['历史相似域名数']
   if (data.task_type === 'apt_template_nrd')
-    return data.statistics['高风险域名数'] || data.statistics['APT模板命中域名数']
+    return data.statistics['高风险域名数'] || data.statistics['模板化APT域名数'] || data.statistics['APT模板命中域名数']
   return data.statistics['恶意域名数']
 }
 
@@ -403,7 +386,7 @@ function riskRateTitle(taskType?: string) {
   if (taskType === 'dga')
     return 'DGA域名占比'
   if (taskType === 'history_similarity')
-    return '历史相似域名占比'
+    return '历史APT相似域名占比'
   if (taskType === 'apt_template_nrd')
     return '高风险域名占比'
   return '恶意域名占比'
@@ -417,7 +400,7 @@ function riskRateValue(data: ResultData) {
   if (data.task_type === 'history_similarity')
     return data.statistics['历史相似域名占比'] || '0%'
   if (data.task_type === 'apt_template_nrd')
-    return data.statistics['高风险域名占比'] || data.statistics['APT模板命中域名占比'] || '0%'
+    return data.statistics['高风险域名占比'] || data.statistics['模板化APT域名占比'] || data.statistics['APT模板命中域名占比'] || '0%'
   return data.statistics['恶意域名占比'] || '0%'
 }
 
@@ -435,9 +418,9 @@ function riskListTitle(taskType?: string) {
   if (taskType === 'dga')
     return 'DGA域名列表'
   if (taskType === 'history_similarity')
-    return '历史相似域名列表'
+    return '历史APT相似域名列表'
   if (taskType === 'apt_template_nrd')
-    return 'APT模板命中域名列表'
+    return '模板化APT域名列表'
   return '恶意域名列表'
 }
 
@@ -607,7 +590,11 @@ function handleDownload() {
 }
 
 function downloadButtonText() {
-  return resultData.value?.task_type === 'impersonation' ? '下载Word报告' : '下载Excel'
+  if (resultData.value?.task_type === 'impersonation')
+    return '下载Word报告'
+  if (['history_similarity', 'apt_template_nrd'].includes(resultData.value?.task_type || ''))
+    return '下载PDF报告'
+  return '下载Excel'
 }
 </script>
 
@@ -766,9 +753,9 @@ function downloadButtonText() {
                   </template>
                   <template v-else-if="resultData.task_type === 'history_similarity'" #description>
                     <div>
-                      <a-tag color="red">历史高度相似</a-tag>
+                      <a-tag color="red">历史APT相似</a-tag>
                       <span class="summary-item">综合相似度: {{ displaySimilarityScore(item) }}</span>
-                      <span class="summary-item">匹配历史恶意域名: {{ item.匹配历史恶意域名 || '未知' }}</span>
+                      <span class="summary-item">匹配历史APT域名: {{ item.匹配历史恶意域名 || '未知' }}</span>
                       <div v-if="item.命中原因" style="margin-top: 4px; color: #667085;">
                         命中原因: {{ item.命中原因 }}
                       </div>
@@ -776,7 +763,7 @@ function downloadButtonText() {
                   </template>
                   <template v-else-if="resultData.task_type === 'apt_template_nrd'" #description>
                     <div>
-                      <a-tag color="red">APT模板命中</a-tag>
+                      <a-tag color="red">模板化APT命中</a-tag>
                       <span class="summary-item">风险分: {{ displayAptScore(item) }}</span>
                       <span class="summary-item">风险等级: {{ item.风险等级 || item.risk_level || '未知' }}</span>
                       <span class="summary-item">匹配模板: {{ item.匹配模板 || '未知' }}</span>

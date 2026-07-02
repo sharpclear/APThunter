@@ -1,7 +1,9 @@
 import logging
 import os
 import subprocess
+import sys
 import threading
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -22,7 +24,7 @@ def _apply_runtime_schema_compatibility(engine) -> None:
         "ALTER TABLE models MODIFY COLUMN model_category ENUM('malicious','impersonation','dga','history_similarity','apt_template_nrd') DEFAULT NULL",
         "ALTER TABLE tasks MODIFY COLUMN task_type ENUM('malicious','impersonation','malicious_ip','dga','history_similarity','apt_template_nrd') NOT NULL COMMENT '任务类型'",
         "ALTER TABLE training_tasks MODIFY COLUMN model_category ENUM('malicious','impersonation','dga','history_similarity','apt_template_nrd') NOT NULL DEFAULT 'malicious'",
-        "ALTER TABLE alerts MODIFY COLUMN task_type ENUM('malicious','impersonation','malicious_ip','dga','history_similarity','apt_template_nrd') NOT NULL COMMENT '任务类型：恶意域名检测/仿冒域名检测/恶意IP检测/DGA域名检测/历史高度相似检测/APT模板新注册域名检测'",
+        "ALTER TABLE alerts MODIFY COLUMN task_type ENUM('malicious','impersonation','malicious_ip','dga','history_similarity','apt_template_nrd') NOT NULL COMMENT '任务类型：恶意域名检测/仿冒域名检测/恶意IP检测/DGA域名检测/历史APT域名相似性检测/模板化APT域名检测'",
         "ALTER TABLE alert_files MODIFY COLUMN task_type ENUM('malicious','impersonation','malicious_ip','dga','history_similarity','apt_template_nrd') NOT NULL COMMENT '任务类型'",
     ]
     with engine.begin() as conn:
@@ -32,6 +34,67 @@ def _apply_runtime_schema_compatibility(engine) -> None:
             except Exception:
                 logger.exception("运行时数据库兼容迁移失败: %s", statement)
                 raise
+
+        model_seed_sql = text(
+            """
+            INSERT INTO models (
+              name, version, description, model_path, file_size, accuracy_metrics,
+              model_type, model_category, is_public, is_official, created_by, status
+            )
+            SELECT
+              '模板化APT域名检测模型',
+              'v1.0',
+              '基于模板化APT域名模板库匹配待检测域名的官方规则模型',
+              'dataset/history_data/APTdomain_templates.xlsx',
+              NULL,
+              JSON_OBJECT('note', '官方模板化APT域名匹配模型', 'template_source', 'dataset/history_data/APTdomain_templates.xlsx', 'default_score_threshold', 0.90),
+              'official',
+              'apt_template_nrd',
+              1,
+              1,
+              'system',
+              'active'
+            WHERE NOT EXISTS (
+              SELECT 1 FROM models
+              WHERE model_category = 'apt_template_nrd'
+                AND model_type = 'official'
+                AND status = 'active'
+            )
+            """
+        )
+        model_update_sql = text(
+            """
+            UPDATE models
+            SET
+              name = '模板化APT域名检测模型',
+              model_path = 'dataset/history_data/APTdomain_templates.xlsx',
+              description = '基于模板化APT域名模板库匹配待检测域名的官方规则模型',
+              accuracy_metrics = JSON_OBJECT('note', '官方模板化APT域名匹配模型', 'template_source', 'dataset/history_data/APTdomain_templates.xlsx', 'default_score_threshold', 0.90),
+              is_public = 1,
+              is_official = 1,
+              status = 'active'
+            WHERE model_category = 'apt_template_nrd'
+              AND model_type = 'official'
+            """
+        )
+        user_binding_sql = text(
+            """
+            INSERT IGNORE INTO user_models (user_id, model_id, acquired_at, is_active, source)
+            SELECT u.id, m.id, NOW(), 1, 'official'
+            FROM users u
+            JOIN models m
+              ON m.model_category = 'apt_template_nrd'
+             AND m.model_type = 'official'
+             AND m.status = 'active'
+            """
+        )
+        try:
+            conn.execute(model_seed_sql)
+            conn.execute(model_update_sql)
+            conn.execute(user_binding_sql)
+        except Exception:
+            logger.exception("运行时模板化APT域名官方模型初始化失败")
+            raise
 
 
 def create_app() -> FastAPI:
@@ -133,6 +196,10 @@ def create_app() -> FastAPI:
 
     fastapi_app.include_router(domain_matches_router)
 
+    from app.api.domain_monitor import router as domain_monitor_router
+
+    fastapi_app.include_router(domain_monitor_router)
+
     from app.api.domain_lookup import router as domain_lookup_router
 
     fastapi_app.include_router(domain_lookup_router)
@@ -156,10 +223,12 @@ def create_app() -> FastAPI:
                 return
             try:
                 logger.info("启动域名属性自动补全任务")
-                subprocess.run(
-                    ["python", "/app/scripts/domain_attributes_bootstrap.py"],
-                    check=True,
-                )
+                backend_root = Path(__file__).resolve().parents[2]
+                script_path = backend_root / "scripts" / "domain_attributes_bootstrap.py"
+                if not script_path.exists():
+                    logger.warning("域名属性自动补全脚本不存在: %s", script_path)
+                    return
+                subprocess.run([sys.executable, str(script_path)], check=True)
                 logger.info("域名属性自动补全任务完成")
             except Exception as exc:
                 logger.exception("域名属性自动补全任务失败: %s", exc)

@@ -1,12 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1040" viewBox="0 0 1900 1040" role="img" aria-label="APT注册模板与新注册域名匹配算法框图">
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1040" viewBox="0 0 1900 1040" role="img" aria-label="模板化APT域名检测流程图">
   <defs>
-    <marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
-      <path d="M1,1 L11,6 L1,11 Z" fill="#000"/>
-    </marker>
-    <marker id="smallArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
-      <path d="M1,1 L9,5 L1,9 Z" fill="#111"/>
-    </marker>
     <style>
       .title { font-family: Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 30px; font-weight: 700; fill: #000; }
       .phase-title { font-family: Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 24px; font-weight: 700; fill: #000; }
@@ -14,206 +8,183 @@
       .small { font-family: Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 17px; fill: #111; }
       .tiny { font-family: Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 14px; fill: #111; }
       .bold { font-weight: 700; }
-      .outer { fill: #fff; stroke: #000; stroke-width: 3; }
-      .dash { fill: #fff; stroke: #5b5b5b; stroke-width: 2.5; stroke-dasharray: 8 9; }
-      .solid { fill: #fff; stroke: #000; stroke-width: 2; }
-      .soft-green { fill: #dcefd7; stroke: #8bb880; stroke-width: 1.5; }
-      .soft-blue { fill: #e3f0fb; stroke: #7fb4df; stroke-width: 1.5; }
-      .soft-red { fill: #fee5e6; stroke: #ee8d92; stroke-width: 1.5; }
-      .soft-purple { fill: #eaddec; stroke: #a983ad; stroke-width: 1.5; }
-      .soft-yellow { fill: #fff3d8; stroke: #d7a84a; stroke-width: 1.5; }
-      .soft-gray { fill: #f6f6f6; stroke: #222; stroke-width: 1.6; }
-      .arrow { stroke: #000; stroke-width: 4; fill: none; marker-end: url(#arrow); }
-      .thin-arrow { stroke: #111; stroke-width: 2.7; fill: none; marker-end: url(#smallArrow); }
-      .mini-red { fill: #ff646b; }
-      .mini-blue { fill: #5aaeea; }
-      .mini-green { fill: #28a745; }
-      .mini-purple { fill: #8b51d6; }
-      .mini-yellow { fill: #f2b84b; }
+      .outer { fill: #ffffff; stroke: #4b5563; stroke-width: 3; }
+      .dash { fill: #ffffff; stroke: #9ca3af; stroke-width: 2.5; stroke-dasharray: 8 9; }
+      .solid { fill: #f3f4f6; stroke: #4b5563; stroke-width: 2; }
+      .soft-green { fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5; }
+      .soft-blue { fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5; }
+      .soft-red { fill: #fee2e2; stroke: #b91c1c; stroke-width: 1.5; }
+      .soft-purple { fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5; }
+      .soft-yellow { fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5; }
+      .soft-gray { fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.6; }
+      .arrow-line { stroke: #4b5563; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+      .arrow-head { fill: #4b5563; stroke: none; }
+      .thin-arrow-line { stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+      .thin-arrow-head { fill: #4b5563; stroke: none; }
     </style>
   </defs>
 
   <rect x="0" y="0" width="1900" height="1040" fill="#fff"/>
 
-  <!-- Column titles -->
-  <circle cx="82" cy="54" r="23" fill="#000"/>
+  <circle cx="82" cy="54" r="23" fill="#4b5563"/>
   <text x="82" y="63" text-anchor="middle" class="title" fill="#fff" style="font-size:28px;">1</text>
-  <text x="118" y="65" class="title">APT 注册模板编译</text>
+  <text x="118" y="65" class="title">模板库准备</text>
 
-  <circle cx="689" cy="54" r="23" fill="#000"/>
+  <circle cx="689" cy="54" r="23" fill="#4b5563"/>
   <text x="689" y="63" text-anchor="middle" class="title" fill="#fff" style="font-size:28px;">2</text>
-  <text x="725" y="65" class="title">日期范围 NRD 数据扫描</text>
+  <text x="725" y="65" class="title">检测输入与模板匹配</text>
 
-  <circle cx="1296" cy="54" r="23" fill="#000"/>
+  <circle cx="1296" cy="54" r="23" fill="#4b5563"/>
   <text x="1296" y="63" text-anchor="middle" class="title" fill="#fff" style="font-size:28px;">3</text>
-  <text x="1332" y="65" class="title">模板匹配与结果输出</text>
+  <text x="1332" y="65" class="title">风险评分与预警输出</text>
 
-  <!-- Outer panels -->
-  <rect x="60" y="95" width="540" height="770" rx="78" class="outer"/>
-  <rect x="680" y="95" width="540" height="770" rx="78" class="outer"/>
-  <rect x="1300" y="95" width="540" height="770" rx="78" class="outer"/>
+  <path d="M138 95 H522 Q600 95 600 173 V787 Q600 865 522 865 H138 Q60 865 60 787 V173 Q60 95 138 95 Z" class="outer" style="fill: #ffffff; stroke: #4b5563; stroke-width: 3;"/>
+  <path d="M758 95 H1142 Q1220 95 1220 173 V787 Q1220 865 1142 865 H758 Q680 865 680 787 V173 Q680 95 758 95 Z" class="outer" style="fill: #ffffff; stroke: #4b5563; stroke-width: 3;"/>
+  <path d="M1378 95 H1762 Q1840 95 1840 173 V787 Q1840 865 1762 865 H1378 Q1300 865 1300 787 V173 Q1300 95 1378 95 Z" class="outer" style="fill: #ffffff; stroke: #4b5563; stroke-width: 3;"/>
 
-  <path d="M610 480 H668" class="arrow"/>
-  <path d="M1230 480 H1288" class="arrow"/>
+  <path d="M610 480 H650" class="arrow-line" style="stroke: #4b5563; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="650,489 668,480 650,471" class="arrow-head" style="fill: #4b5563; stroke: none;"/>
+  <path d="M1230 480 H1270" class="arrow-line" style="stroke: #4b5563; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="1270,489 1288,480 1270,471" class="arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <!-- Column 1: template compilation -->
-  <text x="330" y="145" text-anchor="middle" class="phase-title">Template Workbook &amp; Compilation</text>
+  <text x="330" y="145" text-anchor="middle" class="phase-title">模板规则来源</text>
 
-  <rect x="112" y="174" width="436" height="80" rx="14" class="soft-red"/>
-  <text x="330" y="204" text-anchor="middle" class="label bold">APT 疑似模板工作簿</text>
-  <text x="330" y="232" text-anchor="middle" class="small">疑似模板化注册域名_筛选结果.xlsx</text>
+  <path d="M126 174 H534 Q548 174 548 188 V242 Q548 256 534 256 H126 Q112 256 112 242 V188 Q112 174 126 174 Z" class="soft-red" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="330" y="224" text-anchor="middle" class="label bold">APT 模板化注册规则库</text>
 
-  <path d="M330 256 V278" class="thin-arrow"/>
+  <path d="M330 258 V270" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="323,270 330,282 337,270" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <rect x="112" y="288" width="436" height="72" rx="14" class="soft-blue"/>
-  <text x="330" y="316" text-anchor="middle" class="label bold">工作表读取与模板去重</text>
-  <text x="330" y="341" text-anchor="middle" class="small">模板汇总 → 筛选结果 → 首个工作表</text>
+  <path d="M126 292 H534 Q548 292 548 306 V356 Q548 370 534 370 H126 Q112 370 112 356 V306 Q112 292 126 292 Z" class="soft-blue" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="330" y="340" text-anchor="middle" class="label bold">读取模板并整理字段</text>
 
-  <path d="M330 362 V384" class="thin-arrow"/>
+  <path d="M330 372 V384" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="323,384 330,396 337,384" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <rect x="112" y="392" width="436" height="328" rx="38" class="dash"/>
-  <text x="330" y="426" text-anchor="middle" class="phase-title">Template Compiler</text>
+  <path d="M126 406 H534 Q548 406 548 420 V478 Q548 492 534 492 H126 Q112 492 112 478 V420 Q112 406 126 406 Z" class="soft-gray" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.6;"/>
+  <text x="330" y="458" text-anchor="middle" class="label bold">模板去重与统计信息保留</text>
 
-  <rect x="132" y="452" width="396" height="58" rx="10" class="soft-gray"/>
-  <text x="330" y="476" text-anchor="middle" class="small bold">拆分 SLD 模板与后缀模板</text>
-  <text x="330" y="498" text-anchor="middle" class="tiny">split_template(template)</text>
+  <path d="M330 494 V506" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="323,506 330,518 337,506" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <path d="M330 512 V532" class="thin-arrow"/>
+  <path d="M146 528 H514 Q548 528 548 562 V668 Q548 702 514 702 H146 Q112 702 112 668 V562 Q112 528 146 528 Z" class="dash" style="fill: #ffffff; stroke: #9ca3af; stroke-width: 2.5; stroke-dasharray: 8 9;"/>
+  <text x="330" y="562" text-anchor="middle" class="phase-title">模板编译</text>
 
-  <rect x="132" y="540" width="180" height="72" rx="10" class="soft-green"/>
-  <text x="222" y="565" text-anchor="middle" class="small bold">{x} 通配片段</text>
-  <text x="222" y="588" text-anchor="middle" class="tiny">[a-z0-9]+ 命名捕获组</text>
+  <path d="M142 590 H302 Q312 590 312 600 V638 Q312 648 302 648 H142 Q132 648 132 638 V600 Q132 590 142 590 Z" class="soft-green" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="222" y="627" text-anchor="middle" class="label bold">固定部分</text>
 
-  <rect x="348" y="540" width="180" height="72" rx="10" class="soft-yellow"/>
-  <text x="438" y="565" text-anchor="middle" class="small bold">后缀约束</text>
-  <text x="438" y="588" text-anchor="middle" class="tiny">固定 suffix 或 {tld}</text>
+  <path d="M358 590 H518 Q528 590 528 600 V638 Q528 648 518 648 H358 Q348 648 348 638 V600 Q348 590 358 590 Z" class="soft-yellow" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="438" y="627" text-anchor="middle" class="label bold">可变部分</text>
 
-  <path d="M222 614 V632 H330" class="thin-arrow"/>
-  <path d="M438 614 V632 H330" class="thin-arrow"/>
+  <path d="M222 650 V674 H330 V690" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="323,690 330,702 337,690" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
+  <path d="M438 650 V674 H330 V690" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="323,690 330,702 337,690" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <rect x="154" y="642" width="352" height="62" rx="12" class="soft-purple"/>
-  <text x="330" y="668" text-anchor="middle" class="label bold">编译 SLD 全匹配正则</text>
-  <text x="330" y="691" text-anchor="middle" class="tiny">^...$ · re.IGNORECASE · wildcard_count</text>
+  <path d="M168 712 H492 Q506 712 506 726 V774 Q506 788 492 788 H168 Q154 788 154 774 V726 Q154 712 168 712 Z" class="solid" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 2;"/>
+  <text x="330" y="759" text-anchor="middle" class="label bold">形成可匹配模板库</text>
 
-  <path d="M330 722 V744" class="thin-arrow"/>
+  <text x="950" y="145" text-anchor="middle" class="phase-title">检测入口与匹配过程</text>
 
-  <rect x="132" y="754" width="396" height="86" rx="14" class="solid"/>
-  <text x="330" y="782" text-anchor="middle" class="label bold">TemplateSpec 集合</text>
-  <text x="330" y="806" text-anchor="middle" class="small">模板 · 判定依据 · root/row count</text>
-  <text x="330" y="828" text-anchor="middle" class="tiny">regex · fixed_token_count · wildcard_count</text>
+  <path d="M764 174 H1136 Q1170 174 1170 208 V314 Q1170 348 1136 348 H764 Q730 348 730 314 V208 Q730 174 764 174 Z" class="dash" style="fill: #ffffff; stroke: #9ca3af; stroke-width: 2.5; stroke-dasharray: 8 9;"/>
+  <text x="950" y="208" text-anchor="middle" class="phase-title">两类检测入口</text>
 
-  <!-- Column 2: daily NRD loading -->
-  <text x="950" y="145" text-anchor="middle" class="phase-title">Date Range &amp; Daily NRD Loading</text>
+  <path d="M768 236 H922 Q934 236 934 248 V300 Q934 312 922 312 H768 Q756 312 756 300 V248 Q756 236 768 236 Z" class="soft-green" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="845" y="283" text-anchor="middle" class="label bold">手动检测</text>
 
-  <rect x="742" y="174" width="416" height="80" rx="14" class="soft-yellow"/>
-  <text x="950" y="204" text-anchor="middle" class="label bold">日期范围输入</text>
-  <text x="950" y="232" text-anchor="middle" class="small">YYYYMMDD–YYYYMMDD · 闭区间</text>
+  <path d="M978 236 H1132 Q1144 236 1144 248 V300 Q1144 312 1132 312 H978 Q966 312 966 300 V248 Q966 236 978 236 Z" class="soft-purple" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="1055" y="283" text-anchor="middle" class="label bold">订阅预警</text>
 
-  <path d="M950 256 V278" class="thin-arrow"/>
+  <path d="M852 324 H1048 Q1060 324 1060 336 V364 Q1060 376 1048 376 H852 Q840 376 840 364 V336 Q840 324 852 324 Z" class="soft-yellow" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="950" y="357" text-anchor="middle" class="label bold">日期范围离线扫描</text>
 
-  <rect x="742" y="288" width="416" height="76" rx="14" class="soft-gray"/>
-  <text x="950" y="316" text-anchor="middle" class="label bold">定位每日 NRD ZIP</text>
-  <text x="950" y="342" text-anchor="middle" class="tiny">NRD / YYYY-MM / YYYY-MM-DD-domain.zip</text>
+  <path d="M950 378 V390" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="943,390 950,402 957,390" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <path d="M950 366 V388" class="thin-arrow"/>
+  <path d="M756 412 H1144 Q1158 412 1158 426 V474 Q1158 488 1144 488 H756 Q742 488 742 474 V426 Q742 412 756 412 Z" class="soft-blue" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="950" y="459" text-anchor="middle" class="label bold">域名规范化、校验和去重</text>
 
-  <rect x="730" y="396" width="440" height="310" rx="36" class="dash"/>
-  <text x="950" y="430" text-anchor="middle" class="phase-title">NRD Stream Processing</text>
+  <path d="M950 490 V502" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="943,502 950,514 957,502" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <rect x="750" y="454" width="190" height="72" rx="10" class="soft-blue"/>
-  <text x="845" y="480" text-anchor="middle" class="small bold">ZIP 内文件遍历</text>
-  <text x="845" y="503" text-anchor="middle" class="tiny">仅 TXT / CSV</text>
+  <path d="M756 524 H1144 Q1158 524 1158 538 V596 Q1158 610 1144 610 H756 Q742 610 742 596 V538 Q742 524 756 524 Z" class="soft-gray" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.6;"/>
+  <text x="950" y="576" text-anchor="middle" class="label bold">逐个域名匹配模板库</text>
 
-  <rect x="960" y="454" width="190" height="72" rx="10" class="soft-green"/>
-  <text x="1055" y="480" text-anchor="middle" class="small bold">容错解码</text>
-  <text x="1055" y="503" text-anchor="middle" class="tiny">UTF-8 / GB18030 / Latin-1</text>
+  <path d="M950 612 V624" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="943,624 950,636 957,624" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <path d="M940 490 H956" class="thin-arrow"/>
-  <path d="M950 528 V550" class="thin-arrow"/>
+  <path d="M760 646 H1140 Q1170 646 1170 676 V742 Q1170 772 1140 772 H760 Q730 772 730 742 V676 Q730 646 760 646 Z" class="dash" style="fill: #ffffff; stroke: #9ca3af; stroke-width: 2.5; stroke-dasharray: 8 9;"/>
+  <text x="950" y="680" text-anchor="middle" class="phase-title">多模板命中处理</text>
+  <text x="950" y="735" text-anchor="middle" class="label bold">优先选择更具体、更明确的模板</text>
 
-  <rect x="750" y="558" width="400" height="74" rx="12" class="soft-purple"/>
-  <text x="950" y="586" text-anchor="middle" class="label bold">域名规范化与合法性校验</text>
-  <text x="950" y="612" text-anchor="middle" class="small">normalize_domain · is_normalized_domain_like</text>
+  <path d="M950 774 V786" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="943,786 950,798 957,786" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <path d="M950 634 V654" class="thin-arrow"/>
+  <path d="M772 808 H1128 Q1142 808 1142 822 V840 Q1142 854 1128 854 H772 Q758 854 758 840 V822 Q758 808 772 808 Z" class="solid" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 2;"/>
+  <text x="950" y="839" text-anchor="middle" class="label bold">生成检测结果</text>
 
-  <rect x="750" y="662" width="400" height="58" rx="12" class="soft-gray"/>
-  <text x="950" y="686" text-anchor="middle" class="small bold">解析 registered domain / SLD / suffix</text>
-  <text x="950" y="708" text-anchor="middle" class="tiny">记录 date 与 source_file</text>
+  <text x="1570" y="145" text-anchor="middle" class="phase-title">风险分级与结果流转</text>
 
-  <path d="M950 722 V746" class="thin-arrow"/>
+  <path d="M1376 176 H1764 Q1798 176 1798 210 V334 Q1798 368 1764 368 H1376 Q1342 368 1342 334 V210 Q1342 176 1376 176 Z" class="dash" style="fill: #ffffff; stroke: #9ca3af; stroke-width: 2.5; stroke-dasharray: 8 9;"/>
+  <text x="1570" y="210" text-anchor="middle" class="phase-title">风险评分依据</text>
 
-  <rect x="758" y="756" width="384" height="84" rx="14" class="solid"/>
-  <text x="950" y="784" text-anchor="middle" class="label bold">逐域名模板匹配输入流</text>
-  <text x="950" y="809" text-anchor="middle" class="small">有效域名进入匹配，无效行计数</text>
-  <text x="950" y="830" text-anchor="middle" class="tiny">allow_missing 可跳过缺失日期文件</text>
+  <path d="M1380 238 H1536 Q1546 238 1546 248 V284 Q1546 294 1536 294 H1380 Q1370 294 1370 284 V248 Q1370 238 1380 238 Z" class="soft-green" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="1458" y="274" text-anchor="middle" class="label bold">模板明确程度</text>
 
-  <!-- Column 3: deterministic matching -->
-  <text x="1570" y="145" text-anchor="middle" class="phase-title">Deterministic Matching &amp; Best Template</text>
+  <path d="M1604 238 H1760 Q1770 238 1770 248 V284 Q1770 294 1760 294 H1604 Q1594 294 1594 284 V248 Q1594 238 1604 238 Z" class="soft-yellow" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="1682" y="274" text-anchor="middle" class="label bold">固定部分多少</text>
 
-  <rect x="1342" y="166" width="456" height="552" rx="12" class="dash"/>
-  <text x="1368" y="206" class="phase-title">1. 正则全匹配与择优</text>
+  <path d="M1380 312 H1536 Q1546 312 1546 322 V358 Q1546 368 1536 368 H1380 Q1370 368 1370 358 V322 Q1370 312 1380 312 Z" class="soft-purple" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="1458" y="348" text-anchor="middle" class="label bold">可变部分多少</text>
 
-  <rect x="1378" y="236" width="170" height="62" rx="10" class="soft-green"/>
-  <text x="1463" y="262" text-anchor="middle" class="small bold">TemplateSpec 集合</text>
-  <text x="1463" y="284" text-anchor="middle" class="tiny">compiled regex</text>
+  <path d="M1604 312 H1760 Q1770 312 1770 322 V358 Q1770 368 1760 368 H1604 Q1594 368 1594 358 V322 Q1594 312 1604 312 Z" class="soft-blue" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="1682" y="348" text-anchor="middle" class="label bold">历史命中规模</text>
 
-  <rect x="1592" y="236" width="170" height="62" rx="10" class="soft-blue"/>
-  <text x="1677" y="262" text-anchor="middle" class="small bold">标准化 NRD</text>
-  <text x="1677" y="284" text-anchor="middle" class="tiny">SLD + suffix</text>
+  <path d="M1570 370 V382" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="1563,382 1570,394 1577,382" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <path d="M1548 267 H1588" class="thin-arrow"/>
-  <path d="M1570 300 V324" class="thin-arrow"/>
+  <path d="M1378 404 H1762 Q1776 404 1776 418 V464 Q1776 478 1762 478 H1378 Q1364 478 1364 464 V418 Q1364 404 1378 404 Z" class="soft-red" style="fill: #fee2e2; stroke: #b91c1c; stroke-width: 1.5;"/>
+  <text x="1570" y="450" text-anchor="middle" class="label bold">生成风险分数和风险等级</text>
 
-  <rect x="1386" y="334" width="368" height="68" rx="11" class="soft-yellow"/>
-  <text x="1570" y="361" text-anchor="middle" class="label bold">后缀门控</text>
-  <text x="1570" y="386" text-anchor="middle" class="small">固定后缀必须一致；{tld} 接受实际 suffix</text>
+  <path d="M1570 480 V492" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="1563,492 1570,504 1577,492" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <path d="M1570 404 V424" class="thin-arrow"/>
+  <path d="M1378 514 H1762 Q1776 514 1776 528 V576 Q1776 590 1762 590 H1378 Q1364 590 1364 576 V528 Q1364 514 1378 514 Z" class="soft-yellow" style="fill: #fee2e2; stroke: #b91c1c; stroke-width: 1.5;"/>
+  <text x="1570" y="561" text-anchor="middle" class="label bold">按预警阈值筛选</text>
 
-  <rect x="1386" y="432" width="368" height="68" rx="11" class="soft-purple"/>
-  <text x="1570" y="459" text-anchor="middle" class="label bold">SLD 正则 fullmatch</text>
-  <text x="1570" y="484" text-anchor="middle" class="small">捕获 x1…xN 与可变 tld</text>
+  <path d="M1570 592 V604" class="thin-arrow-line" style="stroke: #4b5563; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="1563,604 1570,616 1577,604" class="thin-arrow-head" style="fill: #4b5563; stroke: none;"/>
 
-  <path d="M1570 502 V522" class="thin-arrow"/>
+  <path d="M1376 626 H1764 Q1798 626 1798 660 V800 Q1798 834 1764 834 H1376 Q1342 834 1342 800 V660 Q1342 626 1376 626 Z" class="dash" style="fill: #ffffff; stroke: #9ca3af; stroke-width: 2.5; stroke-dasharray: 8 9;"/>
+  <text x="1570" y="660" text-anchor="middle" class="phase-title">结果输出</text>
 
-  <rect x="1386" y="530" width="368" height="98" rx="11" class="soft-gray"/>
-  <text x="1570" y="557" text-anchor="middle" class="label bold">模板特异度评分</text>
-  <text x="1570" y="582" text-anchor="middle" class="small">精确 SLD +10000 · 固定后缀 +1000</text>
-  <text x="1570" y="606" text-anchor="middle" class="small">固定 token ×100 − wildcard_count</text>
+  <path d="M1383 690 H1537 Q1548 690 1548 701 V737 Q1548 748 1537 748 H1383 Q1372 748 1372 737 V701 Q1372 690 1383 690 Z" class="soft-green" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="1460" y="726" text-anchor="middle" class="label bold">检测结果</text>
 
-  <path d="M1570 630 V646" class="thin-arrow"/>
+  <path d="M1603 690 H1757 Q1768 690 1768 701 V737 Q1768 748 1757 748 H1603 Q1592 748 1592 737 V701 Q1592 690 1603 690 Z" class="soft-purple" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="1680" y="726" text-anchor="middle" class="label bold">统计信息</text>
 
-  <rect x="1390" y="650" width="360" height="54" rx="12" class="soft-red"/>
-  <text x="1570" y="674" text-anchor="middle" class="small bold">取 specificity_score 最大模板</text>
-  <text x="1570" y="695" text-anchor="middle" class="tiny">无匹配则跳过</text>
+  <path d="M1383 764 H1537 Q1548 764 1548 775 V811 Q1548 822 1537 822 H1383 Q1372 822 1372 811 V775 Q1372 764 1383 764 Z" class="soft-red" style="fill: #fee2e2; stroke: #b91c1c; stroke-width: 1.5;"/>
+  <text x="1460" y="800" text-anchor="middle" class="label bold">预警记录</text>
 
-  <rect x="1342" y="730" width="456" height="116" rx="12" class="dash"/>
-  <text x="1368" y="760" class="phase-title">2. 匹配结果输出</text>
+  <path d="M1603 764 H1757 Q1768 764 1768 775 V811 Q1768 822 1757 822 H1603 Q1592 822 1592 811 V775 Q1592 764 1603 764 Z" class="soft-blue" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="1680" y="800" text-anchor="middle" class="label bold">离线摘要</text>
 
-  <rect x="1364" y="776" width="202" height="58" rx="11" class="soft-green"/>
-  <text x="1465" y="800" text-anchor="middle" class="small bold">匹配明细 CSV</text>
-  <text x="1465" y="822" text-anchor="middle" class="tiny">template · variables_json</text>
-
-  <rect x="1580" y="776" width="196" height="58" rx="11" class="soft-purple"/>
-  <text x="1678" y="800" text-anchor="middle" class="small bold">运行摘要 JSON</text>
-  <text x="1678" y="822" text-anchor="middle" class="tiny">计数 · 文件 · 耗时</text>
-
-  <!-- Legend -->
-  <line x1="82" y1="910" x2="1818" y2="910" stroke="#000" stroke-width="2"/>
+  <line x1="82" y1="910" x2="1818" y2="910" stroke="#4b5563" stroke-width="2"/>
   <text x="82" y="968" class="label bold">图例</text>
 
-  <rect x="150" y="944" width="28" height="28" rx="5" class="soft-red"/>
-  <rect x="188" y="944" width="28" height="28" rx="5" class="soft-blue"/>
-  <text x="240" y="967" class="label">模板来源与 NRD 输入</text>
+  <path d="M155 944 H173 Q178 944 178 949 V967 Q178 972 173 972 H155 Q150 972 150 967 V949 Q150 944 155 944 Z" class="soft-red" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <path d="M193 944 H211 Q216 944 216 949 V967 Q216 972 211 972 H193 Q188 972 188 967 V949 Q188 944 193 944 Z" class="soft-blue" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <text x="240" y="967" class="label">模板来源、输入数据与清洗处理</text>
 
-  <rect x="520" y="944" width="72" height="34" rx="10" class="dash"/>
-  <text x="616" y="968" class="label">虚线框：编译、扫描与匹配阶段</text>
+  <path d="M650 944 H702 Q712 944 712 954 V968 Q712 978 702 978 H650 Q640 978 640 968 V954 Q640 944 650 944 Z" class="dash" style="fill: #ffffff; stroke: #9ca3af; stroke-width: 2.5; stroke-dasharray: 8 9;"/>
+  <text x="736" y="968" class="label">虚线框表示一组核心处理步骤</text>
 
-  <rect x="1002" y="944" width="32" height="32" rx="7" class="soft-purple"/>
-  <rect x="1042" y="944" width="32" height="32" rx="7" class="soft-yellow"/>
-  <text x="1100" y="968" class="label">正则匹配与约束门控</text>
+  <path d="M1171 944 H1189 Q1196 944 1196 951 V969 Q1196 976 1189 976 H1171 Q1164 976 1164 969 V951 Q1164 944 1171 944 Z" class="soft-purple" style="fill: #f3f4f6; stroke: #4b5563; stroke-width: 1.5;"/>
+  <path d="M1211 944 H1229 Q1236 944 1236 951 V969 Q1236 976 1229 976 H1211 Q1204 976 1204 969 V951 Q1204 944 1211 944 Z" class="soft-yellow" style="fill: #fee2e2; stroke: #b91c1c; stroke-width: 1.5;"/>
+  <text x="1262" y="968" class="label">模板命中、风险评分和预警信息</text>
 
-  <path d="M1482 960 H1554" class="arrow"/>
-  <text x="1584" y="968" class="label">数据流与决策流</text>
+  <path d="M1526 960 H1580" class="arrow-line" style="stroke: #4b5563; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; fill: none;"/>
+  <polygon points="1580,969 1598,960 1580,951" class="arrow-head" style="fill: #4b5563; stroke: none;"/>
+  <text x="1628" y="968" class="label">数据流向</text>
 </svg>

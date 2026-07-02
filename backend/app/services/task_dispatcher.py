@@ -5,6 +5,7 @@ from app.tasks.detection_tasks import (
     execute_impersonation_task_job,
     execute_malicious_task_job,
 )
+from app.tasks.domain_monitor_tasks import collect_domain_monitor_snapshot_job
 
 
 def dispatch_malicious_task(task_id: str) -> str:
@@ -56,4 +57,14 @@ def dispatch_impersonation_task(task_id: str) -> str:
         # 入队失败通常来自 broker 不可用/连接失败；抛出让 API 层落库一致性
         raise RuntimeError(
             f"enqueue_failed impersonation task_id={task_id}: {exc}"
+        ) from exc
+
+
+def dispatch_domain_monitor_snapshot_task(target_id: int) -> int:
+    try:
+        collect_domain_monitor_snapshot_job.delay(target_id=int(target_id))
+        return int(target_id)
+    except Exception as exc:
+        raise RuntimeError(
+            f"enqueue_failed domain_monitor target_id={target_id}: {exc}"
         ) from exc

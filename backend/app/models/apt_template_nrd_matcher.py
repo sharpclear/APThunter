@@ -1,9 +1,9 @@
 """Match newly registered domains against APT-style registration templates.
 
-Templates are read from the workbook produced by the APT domain template
-screening step. A date range such as 20260301-20260302 selects daily NRD zip
-files under dataset/NRD/YYYY-MM/YYYY-MM-DD-domain.zip and writes candidate
-matches to outputs/apt_template_nrd_matcher/<range>/.
+Templates are read from the templated APT domain workbook. A date range such
+as 20260301-20260302 selects daily NRD zip files under
+dataset/NRD/YYYY-MM/YYYY-MM-DD-domain.zip and writes candidate matches to
+outputs/apt_template_nrd_matcher/<range>/.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ import pandas as pd
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_TEMPLATES_PATH = SCRIPT_DIR / "dataset" / "APTdomains" / "疑似模板化注册域名_筛选结果.xlsx"
+DEFAULT_TEMPLATES_PATH = SCRIPT_DIR / "dataset" / "history_data" / "APTdomain_templates.xlsx"
 DEFAULT_NRD_ROOT = SCRIPT_DIR / "dataset" / "NRD"
 DEFAULT_OUTPUT_ROOT = SCRIPT_DIR / "outputs"
 OUTPUT_JOB_NAME = "apt_template_nrd_matcher"
@@ -457,7 +457,7 @@ def _load_templates_cached(path_text: str, mtime_ns: int) -> tuple[TemplateSpec,
 def _get_templates(model_path: str | None) -> tuple[list[TemplateSpec], dict[str, Any]]:
     path = _resolve_templates_path(model_path)
     if not path.is_file():
-        raise FileNotFoundError(f"APT模板库文件不存在: {path}")
+        raise FileNotFoundError(f"模板化APT域名模板库文件不存在: {path}")
     stat = path.stat()
     templates = list(_load_templates_cached(str(path), stat.st_mtime_ns))
     meta = {
@@ -552,7 +552,7 @@ def _match_reason(match: TemplateMatch) -> str:
     reason = str(match.reason or "").strip()
     if reason:
         return reason
-    return f"命中APT注册模板 {match.template}"
+    return f"命中模板化APT域名模板 {match.template}"
 
 
 def _match_to_row(domain: str, match: TemplateMatch, template_index: dict[str, TemplateSpec]) -> dict[str, Any]:
@@ -577,7 +577,7 @@ def _match_to_row(domain: str, match: TemplateMatch, template_index: dict[str, T
         "模板命中原始行数": match.row_count,
         "变量JSON": json.dumps(match.variables, ensure_ascii=False, sort_keys=True),
         "预测标签": 1,
-        "预测结果": "APT模板命中",
+        "预测结果": "模板化APT命中",
     }
 
 
@@ -630,10 +630,10 @@ def _build_excel(
 
     stats_rows = [
         ("总域名数", total),
-        ("APT模板命中域名数", matched_count),
+        ("模板化APT域名数", matched_count),
         ("高风险域名数", high_risk_count),
         ("正常域名数", normal_count),
-        ("APT模板命中域名占比", f"{matched_rate:.2f}%"),
+        ("模板化APT域名占比", f"{matched_rate:.2f}%"),
         ("高风险域名占比", f"{high_risk_rate:.2f}%"),
         ("预警阈值", f"{score_threshold:.2f}"),
         ("模板数量", template_meta.get("template_count", 0)),
@@ -645,14 +645,14 @@ def _build_excel(
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         pd.DataFrame(result_rows).to_excel(writer, sheet_name="预测结果", index=False)
         pd.DataFrame(stats_rows, columns=["统计项", "数值"]).to_excel(writer, sheet_name="统计信息", index=False)
-        pd.DataFrame(alert_rows).to_excel(writer, sheet_name="APT模板命中域名列表", index=False)
+        pd.DataFrame(alert_rows).to_excel(writer, sheet_name="模板化APT域名列表", index=False)
 
     statistics = {
         "总域名数": total,
-        "APT模板命中域名数": matched_count,
+        "模板化APT域名数": matched_count,
         "高风险域名数": high_risk_count,
         "正常域名数": normal_count,
-        "APT模板命中域名占比": f"{matched_rate:.2f}%",
+        "模板化APT域名占比": f"{matched_rate:.2f}%",
         "高风险域名占比": f"{high_risk_rate:.2f}%",
         "total": total,
         "apt_template_nrd": high_risk_count,

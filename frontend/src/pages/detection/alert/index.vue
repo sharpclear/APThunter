@@ -82,11 +82,11 @@ function modelTypeLabel(type?: SubscriptionModelType | '') {
   if (type === 'phishing')
     return '仿冒域名检测'
   if (type === 'history_similarity')
-    return '历史高度相似检测'
+    return '历史APT域名相似性检测'
   if (type === 'dga')
     return 'DGA域名检测'
   if (type === 'apt_template_nrd')
-    return 'APT模板新注册域名检测'
+    return '模板化APT域名检测'
   return '恶意性检测'
 }
 
@@ -104,7 +104,7 @@ function modelTypeTagColor(type?: SubscriptionModelType | '') {
 
 function defaultThresholdValue(type?: SubscriptionModelType | '') {
   if (type === 'history_similarity')
-    return 55
+    return 65
   if (type === 'apt_template_nrd')
     return 90
   return 60
@@ -114,11 +114,11 @@ function defaultThresholdPolicyTextByType(type?: SubscriptionModelType | '') {
   if (type === 'phishing')
     return '默认使用普通仿冒检测任务的自适应相似度阈值。'
   if (type === 'history_similarity')
-    return '默认使用综合相似度 55 作为预警阈值。'
+    return '默认使用综合相似度 65 作为预警阈值。'
   if (type === 'dga')
     return '默认将模型判定为DGA-like的结果作为预警对象。'
   if (type === 'apt_template_nrd')
-    return '默认使用风险分 90 作为APT模板命中预警阈值。'
+    return '默认使用风险分 90 作为模板化APT域名预警阈值。'
   return '默认将模型判定为恶意的结果全部作为预警对象。'
 }
 

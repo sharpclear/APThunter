@@ -118,7 +118,7 @@ check_requirements() {
 
     if [[ -d "$BACKEND_VENV_DIR" ]]; then
         [[ -x "$BACKEND_VENV_DIR/bin/python" ]] || die "backend venv exists but python is not executable: $BACKEND_VENV_DIR/bin/python"
-        "$BACKEND_VENV_DIR/bin/python" -c "import uvicorn, celery" >/dev/null 2>&1 || die "uvicorn or celery is not importable in backend venv; run: cd backend && source venv/bin/activate && pip install -r requirements.txt"
+        "$BACKEND_VENV_DIR/bin/python" -c "import uvicorn, celery, tldextract, rapidfuzz, yaml, pypinyin, jinja2, reportlab" >/dev/null 2>&1 || die "backend dependencies are incomplete; run: cd backend && source venv/bin/activate && pip install -r requirements.txt"
     else
         command -v uvicorn >/dev/null 2>&1 || die "uvicorn is not available; create backend/venv or install backend requirements"
         command -v celery >/dev/null 2>&1 || die "celery is not available; create backend/venv or install backend requirements"

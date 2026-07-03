@@ -1,0 +1,24 @@
+{
+  "threshold": 0.35209923,
+  "flagged_count": 17363,
+  "true_positive": 15627,
+  "false_positive": 1736,
+  "false_negative": 9552,
+  "precision": 0.9000172781201405,
+  "recall": 0.6206362444894555,
+  "f1": 0.7346622161628509,
+  "fpr": 0.03447317208785099,
+  "family_recall": {
+    "conficker": 0.3504,
+    "dircrypt": 0.764,
+    "dircrypt;extrahop_unknown": 1.0,
+    "matsnu": 0.8862,
+    "simda": 0.2432,
+    "simda;extrahop_unknown": 0.0625,
+    "tinba": 0.8546,
+    "tinba;extrahop_unknown": 0.8176100628930818
+  },
+  "total_count": 75537,
+  "positive_count": 25179,
+  "negative_count": 50358
+}

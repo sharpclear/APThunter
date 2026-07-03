@@ -811,6 +811,14 @@ def _excel_rows(excel_file: io.BytesIO, sheet_name: str) -> list:
         return []
 
 
+def _is_dga_result_row(row: dict) -> bool:
+    result_text = str(row.get("预测结果") or "").strip()
+    return (
+        row.get("预测标签") == 1
+        or result_text in {"高置信DGA", "DGA-like"}
+    )
+
+
 def _parse_detection_preview_payload(
     *,
     task_type: str,
@@ -855,7 +863,7 @@ def _parse_detection_preview_payload(
         if not dga_list:
             dga_list = [
                 row for row in results_list
-                if row.get("预测标签") == 1 or row.get("预测结果") == "DGA-like"
+                if _is_dga_result_row(row)
             ]
         return _json_safe_value({
             "ok": True,
@@ -2450,7 +2458,7 @@ async def get_task_result_json(task_id: str, request: Request):
                 if not dga_list:
                     dga_list = [
                         row for row in results_list
-                        if row.get('预测标签') == 1 or row.get('预测结果') == 'DGA-like'
+                        if _is_dga_result_row(row)
                     ]
 
                 return JSONResponse(

@@ -1,0 +1,27 @@
+{
+  "output": "models/model_dga_detector.joblib",
+  "hybrid_model": "embedded:hybrid_sgd",
+  "tfidf_model": "embedded:tfidf_logistic",
+  "tfidf_weight": 0.4,
+  "wordlist_path": "data/reference/dga_english_wordlist.txt",
+  "word_count": 230862,
+  "wordlist": {
+    "len_center": 26.0,
+    "count_center": 6.0,
+    "coverage_center": 0.85
+  },
+  "high_threshold": 0.98,
+  "thresholds": {
+    "high_confidence_dga": 0.98,
+    "direct_high_confidence_dga": 0.98,
+    "family_input_dga": 0.9,
+    "suspicious_dga": 0.4,
+    "uncertain": 0.2
+  },
+  "delivery_policy_path": "configs/delivery_policy.json",
+  "delivery_thresholds": {
+    "direct_high_confidence_dga": 0.98,
+    "family_input_dga": 0.9,
+    "family_confidence": 0.95
+  }
+}

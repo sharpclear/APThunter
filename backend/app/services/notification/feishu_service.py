@@ -415,8 +415,13 @@ def _build_dga_alert_lines(
                 "domain": domain,
                 "dga_score": dga_score,
                 "_score_value": _coerce_dga_score(dga_score),
-                "label": _safe_text(item.get("label") or raw.get("预测结果"), "DGA-like"),
-                "reason": _safe_text(item.get("reason"), "DGA_score 达到订阅预警阈值"),
+                "label": _safe_text(item.get("label") or raw.get("预测结果"), "高置信DGA"),
+                "family": _safe_text(item.get("family") or raw.get("DGA家族")),
+                "family_confidence": item.get("family_confidence", raw.get("家族置信度")),
+                "family_attribution_status": _safe_text(
+                    item.get("family_attribution_status") or raw.get("家族归因状态")
+                ),
+                "reason": _safe_text(item.get("reason"), "达到DGA高置信检测口径"),
             }
         )
 
@@ -429,8 +434,11 @@ def _build_dga_alert_lines(
                         "domain": domain_text,
                         "dga_score": None,
                         "_score_value": None,
-                        "label": "DGA-like",
-                        "reason": "DGA_score 达到订阅预警阈值",
+                        "label": "高置信DGA",
+                        "family": "",
+                        "family_confidence": None,
+                        "family_attribution_status": "",
+                        "reason": "达到DGA高置信检测口径",
                     }
                 )
 
@@ -444,14 +452,22 @@ def _build_dga_alert_lines(
     preview_records = normalized_records[:30]
 
     detail_lines = [
-        f"检测结果：命中DGA-like域名 {high_risk_count} 个 / 检测总数 {detected_count} 个",
+        f"检测结果：命中高置信DGA域名 {high_risk_count} 个 / 检测总数 {detected_count} 个",
         "DGA明细（按DGA_score降序，仅展示前30个）：",
     ]
     for index, item in enumerate(preview_records, start=1):
+        family_line = ""
+        if item.get("family"):
+            family_line = (
+                f"   DGA家族：{item.get('family', '')}"
+                f"  家族置信度：{_format_dga_score(item.get('family_confidence'))}"
+                f"  状态：{item.get('family_attribution_status', '')}\n"
+            )
         detail_lines.append(
             f"{index}. 域名：{item.get('domain', '')}\n"
             f"   DGA_score：{_format_dga_score(item.get('dga_score'))}\n"
-            f"   预测结果：{item.get('label', 'DGA-like')}\n"
+            f"   预测结果：{item.get('label', '高置信DGA')}\n"
+            f"{family_line}"
             f"   命中原因：{item.get('reason', '')}"
         )
     if len(normalized_records) > len(preview_records):

@@ -105,6 +105,8 @@ function modelTypeTagColor(type?: SubscriptionModelType | '') {
 function defaultThresholdValue(type?: SubscriptionModelType | '') {
   if (type === 'history_similarity')
     return 65
+  if (type === 'dga')
+    return 90
   if (type === 'apt_template_nrd')
     return 90
   return 60
@@ -116,7 +118,7 @@ function defaultThresholdPolicyTextByType(type?: SubscriptionModelType | '') {
   if (type === 'history_similarity')
     return '默认使用综合相似度 65 作为预警阈值。'
   if (type === 'dga')
-    return '默认将模型判定为DGA-like的结果作为预警对象。'
+    return '默认使用高置信DGA口径：DGA分数不低于0.98，或DGA分数不低于0.90且家族识别通过可展示标准。'
   if (type === 'apt_template_nrd')
     return '默认使用风险分 90 作为模板化APT域名预警阈值。'
   return '默认将模型判定为恶意的结果全部作为预警对象。'

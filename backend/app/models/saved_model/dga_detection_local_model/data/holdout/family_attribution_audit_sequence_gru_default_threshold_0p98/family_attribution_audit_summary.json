@@ -1,0 +1,19 @@
+{
+  "model_path": "models/family_sequence_gru_public_sources_user_approved/model_dga_family_sequence_gru.pt",
+  "valid_path": "data/training/dga_family_classifier_valid_expanded_public_sources_user_approved.csv",
+  "unknown_path": "data/training/dga_family_classifier_unknown_test_expanded_public_sources_user_approved.csv",
+  "scored_path": "data/holdout/nrd_domains_2026_06_21_to_2026_06_24_scores_sequence_family_threshold_0p98.csv",
+  "confidence_threshold": 0.98,
+  "concrete_family_rows": 300,
+  "concrete_family_count": 8,
+  "row_status_counts": {
+    "caution_limited_support": 7,
+    "usable": 293
+  },
+  "family_status_counts": {
+    "caution_limited_support": 2,
+    "usable": 6
+  },
+  "family_audit_path": "data/holdout/family_attribution_audit_sequence_gru_default_threshold_0p98/family_attribution_audit_by_family.csv",
+  "row_audit_path": "data/holdout/family_attribution_audit_sequence_gru_default_threshold_0p98/family_attribution_audit_rows.csv"
+}

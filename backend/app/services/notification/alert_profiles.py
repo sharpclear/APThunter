@@ -45,9 +45,9 @@ ALERT_PROFILES: Dict[str, AlertProfile] = {
     "dga": AlertProfile(
         task_type="dga",
         type_label="DGA域名检测",
-        domain_label="DGA-like域名",
+        domain_label="高置信DGA域名",
         attachment_prefix="dga",
-        default_reason="DGA_score 达到订阅预警阈值",
+        default_reason="达到DGA高置信检测口径",
     ),
     "apt_template_nrd": AlertProfile(
         task_type="apt_template_nrd",

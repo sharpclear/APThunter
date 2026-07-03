@@ -594,13 +594,14 @@ function resetForm(clearModel = true) {
 
           <div v-else-if="previewResult.task_type === 'dga'" class="report-block">
             <div class="report-line">检测类型：DGA域名检测</div>
-            <div class="report-line">DGA-like 域名数量：{{ previewMainCount }}</div>
+            <div class="report-line">高置信DGA域名数量：{{ previewMainCount }}</div>
             <div v-for="(item, index) in dgaRows()" :key="index" class="report-item">
               <div>{{ index + 1 }}. 域名：{{ item.域名 || item.domain || '未知域名' }}</div>
               <div>   DGA评分：{{ scoreText(item.DGA_score || item.dga_score) }}</div>
-              <div>   判定结果：{{ item.预测结果 || 'DGA-like' }}</div>
+              <div>   判定结果：{{ item.预测结果 || '高置信DGA' }}</div>
+              <div v-if="item.DGA家族">   DGA家族：{{ item.DGA家族 }}</div>
             </div>
-            <a-empty v-if="previewMainCount === 0" description="未发现DGA-like候选域名" />
+            <a-empty v-if="previewMainCount === 0" description="未发现高置信DGA域名" />
           </div>
 
           <div v-else class="report-block">
@@ -628,7 +629,7 @@ function resetForm(clearModel = true) {
           <a-card title="默认策略" class="guide-card" :bordered="false">
             <ul class="guide-list">
               <li><span class="dot">1</span><span>仿冒域名检测默认加载系统全量白名单。</span></li>
-              <li><span class="dot">2</span><span>DGA检测使用当前DGA模型输出DGA-like候选。</span></li>
+              <li><span class="dot">2</span><span>DGA检测使用当前DGA模型输出高置信DGA域名和家族识别结果。</span></li>
               <li><span class="dot">3</span><span>历史相似检测按历史恶意样本相似度进行排序。</span></li>
             </ul>
           </a-card>

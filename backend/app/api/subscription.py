@@ -627,7 +627,7 @@ def _safe_optional_float(value) -> Optional[float]:
 def _extract_dga_alert_items(rows) -> List[dict]:
     """
     从 DGA 检测结果 DataFrame 提取订阅预警明细。
-    兼容列：域名、DGA_score、预测结果、预测标签。
+    兼容旧版 DGA-like 字段，同时优先使用新版高置信 DGA 与家族识别字段。
     """
     items: List[dict] = []
     seen = set()
@@ -644,7 +644,7 @@ def _extract_dga_alert_items(rows) -> List[dict]:
             continue
         result_text = _clean_optional_text(row.get("预测结果"))
         label_text = _clean_optional_text(row.get("预测标签"))
-        is_dga = result_text == "DGA-like" or label_text == "1"
+        is_dga = result_text in {"高置信DGA", "DGA-like"} or label_text == "1"
         if not is_dga:
             continue
         domain_key = domain.lower()
@@ -652,12 +652,19 @@ def _extract_dga_alert_items(rows) -> List[dict]:
             continue
         seen.add(domain_key)
         score = _safe_optional_float(row.get("DGA_score") or row.get("dga_score"))
+        family = _clean_optional_text(row.get("DGA家族") or row.get("predicted_family"))
+        family_confidence = _safe_optional_float(row.get("家族置信度") or row.get("family_confidence"))
+        family_status = _clean_optional_text(row.get("家族归因状态") or row.get("family_attribution_status"))
+        reason = _clean_optional_text(row.get("命中方式") or row.get("命中原因") or row.get("reason"))
         items.append(
             {
                 "domain": domain,
                 "dga_score": score,
-                "label": result_text or "DGA-like",
-                "reason": "DGA_score 达到订阅预警阈值",
+                "label": result_text or "高置信DGA",
+                "family": family,
+                "family_confidence": family_confidence,
+                "family_attribution_status": family_status,
+                "reason": reason or "达到DGA高置信检测口径",
                 "raw": dict(row),
             }
         )
@@ -750,25 +757,32 @@ def _build_alert_attachment_excel(
                 }
             )
     elif task_type == "dga":
-        columns = ["DGA-like域名", "DGA_score", "预测结果", "命中原因"]
+        columns = ["DGA域名", "DGA_score", "预测结果", "DGA家族", "家族置信度", "家族归因状态", "命中原因"]
         for item in dga_alert_items or []:
             score = item.get("dga_score")
+            family_confidence = item.get("family_confidence")
             rows.append(
                 {
-                    "DGA-like域名": item.get("domain", ""),
+                    "DGA域名": item.get("domain", ""),
                     "DGA_score": "" if score is None else f"{float(score):.6f}",
-                    "预测结果": item.get("label") or "DGA-like",
-                    "命中原因": item.get("reason") or "DGA_score 达到订阅预警阈值",
+                    "预测结果": item.get("label") or "高置信DGA",
+                    "DGA家族": item.get("family") or "",
+                    "家族置信度": "" if family_confidence is None else f"{float(family_confidence):.6f}",
+                    "家族归因状态": item.get("family_attribution_status") or "",
+                    "命中原因": item.get("reason") or "达到DGA高置信检测口径",
                 }
             )
         if not rows:
             for domain in high_risk_domains:
                 rows.append(
                     {
-                        "DGA-like域名": domain,
+                        "DGA域名": domain,
                         "DGA_score": "",
-                        "预测结果": "DGA-like",
-                        "命中原因": "DGA_score 达到订阅预警阈值",
+                        "预测结果": "高置信DGA",
+                        "DGA家族": "",
+                        "家族置信度": "",
+                        "家族归因状态": "",
+                        "命中原因": "达到DGA高置信检测口径",
                     }
                 )
     elif task_type == "apt_template_nrd":
@@ -1448,8 +1462,11 @@ def execute_subscription(subscription_id: str):
                             "domain": d,
                             "score": item.get("dga_score"),
                             "dga_score": item.get("dga_score"),
-                            "label": item.get("label") or "DGA-like",
-                            "reason": item.get("reason") or "DGA_score 达到订阅预警阈值",
+                            "label": item.get("label") or "高置信DGA",
+                            "family": item.get("family"),
+                            "family_confidence": item.get("family_confidence"),
+                            "family_attribution_status": item.get("family_attribution_status"),
+                            "reason": item.get("reason") or "达到DGA高置信检测口径",
                             "raw": item.get("raw") or {},
                         }
                     )

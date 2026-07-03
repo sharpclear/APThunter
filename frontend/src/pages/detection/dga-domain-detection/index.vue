@@ -237,11 +237,11 @@ function resetForm() {
           <div class="card-header">
             <div class="card-title">创建DGA域名检测任务</div>
             <div class="card-subtitle">
-              使用DGA二分类模型计算域名的DGA-like分数并输出检测结果。
+              使用本地主DGA模型计算风险分数，并对候选域名进行DGA家族识别。
             </div>
             <div class="header-tags">
-              <span class="mini-tag">二分类模型</span>
-              <span class="mini-tag">DGA-like</span>
+              <span class="mini-tag">高置信DGA</span>
+              <span class="mini-tag">家族识别</span>
               <span class="mini-tag">离线检测</span>
             </div>
           </div>
@@ -329,9 +329,9 @@ function resetForm() {
       <a-col :xs="24" :xl="8">
         <a-card title="处理流程" class="guide-card" :bordered="false">
           <ul class="guide-list">
-            <li><span class="dot">1</span><span>先用DGA二分类模型计算每个域名的DGA_score。</span></li>
-            <li><span class="dot">2</span><span>将DGA_score不低于0.90的域名判定为DGA-like。</span></li>
-            <li><span class="dot">3</span><span>生成预测结果、统计信息和DGA域名列表。</span></li>
+            <li><span class="dot">1</span><span>先用主DGA模型计算每个域名的DGA分数。</span></li>
+            <li><span class="dot">2</span><span>DGA分数不低于0.90的域名进入家族识别池。</span></li>
+            <li><span class="dot">3</span><span>DGA分数不低于0.98，或家族识别通过可展示标准时，输出为高置信DGA。</span></li>
           </ul>
         </a-card>
       </a-col>

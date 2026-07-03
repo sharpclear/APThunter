@@ -1,0 +1,22 @@
+{
+  "name": "APTHunter DGA detection local delivery policy",
+  "mode": "local_inference_only",
+  "uses_external_llm": false,
+  "main_detector": {
+    "model_path": "models/model_dga_detector.joblib",
+    "direct_high_confidence_threshold": 0.98,
+    "output_score_field": "dga_score"
+  },
+  "family_attribution": {
+    "model_path": "models/family_sequence_gru_public_sources_user_approved/model_dga_family_sequence_gru.pt",
+    "audit_path": "data/holdout/family_attribution_audit_sequence_gru_default_threshold_0p98/family_attribution_audit_by_family.csv",
+    "family_input_threshold": 0.9,
+    "family_confidence_threshold": 0.95,
+    "show_concrete_family_only_when_status": "usable"
+  },
+  "high_confidence_dga_policy": {
+    "direct_main_model_hit": "dga_score >= 0.98",
+    "family_confirmed_hit": "dga_score >= 0.90 and family_attribution_status == usable",
+    "unknown_or_unusable_family_display": "unknown_family"
+  }
+}

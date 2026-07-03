@@ -77,16 +77,18 @@ INSERT INTO models (
 )
 SELECT
   '官方DGA域名检测模型',
-  'v1.0',
-  '用于DGA-like域名检测的官方二分类模型',
-  'saved_model/dga_binary_detector.joblib',
+  'v2.0',
+  '用于高置信DGA域名检测与DGA家族识别的官方本地模型',
+  'saved_model/dga_detection_local_model',
   NULL,
   JSON_OBJECT(
-    'note', '官方DGA二分类种子模型',
-    'threshold', 0.90,
-    'precision', 0.9000,
-    'recall', 0.6206,
-    'f1', 0.7347
+    'note', '官方DGA本地交付模型：主检测模型 + Sequence GRU家族识别',
+    'direct_high_confidence_threshold', 0.98,
+    'family_input_threshold', 0.90,
+    'family_confidence_threshold', 0.95,
+    'precision_at_training_threshold', 0.9000,
+    'recall_at_training_threshold', 0.6206,
+    'f1_at_training_threshold', 0.7347
   ),
   'official',
   'dga',
@@ -98,7 +100,7 @@ WHERE NOT EXISTS (
   SELECT 1
   FROM models
   WHERE name = '官方DGA域名检测模型'
-    AND version = 'v1.0'
+    AND version = 'v2.0'
     AND model_type = 'official'
 );
 

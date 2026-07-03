@@ -1,0 +1,70 @@
+{
+  "model_path": "models/family_sequence_gru_public_sources_user_approved_candidate/model_dga_family_sequence_gru.pt",
+  "valid_path": "data/training/dga_family_classifier_valid_expanded_public_sources_user_approved.csv",
+  "unknown_path": "data/training/dga_family_classifier_unknown_test_expanded_public_sources_user_approved.csv",
+  "thresholds": [
+    {
+      "threshold": 0.5,
+      "known_coverage": 0.6854827037197858,
+      "retained_accuracy": 0.8705357142857143,
+      "strict_accuracy": 0.5967371751132063,
+      "unknown_reject_rate": 0.3942125237191651
+    },
+    {
+      "threshold": 0.6,
+      "known_coverage": 0.6129272377644067,
+      "retained_accuracy": 0.907735384407786,
+      "strict_accuracy": 0.5563757417860762,
+      "unknown_reject_rate": 0.49430740037950666
+    },
+    {
+      "threshold": 0.7,
+      "known_coverage": 0.5398134937865724,
+      "retained_accuracy": 0.9379476768682729,
+      "strict_accuracy": 0.5063168124392614,
+      "unknown_reject_rate": 0.5837286527514232
+    },
+    {
+      "threshold": 0.8,
+      "known_coverage": 0.45216384426110867,
+      "retained_accuracy": 0.9718767148344614,
+      "strict_accuracy": 0.4394475115274073,
+      "unknown_reject_rate": 0.6755218216318786
+    },
+    {
+      "threshold": 0.85,
+      "known_coverage": 0.410975332382193,
+      "retained_accuracy": 0.9832461259810827,
+      "strict_accuracy": 0.4040899034385791,
+      "unknown_reject_rate": 0.7376660341555977
+    },
+    {
+      "threshold": 0.9,
+      "known_coverage": 0.3691044806980543,
+      "retained_accuracy": 0.9901966276399081,
+      "strict_accuracy": 0.36548601203399295,
+      "unknown_reject_rate": 0.7979127134724858
+    },
+    {
+      "threshold": 0.95,
+      "known_coverage": 0.30465438455017263,
+      "retained_accuracy": 0.9956563051445636,
+      "strict_accuracy": 0.30333105886731593,
+      "unknown_reject_rate": 0.8681214421252372
+    },
+    {
+      "threshold": 0.98,
+      "known_coverage": 0.19200628579699358,
+      "retained_accuracy": 0.9988154210639673,
+      "strict_accuracy": 0.19177883919525257,
+      "unknown_reject_rate": 0.9658444022770398
+    },
+    {
+      "threshold": 0.99,
+      "known_coverage": 0.09304633707586378,
+      "retained_accuracy": 0.9988888888888889,
+      "strict_accuracy": 0.0929429522568906,
+      "unknown_reject_rate": 1.0
+    }
+  ]
+}

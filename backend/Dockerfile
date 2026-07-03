@@ -41,7 +41,7 @@ RUN (apt-get update || ( \
     rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件
-COPY requirements.txt .
+COPY requirements.txt requirements_dga.txt ./
 
 # 安装 Python 依赖到临时目录（增加超时时间）
 # 配置 pip 使用国内镜像源（解决依赖包下载超时问题）
@@ -53,6 +53,19 @@ RUN pip install --default-timeout=1000 \
     --user \
     -i https://pypi.tuna.tsinghua.edu.cn/simple/ \
     -r requirements.txt
+
+# DGA 本地交付模型由 sklearn 1.7.2 / numpy 2.x 导出，和既有仿冒模型的
+# sklearn 1.2.1 运行环境不兼容；用独立 venv 隔离 DGA 推理依赖。
+RUN python -m venv --system-site-packages /opt/dga-runtime && \
+    /opt/dga-runtime/bin/pip install --default-timeout=1000 \
+    --index-url https://download.pytorch.org/whl/cpu \
+    --extra-index-url https://pypi.tuna.tsinghua.edu.cn/simple/ \
+    --trusted-host download.pytorch.org \
+    --trusted-host pypi.tuna.tsinghua.edu.cn \
+    'torch==2.7.1+cpu' && \
+    /opt/dga-runtime/bin/pip install --default-timeout=1000 \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple/ \
+    -r requirements_dga.txt
 
 # 第二阶段：运行阶段
 FROM python:3.10-slim-bookworm
@@ -84,6 +97,7 @@ RUN (apt-get update || ( \
 
 # 从构建阶段复制已安装的 Python 包
 COPY --from=builder /root/.local /root/.local
+COPY --from=builder /opt/dga-runtime /opt/dga-runtime
 
 # 确保使用本地安装的包
 ENV PATH=/root/.local/bin:$PATH
@@ -99,7 +113,8 @@ WORKDIR /app/app
 # 设置 Python 环境变量（PYTHONPATH 使包名 app 映射到 /app/app，供 uvicorn 与 celery 一致解析）
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    DGA_RUNTIME_PYTHON=/opt/dga-runtime/bin/python
 
 # 暴露端口（FastAPI 默认端口，可通过环境变量覆盖）
 EXPOSE 8000

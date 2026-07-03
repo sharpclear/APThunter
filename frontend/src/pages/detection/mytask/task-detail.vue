@@ -52,6 +52,12 @@ interface DgaResultItem {
   模型候选?: string
   预测标签?: number
   预测结果?: string
+  命中方式?: string
+  DGA家族?: string
+  家族置信度?: string | number
+  家族归因状态?: string
+  Top1家族?: string
+  Top1家族置信度?: string | number
 }
 
 interface HistorySimilarityResultItem {
@@ -104,6 +110,11 @@ interface DgaStatistics {
   总域名数?: string | number
   DGA候选数?: string | number
   DGA域名数?: string | number
+  高置信DGA域名数?: string | number
+  主模型高置信数?: string | number
+  家族确认提升数?: string | number
+  识别出DGA家族的域名数?: string | number
+  识别出的DGA家族种类数?: string | number
   正常域名数?: string | number
   DGA域名占比?: string
 }
@@ -491,22 +502,36 @@ const resultColumns = computed(() => {
         title: 'DGA_score',
         dataIndex: 'DGA_score',
         key: 'dga_score',
-        width: '14%',
+        width: '12%',
         align: 'center' as const,
       },
       {
         title: '预测结果',
         dataIndex: '预测结果',
         key: 'result',
-        width: '14%',
+        width: '12%',
         align: 'center' as const,
       },
       {
-        title: '模型候选',
-        dataIndex: '模型候选',
-        key: 'candidate',
-        width: '30%',
+        title: 'DGA家族',
+        dataIndex: 'DGA家族',
+        key: 'dga_family',
+        width: '16%',
+        ellipsis: true,
+      },
+      {
+        title: '家族置信度',
+        dataIndex: '家族置信度',
+        key: 'family_confidence',
+        width: '12%',
         align: 'center' as const,
+      },
+      {
+        title: '命中方式',
+        dataIndex: '命中方式',
+        key: 'hit_type',
+        width: '24%',
+        ellipsis: true,
       },
     ]
   }
@@ -797,7 +822,7 @@ onMounted(() => {
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'result'">
-                  <a-tag :color="record['预测结果'] === '恶意' || record['预测结果'] === 'DGA-like' || record['预测结果'] === '历史高度相似' || record['预测结果'] === '模板化APT命中' || record['预测结果'] === 'APT模板命中' ? 'red' : 'green'">
+                  <a-tag :color="record['预测结果'] === '恶意' || record['预测结果'] === 'DGA-like' || record['预测结果'] === '高置信DGA' || record['预测结果'] === '历史高度相似' || record['预测结果'] === '模板化APT命中' || record['预测结果'] === 'APT模板命中' ? 'red' : 'green'">
                     {{ record['预测结果'] }}
                   </a-tag>
                 </template>
@@ -846,8 +871,13 @@ onMounted(() => {
                       </div>
                     </template>
                     <template v-else-if="resultData.task_type === 'dga'" #description>
-                      <a-tag color="red">DGA-like</a-tag>
+                      <a-tag color="red">高置信DGA</a-tag>
                       <span>DGA_score: {{ item.DGA_score }}</span>
+                      <span v-if="item.DGA家族"> | DGA家族: {{ item.DGA家族 }}</span>
+                      <span v-if="item.家族置信度"> | 家族置信度: {{ item.家族置信度 }}</span>
+                      <div v-if="item.命中方式" style="margin-top: 4px; color: #667085;">
+                        命中方式: {{ item.命中方式 }}
+                      </div>
                     </template>
                     <template v-else-if="resultData.task_type === 'history_similarity'" #description>
                       <a-tag color="red">历史APT相似</a-tag>

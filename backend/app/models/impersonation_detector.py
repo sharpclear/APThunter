@@ -36,9 +36,19 @@ TARGET_EXCEL_PATH = r"E:\项目\APT组织域名预测\预测结果\仿冒检测\
 NEW_DOMAIN_FOLDER = r"E:\项目\APT组织域名预测\预测结果\新增域名_仿冒检测"
 OUTPUT_DIR = r"E:\项目\APT组织域名预测\预测结果\仿冒检测\结果"
 
-# CANINE 默认作为“过滤歧义候选”的复核模块
-ENABLE_CANINE = True
-CANINE_MODEL_PATH = r"./models/canine-s"
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+# CANINE 复核是可选深度模型能力，默认业务链路使用轻量规则/小模型路径。
+ENABLE_CANINE = _env_bool("IMPERSONATION_ENABLE_CANINE", False)
+CANINE_MODEL_PATH = os.getenv(
+    "IMPERSONATION_CANINE_MODEL_PATH",
+    os.getenv("APTHUNTER_CANINE_MODEL_PATH", r"./models/canine-s"),
+)
 
 # CANINE 只处理规则召回后的歧义候选，避免对数百万域名直接跑模型
 CANINE_MAX_CANDIDATES = 30000

@@ -48,16 +48,7 @@ COPY requirements.txt .
 RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple && \
     pip config set global.trusted-host pypi.tuna.tsinghua.edu.cn
 
-# 先安装 CPU 版本的 PyTorch（使用 PyTorch 官方源，但依赖从国内镜像下载）
-RUN pip install --default-timeout=1000 \
-    --user \
-    --index-url https://download.pytorch.org/whl/cpu \
-    --extra-index-url https://pypi.tuna.tsinghua.edu.cn/simple/ \
-    --trusted-host download.pytorch.org \
-    --trusted-host pypi.tuna.tsinghua.edu.cn \
-    'torch==2.7.1+cpu'
-
-# 安装其他依赖
+# 安装 Python 依赖
 RUN pip install --default-timeout=1000 \
     --user \
     -i https://pypi.tuna.tsinghua.edu.cn/simple/ \
@@ -100,6 +91,7 @@ ENV PATH=/root/.local/bin:$PATH
 # 复制应用代码与定时任务脚本（cron / docker exec 可用 /app/scripts/...）
 COPY app/ ./app/
 COPY scripts/ ./scripts/
+COPY 报告模板/ ./报告模板/
 
 # 切换到应用目录（关键修改：与本地运行方式一致）
 WORKDIR /app/app

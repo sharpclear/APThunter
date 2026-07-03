@@ -29,6 +29,8 @@ htmlcov/
 # Documentation
 README.md
 *.md
+!报告模板/
+!报告模板/*.md
 
 # Environment
 .env
@@ -42,8 +44,8 @@ app/models/fasttext/
 # Compose 会把宿主机 daily_data 挂载到 /app/app/daily_data，历史日数据不需要打进镜像。
 app/daily_data/
 
-# CANINE 本地模型需要保留，但 safetensors 与 pytorch_model.bin 二选一即可；保留 safetensors。
-app/models/pretrained_model/canine-s/pytorch_model.bin
+# CANINE 深度模型不是默认业务链路依赖，避免 1GB 级模型文件进入镜像上下文。
+app/models/pretrained_model/canine-s/
 
 # 训练产生的动态模型通过 Compose 挂载 saved_model 目录持久化，镜像只保留官方基线模型文件。
 app/models/saved_model/model_TRAIN_*.pkl

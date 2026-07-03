@@ -1,14 +1,13 @@
 import numpy as np
-import pandas as pd
 import re
 import math
 import os
 from collections import Counter
 
-import torch
-from transformers import CanineTokenizer, CanineModel
-
+import Levenshtein
 from wordsegment import load, segment
+
+keywords = ["gov", "pk", "mail", "serve"]
 
 
 # =========================
@@ -29,6 +28,30 @@ DEFAULT_CANINE_MODEL_PATH = os.path.normpath(
 
 _CANINE_TOKENIZER_CACHE = None
 _CANINE_MODEL_CACHE = None
+_CANINE_DEPENDENCIES_CACHE = None
+
+
+def _load_canine_dependencies():
+    """
+    CANINE 是可选深度特征，不属于当前默认小模型链路。
+    只有显式调用 CANINE 特征时才加载 PyTorch / Transformers。
+    """
+    global _CANINE_DEPENDENCIES_CACHE
+
+    if _CANINE_DEPENDENCIES_CACHE is not None:
+        return _CANINE_DEPENDENCIES_CACHE
+
+    try:
+        import torch
+        from transformers import CanineTokenizer, CanineModel
+    except ImportError as exc:
+        raise RuntimeError(
+            "CANINE 特征提取需要额外安装 torch 和 transformers；"
+            "当前默认恶意域名小模型不依赖该能力。"
+        ) from exc
+
+    _CANINE_DEPENDENCIES_CACHE = (torch, CanineTokenizer, CanineModel)
+    return _CANINE_DEPENDENCIES_CACHE
 
 
 def get_device(device=None):
@@ -36,6 +59,8 @@ def get_device(device=None):
     获取运行设备。
     如果不指定 device，则优先使用 cuda，否则使用 cpu。
     """
+    torch, _, _ = _load_canine_dependencies()
+
     if device is not None:
         return torch.device(device)
 
@@ -72,6 +97,7 @@ def load_canine_model(model_path=None, device=None):
             f"CANINE 模型目录中未找到 model.safetensors 或 pytorch_model.bin: {model_path}"
         )
 
+    _, CanineTokenizer, CanineModel = _load_canine_dependencies()
     device = get_device(device)
 
     print(f"Loading local CANINE tokenizer from {model_path}...")
@@ -184,6 +210,8 @@ def domains_to_canine_vectors(
         reduce_to_128=False:
             shape = (N, 768)
     """
+    torch, _, _ = _load_canine_dependencies()
+
     if tokenizer is None or model is None:
         tokenizer, model = load_canine_model(
             model_path=model_path,
@@ -335,20 +363,7 @@ def known_top(domain):
         return [0]
 
     top_domain = parts[-1]
-
-    known_tlds = {
-        "com", "net", "org", "info", "biz", "name", "pro",
-        "top", "xyz", "site", "online", "club", "vip", "shop",
-        "store", "app", "dev", "cloud", "tech", "space", "website",
-        "link", "click", "live", "work", "today", "world", "email",
-        "services", "support", "systems", "network", "digital",
-        "cn", "ru", "us", "uk", "de", "fr", "jp", "kr", "in",
-        "br", "au", "ca", "nl", "it", "es", "pl", "tr", "ir",
-        "ua", "hk", "tw", "sg", "vn", "th", "id", "my", "ph",
-        "cc", "co", "io", "me", "tv", "pw", "su", "to", "gg",
-        "ml", "ga", "cf", "tk", "gq", "icu", "cyou", "monster",
-        "quest", "rest", "bar", "fun", "bond", "cam"
-    }
+    known_tlds = {"com", "org", "net", "gov", "edu"}
 
     return [1 if top_domain in known_tlds else 0]
 
@@ -398,12 +413,39 @@ def calculate_entropy(domain):
     return entropy
 
 
+def www_com(parts):
+    www, com, gov = 0, 0, 0
+    subdomain = parts[:-1]
+
+    for part in subdomain:
+        if "www" in part:
+            www = 1
+        if "com" in part:
+            com = 1
+        gov += part.count("gov")
+
+    return [www, com, gov]
+
+
+def edit_dist(words, min_nums):
+    for index, keyword in enumerate(keywords):
+        min_dist = 20
+        for word in words:
+            dist = Levenshtein.distance(str(word), str(keyword))
+            if dist < min_dist:
+                min_dist = dist
+        if min_dist < min_nums[index]:
+            min_nums[index] = min_dist
+
+    return min_nums
+
+
 def extract_manual_features(domains):
     """
-    提取人工特征。
+    提取当前默认恶意域名小模型使用的 25 维人工特征。
 
     输出：
-        shape = (N, 18)
+        shape = (N, 25)
     """
     result = []
 
@@ -431,13 +473,17 @@ def extract_manual_features(domains):
         # 3. 原始词统计
         feature.extend(raw_word(parts))
 
-        # 4. 长字符串分词统计
+        # 4. 关键词编辑距离
+        dists = edit_dist(parts[:-1], [20] * len(keywords))
+
+        # 5. 长字符串分词统计
         for part in parts:
             if len(part) > 7:
                 without_digit = re.sub(r'\d+', '', part)
 
                 if without_digit:
                     words = segment(without_digit)
+                    dists = edit_dist(words, dists)
 
                     if len(words) > 1:
                         combined_word_list.append(part)
@@ -447,14 +493,12 @@ def extract_manual_features(domains):
             else:
                 domain_word_list.append(part)
 
-        # 5. 分割词总数
+        # 6. 关键词距离、分割词总数、组合词、信息熵和 www/com/gov 特征
+        feature.extend(dists)
         feature.append(len(domain_word_list))
-
-        # 6. 组合词统计
         feature.extend(combined_word(combined_word_list))
-
-        # 7. 信息熵
         feature.append(calculate_entropy(domain))
+        feature.extend(www_com(parts))
 
         result.append(np.array(feature, dtype=np.float32))
 
@@ -473,17 +517,17 @@ def feature_extract(
     batch_size=64,
     max_length=128,
     device=None,
-    use_canine=True
+    use_canine=False
 ):
     """
     提取最终域名特征。
 
     use_canine=False:
-        只输出人工特征，维度为 18。
+        默认只输出当前小模型使用的 25 维人工特征。
 
     use_canine=True:
-        人工特征 18 维 + CANINE 分组平均池化特征 128 维
-        最终输出 146 维。
+        人工特征 25 维 + CANINE 分组平均池化特征 128 维。
+        这是显式可选能力，默认业务链路不依赖 PyTorch / Transformers。
     """
     normalized_domains = [normalize_domain(domain) for domain in domains]
 

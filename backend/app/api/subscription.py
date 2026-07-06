@@ -103,6 +103,11 @@ from app.services.apt_template_nrd_report import (
     build_apt_template_nrd_result_payload,
     generate_apt_template_nrd_pdf_report,
 )
+from app.services.dga_report import (
+    build_dga_result_json,
+    build_dga_result_payload,
+    generate_dga_pdf_report,
+)
 from app.services.history_similarity_report import (
     build_history_similarity_result_json,
     build_history_similarity_result_payload,
@@ -1237,6 +1242,76 @@ def execute_subscription(subscription_id: str):
                     "source": "history_similarity_result_json",
                     "task_id": task_id,
                     "task_type": "history_similarity",
+                    "subscription_id": subscription_id,
+                },
+            )
+            db.add(result_data_file_record)
+            db.flush()
+            result_data_file_id = result_data_file_record.id
+        elif model.model_category == "dga":
+            timestamp = beijing_now().strftime("%Y%m%d_%H%M%S")
+            result_filename = f"dga_domain_detection_report_{task_id}_{timestamp}.pdf"
+            result_data_filename = f"dga_domain_detection_result_{task_id}_{timestamp}.json"
+            result_payload = build_dga_result_payload(
+                excel_content,
+                task_id=task_id,
+                dga_meta=task.extra.get("dga_detection") or {},
+            )
+            report_content = generate_dga_pdf_report(
+                result_payload,
+                task_id=task_id,
+                model_name=str(model.name or ""),
+                data_source="newDomain",
+                candidate_threshold=float(task.extra.get("candidate_threshold") or 0.90),
+                date_range=date_range,
+                generated_at=beijing_now().replace(tzinfo=None),
+            )
+            result_key = upload_file_content_to_minio(
+                report_content,
+                result_filename,
+                content_type="application/pdf",
+                bucket=RESULTS_BUCKET,
+            )
+            result_payload["result_file_key"] = result_key
+            result_payload["result_filename"] = result_filename
+            result_data_content = build_dga_result_json(result_payload)
+            result_data_key = upload_file_content_to_minio(
+                result_data_content,
+                result_data_filename,
+                content_type="application/json",
+                bucket=RESULTS_BUCKET,
+            )
+            result_content_type = "application/pdf"
+            result_data_content_type = "application/json"
+
+            report_file_record = StoredFile(
+                bucket=RESULTS_BUCKET,
+                object_key=result_key,
+                filename=result_filename,
+                content_type=result_content_type,
+                size=len(report_content),
+                uploaded_by=str(subscription.user_id),
+                metadata_json={
+                    "source": "dga_pdf_report",
+                    "task_id": task_id,
+                    "task_type": "dga",
+                    "subscription_id": subscription_id,
+                },
+            )
+            db.add(report_file_record)
+            db.flush()
+            result_file_id = report_file_record.id
+            result_data_file_record = StoredFile(
+                bucket=RESULTS_BUCKET,
+                object_key=result_data_key,
+                filename=result_data_filename,
+                content_type=result_data_content_type,
+                size=len(result_data_content),
+                uploaded_by=str(subscription.user_id),
+                metadata_json={
+                    "source": "dga_result_json",
+                    "task_id": task_id,
+                    "task_type": "dga",
                     "subscription_id": subscription_id,
                 },
             )

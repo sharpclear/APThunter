@@ -393,9 +393,14 @@ def generate_history_similarity_pdf_report(
     return render_markdown_report_to_pdf(markdown_text, task_id=task_id)
 
 
-def render_markdown_report_to_pdf(markdown_text: str, *, task_id: str) -> bytes:
+def render_markdown_report_to_pdf(
+    markdown_text: str,
+    *,
+    task_id: str,
+    report_title: Optional[str] = None,
+) -> bytes:
     """Render a repository Markdown report into a paginated PDF."""
-    return _markdown_to_pdf(markdown_text, task_id=task_id)
+    return _markdown_to_pdf(markdown_text, task_id=task_id, report_title=report_title)
 
 
 def _load_reportlab():
@@ -543,12 +548,13 @@ def _build_styles(rl: dict[str, Any], font_regular: str, font_bold: str) -> dict
     }
 
 
-def _markdown_to_pdf(markdown_text: str, *, task_id: str) -> bytes:
+def _markdown_to_pdf(markdown_text: str, *, task_id: str, report_title: Optional[str] = None) -> bytes:
     rl = _load_reportlab()
     font_regular, font_bold = _register_fonts(rl)
     styles = _build_styles(rl, font_regular, font_bold)
     story = _markdown_to_flowables(markdown_text, rl, styles)
     buffer = io.BytesIO()
+    title_text = report_title or "APTHunter 历史APT域名相似性检测报告"
     doc = rl["SimpleDocTemplate"](
         buffer,
         pagesize=rl["A4"],
@@ -556,7 +562,7 @@ def _markdown_to_pdf(markdown_text: str, *, task_id: str) -> bytes:
         rightMargin=PAGE_MARGIN_RIGHT,
         topMargin=PAGE_MARGIN_TOP,
         bottomMargin=PAGE_MARGIN_BOTTOM,
-        title=f"APTHunter 历史APT域名相似性检测报告 {task_id}",
+        title=f"{title_text} {task_id}",
         author="APTHunter",
     )
 
@@ -564,7 +570,7 @@ def _markdown_to_pdf(markdown_text: str, *, task_id: str) -> bytes:
         canvas.saveState()
         canvas.setFont(font_regular, 8)
         canvas.setFillColor(rl["colors"].HexColor("#829AB1"))
-        canvas.drawString(PAGE_MARGIN_LEFT, 24, "APTHunter 历史APT域名相似性检测报告")
+        canvas.drawString(PAGE_MARGIN_LEFT, 24, title_text)
         canvas.drawRightString(PAGE_WIDTH - PAGE_MARGIN_RIGHT, 24, f"第 {document.page} 页")
         canvas.setStrokeColor(rl["colors"].HexColor("#D9E2EC"))
         canvas.line(PAGE_MARGIN_LEFT, 36, PAGE_WIDTH - PAGE_MARGIN_RIGHT, 36)

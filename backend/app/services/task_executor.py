@@ -18,6 +18,11 @@ from app.services.apt_template_nrd_report import (
     build_apt_template_nrd_result_payload,
     generate_apt_template_nrd_pdf_report,
 )
+from app.services.dga_report import (
+    build_dga_result_json,
+    build_dga_result_payload,
+    generate_dga_pdf_report,
+)
 from app.services.domain_infra_collector import collect_missing_domain_infra
 from app.services.history_similarity_report import (
     build_history_similarity_result_json,
@@ -426,7 +431,9 @@ def execute_dga_task(task_id: str):
         candidate_threshold = (
             0.90 if candidate_threshold_value is None else float(candidate_threshold_value)
         )
-        result_filename = f"result_{task_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        result_filename = f"dga_domain_detection_report_{task_id}_{timestamp}.pdf"
+        result_data_filename = f"dga_domain_detection_result_{task_id}_{timestamp}.json"
 
         if data_source == "upload":
             _set_task_progress(db, task, extra_data, 20, "读取上传文件")
@@ -473,18 +480,80 @@ def execute_dga_task(task_id: str):
             raise ValueError(f"未知 dataSource: {data_source}")
 
         extra_data["dga_detection"] = dga_meta
-        _set_task_progress(db, task, extra_data, 85, "上传结果文件")
-        result_key = _upload_file_content_to_minio(
+        result_payload = build_dga_result_payload(
             excel_content,
+            task_id=task_id,
+            dga_meta=dga_meta,
+        )
+        report_content = generate_dga_pdf_report(
+            result_payload,
+            task_id=task_id,
+            model_name=str(model_record.name or ""),
+            data_source=str(data_source or ""),
+            candidate_threshold=candidate_threshold,
+            date_range=extra_data.get("dateRange") if isinstance(extra_data.get("dateRange"), list) else None,
+            generated_at=datetime.utcnow(),
+        )
+
+        _set_task_progress(db, task, extra_data, 85, "上传PDF报告")
+        result_key = _upload_file_content_to_minio(
+            report_content,
             result_filename,
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content_type="application/pdf",
+            bucket=RESULTS_BUCKET,
+        )
+        result_payload["result_file_key"] = result_key
+        result_payload["result_filename"] = result_filename
+        result_data_content = build_dga_result_json(result_payload)
+        result_data_key = _upload_file_content_to_minio(
+            result_data_content,
+            result_data_filename,
+            content_type="application/json",
             bucket=RESULTS_BUCKET,
         )
 
+        report_file_record = StoredFile(
+            bucket=RESULTS_BUCKET,
+            object_key=result_key,
+            filename=result_filename,
+            content_type="application/pdf",
+            size=len(report_content),
+            uploaded_by=str(task.created_by) if task.created_by is not None else None,
+            metadata_json={
+                "source": "dga_pdf_report",
+                "task_id": task_id,
+                "task_type": "dga",
+            },
+        )
+        db.add(report_file_record)
+        db.flush()
+        result_data_file_record = StoredFile(
+            bucket=RESULTS_BUCKET,
+            object_key=result_data_key,
+            filename=result_data_filename,
+            content_type="application/json",
+            size=len(result_data_content),
+            uploaded_by=str(task.created_by) if task.created_by is not None else None,
+            metadata_json={
+                "source": "dga_result_json",
+                "task_id": task_id,
+                "task_type": "dga",
+            },
+        )
+        db.add(result_data_file_record)
+        db.flush()
+
         task.status = "completed"
+        extra_data["result_file_id"] = report_file_record.id
         extra_data["result_file_key"] = result_key
         extra_data["result_bucket"] = RESULTS_BUCKET
         extra_data["result_filename"] = result_filename
+        extra_data["result_content_type"] = "application/pdf"
+        extra_data["result_data_file_id"] = result_data_file_record.id
+        extra_data["result_data_file_key"] = result_data_key
+        extra_data["result_data_bucket"] = RESULTS_BUCKET
+        extra_data["result_data_filename"] = result_data_filename
+        extra_data["result_data_content_type"] = "application/json"
         extra_data["statistics"] = statistics
         extra_data["completed_at"] = datetime.utcnow().isoformat()
         extra_data["progress"] = 100

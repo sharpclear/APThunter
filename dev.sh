@@ -81,6 +81,15 @@ init_env() {
 
     export VITE_API_PROXY_TARGET="${VITE_API_PROXY_TARGET:-http://127.0.0.1:${BACKEND_PORT}}"
     export VITE_ENABLE_H3_MOCK="${VITE_ENABLE_H3_MOCK:-false}"
+    if [[ -z "${DGA_RUNTIME_PYTHON:-}" ]]; then
+        if [[ -x "$BACKEND_DIR/.dga-runtime/bin/python" ]]; then
+            export DGA_RUNTIME_PYTHON="$BACKEND_DIR/.dga-runtime/bin/python"
+        elif [[ -x "$BACKEND_DIR/dga-runtime/bin/python" ]]; then
+            export DGA_RUNTIME_PYTHON="$BACKEND_DIR/dga-runtime/bin/python"
+        elif [[ -x "/opt/dga-runtime/bin/python" ]]; then
+            export DGA_RUNTIME_PYTHON="/opt/dga-runtime/bin/python"
+        fi
+    fi
 
     UVICORN_CMD="${UVICORN_CMD:-python -m uvicorn app.main:app --host 0.0.0.0 --port ${BACKEND_PORT}}"
     CELERY_CMD="${CELERY_CMD:-python -m celery -A celery_worker worker --loglevel=info}"

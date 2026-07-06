@@ -2367,6 +2367,27 @@ async def get_task_result_json(task_id: str, request: Request):
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Failed to parse apt template result data",
                 ) from exc
+
+        if task.task_type == "dga" and extra_data.get("result_data_file_key"):
+            try:
+                result_data_bytes = download_file_from_minio(
+                    extra_data.get("result_data_file_key"),
+                    extra_data.get("result_data_bucket") or RESULTS_BUCKET,
+                )
+                result_payload = json.loads(result_data_bytes.decode("utf-8"))
+                result_payload["result_file_key"] = result_key
+                result_payload["result_filename"] = extra_data.get("result_filename") or result_payload.get("result_filename") or f"{task.task_id}_report.pdf"
+                result_payload["dga_detection"] = extra_data.get("dga_detection") or result_payload.get("dga_detection") or {}
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content=_json_safe_value(result_payload),
+                )
+            except Exception as exc:
+                logger.exception("读取DGA域名检测JSON结果失败 task_id=%s: %s", task.task_id, exc)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to parse dga result data",
+                ) from exc
         
         try:
             # 从MinIO下载Excel文件

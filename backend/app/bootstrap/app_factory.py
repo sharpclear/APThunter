@@ -217,10 +217,9 @@ def create_app() -> FastAPI:
         except Exception as e:
             logger.exception(f"订阅调度器初始化失败: {e}")
 
+        auto_domain_bootstrap_enabled = os.getenv("AUTO_DOMAIN_BOOTSTRAP", "false").lower() in {"1", "true", "yes"}
+
         def run_domain_bootstrap():
-            if os.getenv("AUTO_DOMAIN_BOOTSTRAP", "true").lower() not in {"1", "true", "yes"}:
-                logger.info("域名属性自动补全已关闭")
-                return
             try:
                 logger.info("启动域名属性自动补全任务")
                 backend_root = Path(__file__).resolve().parents[2]
@@ -233,7 +232,10 @@ def create_app() -> FastAPI:
             except Exception as exc:
                 logger.exception("域名属性自动补全任务失败: %s", exc)
 
-        threading.Thread(target=run_domain_bootstrap, daemon=True).start()
+        if auto_domain_bootstrap_enabled:
+            threading.Thread(target=run_domain_bootstrap, daemon=True).start()
+        else:
+            logger.info("域名属性自动补全已关闭")
 
     @fastapi_app.on_event("shutdown")
     async def shutdown_event():

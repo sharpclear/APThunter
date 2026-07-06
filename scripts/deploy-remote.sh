@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Load a packaged image archive on the remote VM, run existing DB migrations,
+# Load a packaged image archive on the remote VM, bootstrap the database,
 # and recreate app containers from the loaded images.
 set -Eeuo pipefail
 
@@ -15,11 +15,11 @@ Options:
   --tag TAG                    Use releases/apthunter-images-TAG.tar.gz
   --archive FILE               Use a specific image archive
   --upload-dir DIR             Directory containing uploaded archives. Default: ./releases
-  --skip-migrations            Do not run SQL migration stage
-  --skip-db-bootstrap          Do not run idempotent DB seed/fix stage
-  --migrations-only            Run migration stage only; do not load images or recreate app containers
-  --baseline-migrations        Record current migration SQL files as applied without executing them
-  --run-untracked-migrations   If schema_migrations is missing, execute existing SQL files instead of baselining them
+  --skip-migrations            Do not apply unrecorded migration files
+  --skip-db-bootstrap          Do not apply current seed data
+  --migrations-only            Run database bootstrap/migration only; do not load images or recreate app containers
+  --baseline-migrations        Kept for compatibility; database bootstrap now adopts covered legacy migrations automatically
+  --run-untracked-migrations   Kept for compatibility; future unrecorded migrations are applied by database bootstrap
   --skip-health-check          Do not wait for service health after recreate
   -h, --help                   Show this help
 
@@ -27,7 +27,6 @@ Environment overrides:
   COMPOSE_PROJECT_NAME         Default: apthunter
   RUN_MIGRATIONS               Default: 1
   RUN_DB_BOOTSTRAP             Default: 1
-  BASELINE_ON_MISSING_TABLE    Default: 1
   STOP_APP_BEFORE_MIGRATION    Default: 1
   PULL_EXTERNAL_IMAGES         Default: 1
   HEALTH_TIMEOUT_SEC           Default: 420
@@ -47,13 +46,6 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"
 }
 
-mysql_escape() {
-  local value="$1"
-  value="${value//\\/\\\\}"
-  value="${value//\'/\'\'}"
-  printf '%s' "$value"
-}
-
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-apthunter}"
 UPLOAD_DIR="${REMOTE_UPLOAD_DIR:-$ROOT/releases}"
 DEPLOY_TAG="${DEPLOY_TAG:-}"
@@ -67,6 +59,7 @@ PULL_EXTERNAL_IMAGES="${PULL_EXTERNAL_IMAGES:-1}"
 HEALTH_TIMEOUT_SEC="${HEALTH_TIMEOUT_SEC:-420}"
 SKIP_HEALTH_CHECK="${SKIP_HEALTH_CHECK:-0}"
 MIGRATIONS_ONLY=0
+TARGET_IMAGES=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -116,16 +109,16 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ "$BASELINE_MIGRATIONS" == "1" ]]; then
+  log "--baseline-migrations is kept for compatibility; current bootstrap adopts covered legacy migrations automatically"
+fi
+
+if [[ "$BASELINE_ON_MISSING_TABLE" == "0" ]]; then
+  log "--run-untracked-migrations is kept for compatibility; future unrecorded migrations are applied automatically"
+fi
+
 compose() {
   docker compose -p "$COMPOSE_PROJECT_NAME" "$@"
-}
-
-mysql_exec() {
-  compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'
-}
-
-mysql_query() {
-  compose exec -T mysql sh -c 'mysql -N -B -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" 2>/dev/null'
 }
 
 service_state() {
@@ -181,6 +174,49 @@ resolve_archive() {
   printf '%s' "$latest"
 }
 
+resolve_manifest() {
+  local archive="$1"
+  if [[ -n "$DEPLOY_TAG" && -f "$UPLOAD_DIR/manifest-${DEPLOY_TAG}.env" ]]; then
+    printf '%s' "$UPLOAD_DIR/manifest-${DEPLOY_TAG}.env"
+    return
+  fi
+
+  local archive_dir archive_base tag_from_archive
+  archive_dir="$(dirname "$archive")"
+  archive_base="$(basename "$archive")"
+  tag_from_archive="${archive_base#apthunter-images-}"
+  tag_from_archive="${tag_from_archive%.tar.gz}"
+  if [[ "$tag_from_archive" != "$archive_base" && -f "$archive_dir/manifest-${tag_from_archive}.env" ]]; then
+    printf '%s' "$archive_dir/manifest-${tag_from_archive}.env"
+    return
+  fi
+
+  printf ''
+}
+
+load_manifest_target_images() {
+  local manifest_file="$1"
+  TARGET_IMAGES=()
+  if [[ -z "$manifest_file" || ! -f "$manifest_file" ]]; then
+    log "manifest not found; falling back to Compose project image names"
+    TARGET_IMAGES=(
+      "${COMPOSE_PROJECT_NAME}-mysql:latest"
+      "${COMPOSE_PROJECT_NAME}-backend:latest"
+      "${COMPOSE_PROJECT_NAME}-celery-worker:latest"
+      "${COMPOSE_PROJECT_NAME}-frontend:latest"
+    )
+    return
+  fi
+
+  local value
+  value="$(sed -n 's/^TARGET_IMAGES=//p' "$manifest_file" | tail -n 1)"
+  if [[ -z "$value" ]]; then
+    fail "manifest exists but TARGET_IMAGES is empty: $manifest_file"
+  fi
+  read -r -a TARGET_IMAGES <<< "$value"
+  log "loaded target images from manifest: $manifest_file"
+}
+
 verify_archive_checksum() {
   local archive="$1"
   local checksum_file="$archive.sha256"
@@ -203,15 +239,8 @@ load_image_archive() {
   log "loading Docker images from: $archive"
   gzip -dc "$archive" | docker load
 
-  local required_images=(
-    "${COMPOSE_PROJECT_NAME}-mysql:latest"
-    "${COMPOSE_PROJECT_NAME}-backend:latest"
-    "${COMPOSE_PROJECT_NAME}-celery-worker:latest"
-    "${COMPOSE_PROJECT_NAME}-frontend:latest"
-  )
-
   log "checking loaded Compose images"
-  docker image inspect "${required_images[@]}" >/dev/null
+  docker image inspect "${TARGET_IMAGES[@]}" >/dev/null
 }
 
 ensure_external_images() {
@@ -234,143 +263,22 @@ ensure_infra_services() {
   wait_for_service mysql "$HEALTH_TIMEOUT_SEC"
 }
 
-record_migration() {
-  local filename="$1"
-  local checksum="$2"
-  local filename_sql checksum_sql
-  filename_sql="$(mysql_escape "$filename")"
-  checksum_sql="$(mysql_escape "$checksum")"
-
-  printf "INSERT INTO schema_migrations (filename, checksum) VALUES ('%s', '%s') ON DUPLICATE KEY UPDATE checksum = VALUES(checksum);\n" \
-    "$filename_sql" "$checksum_sql" | mysql_exec >/dev/null
-}
-
-run_migrations() {
-  local migration_dir="$ROOT/backend/db/migrations"
-  [[ -d "$migration_dir" ]] || {
-    log "migration directory not found; skipping: $migration_dir"
-    return
-  }
-
-  shopt -s nullglob
-  local migration_files=("$migration_dir"/*.sql)
-  shopt -u nullglob
-
-  if [[ "${#migration_files[@]}" -eq 0 ]]; then
-    log "no migration SQL files found"
-    return
-  fi
-
-  log "preparing schema_migrations table"
-  local had_table
-  had_table="$(printf "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'schema_migrations';\n" | mysql_query | tr -d '[:space:]')"
-
-  cat <<'SQL' | mysql_exec >/dev/null
-CREATE TABLE IF NOT EXISTS schema_migrations (
-  filename VARCHAR(255) NOT NULL PRIMARY KEY,
-  checksum CHAR(64) NOT NULL,
-  applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-SQL
-
-  if [[ "$BASELINE_MIGRATIONS" == "1" || ( "$had_table" == "0" && "$BASELINE_ON_MISSING_TABLE" == "1" ) ]]; then
-    if [[ "$BASELINE_MIGRATIONS" == "1" ]]; then
-      log "baselining current migration files by request; SQL files will not be executed"
-    else
-      log "schema_migrations did not exist; baselining current migration files for existing DB"
-    fi
-
-    local file filename checksum
-    for file in "${migration_files[@]}"; do
-      filename="$(basename "$file")"
-      checksum="$(sha256sum "$file" | awk '{print $1}')"
-      record_migration "$filename" "$checksum"
-      log "baselined migration: $filename"
-    done
-    return
-  fi
-
-  local file filename checksum filename_sql existing_checksum
-  for file in "${migration_files[@]}"; do
-    filename="$(basename "$file")"
-    checksum="$(sha256sum "$file" | awk '{print $1}')"
-    filename_sql="$(mysql_escape "$filename")"
-    existing_checksum="$(printf "SELECT checksum FROM schema_migrations WHERE filename = '%s' LIMIT 1;\n" "$filename_sql" | mysql_query | tr -d '[:space:]' || true)"
-
-    if [[ -n "$existing_checksum" ]]; then
-      if [[ "$existing_checksum" != "$checksum" ]]; then
-        fail "migration checksum changed after being applied: $filename"
-      fi
-      log "skipping already applied migration: $filename"
-      continue
-    fi
-
-    if [[ "$filename" == "007_add_dga_detection_task.sql" ]]; then
-      log "recording superseded legacy migration without executing: $filename"
-      record_migration "$filename" "$checksum"
-      continue
-    fi
-
-    log "applying migration: $filename"
-    mysql_exec < "$file"
-    record_migration "$filename" "$checksum"
-  done
-}
-
 run_db_bootstrap() {
-  log "running idempotent DB bootstrap"
-
-  log "ensuring current model/task enums"
-  cat <<'SQL' | mysql_exec >/dev/null
-ALTER TABLE models
-  MODIFY COLUMN model_category ENUM('malicious','impersonation','dga','history_similarity') DEFAULT NULL;
-
-ALTER TABLE tasks
-  MODIFY COLUMN task_type ENUM('malicious','impersonation','malicious_ip','dga','history_similarity') NOT NULL COMMENT '任务类型';
-
-ALTER TABLE training_tasks
-  MODIFY COLUMN model_category ENUM('malicious','impersonation','dga','history_similarity') NOT NULL DEFAULT 'malicious';
-
-ALTER TABLE alerts
-  MODIFY COLUMN task_type ENUM('malicious', 'impersonation', 'malicious_ip', 'dga', 'history_similarity') NOT NULL COMMENT '任务类型：恶意域名检测/仿冒域名检测/恶意IP检测/DGA域名检测/历史高度相似检测';
-
-ALTER TABLE alert_files
-  MODIFY COLUMN task_type ENUM('malicious', 'impersonation', 'malicious_ip', 'dga', 'history_similarity') NOT NULL COMMENT '任务类型';
-SQL
-
-  local seed_file="$ROOT/backend/db/init/05_seed_core_data.sql"
-  [[ -f "$seed_file" ]] || fail "core seed SQL not found: $seed_file"
-  log "seeding official users/models: $(basename "$seed_file")"
-  mysql_exec < "$seed_file"
-
-  local dga_switch_file="$ROOT/backend/db/migrations/009_switch_dga_binary_detector.sql"
-  if [[ -f "$dga_switch_file" ]]; then
-    log "ensuring DGA binary model metadata: $(basename "$dga_switch_file")"
-    mysql_exec < "$dga_switch_file"
-  else
-    log "DGA switch migration not found; skipping: $dga_switch_file"
+  if [[ "$RUN_MIGRATIONS" != "1" && "$RUN_DB_BOOTSTRAP" != "1" ]]; then
+    log "database bootstrap skipped"
+    return
   fi
 
-  log "granting active official models to all users"
-  cat <<'SQL' | mysql_exec >/dev/null
-INSERT INTO user_models (user_id, model_id, acquired_at, is_active, source)
-SELECT u.id, m.id, NOW(), 1, 'official'
-FROM users u
-JOIN models m
-  ON m.model_type = 'official'
- AND m.status = 'active'
-WHERE NOT EXISTS (
-  SELECT 1
-  FROM user_models um
-  WHERE um.user_id = u.id
-    AND um.model_id = m.id
-);
-SQL
+  local args=()
+  if [[ "$RUN_MIGRATIONS" != "1" ]]; then
+    args+=(--skip-migrations)
+  fi
+  if [[ "$RUN_DB_BOOTSTRAP" != "1" ]]; then
+    args+=(--skip-seed)
+  fi
 
-  log "verifying DGA official model"
-  local dga_count
-  dga_count="$(printf "SELECT COUNT(*) FROM models WHERE model_category = 'dga' AND model_type = 'official' AND status = 'active' AND model_path = 'saved_model/dga_binary_detector.joblib';\n" | mysql_query | tr -d '[:space:]')"
-  [[ "$dga_count" != "0" ]] || fail "DGA official model is missing after DB bootstrap"
+  log "running image-contained database bootstrap"
+  compose run --rm -T --no-deps --pull never backend python /app/scripts/db_bootstrap.py "${args[@]}"
 }
 
 recreate_app_services() {
@@ -418,31 +326,29 @@ main() {
   log "compose project: $COMPOSE_PROJECT_NAME"
 
   local archive=""
+  local manifest_file=""
   if [[ "$MIGRATIONS_ONLY" != "1" ]]; then
     archive="$(resolve_archive)"
+    manifest_file="$(resolve_manifest "$archive")"
+    load_manifest_target_images "$manifest_file"
     load_image_archive "$archive"
+  else
+    load_manifest_target_images ""
   fi
 
   ensure_external_images
   ensure_infra_services
 
-  if [[ "$RUN_MIGRATIONS" == "1" ]]; then
-    if [[ "$STOP_APP_BEFORE_MIGRATION" == "1" && "$MIGRATIONS_ONLY" != "1" ]]; then
-      log "stopping app services before migration"
+  if [[ "$STOP_APP_BEFORE_MIGRATION" == "1" && ( "$RUN_MIGRATIONS" == "1" || "$RUN_DB_BOOTSTRAP" == "1" ) ]]; then
+    if [[ "$MIGRATIONS_ONLY" != "1" ]]; then
+      log "stopping app services before database bootstrap"
       compose stop frontend celery-worker backend || true
-    elif [[ "$STOP_APP_BEFORE_MIGRATION" == "1" ]]; then
+    else
       log "migrations-only mode; app services will not be stopped"
     fi
-    run_migrations
-  else
-    log "migration stage skipped"
   fi
 
-  if [[ "$RUN_DB_BOOTSTRAP" == "1" ]]; then
-    run_db_bootstrap
-  else
-    log "DB bootstrap stage skipped"
-  fi
+  run_db_bootstrap
 
   if [[ "$MIGRATIONS_ONLY" == "1" ]]; then
     log "migrations-only mode complete"

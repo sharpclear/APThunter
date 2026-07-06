@@ -67,7 +67,7 @@ export DEPLOY_TAG=manual-$(date +%Y%m%d-%H%M)
 /home/mlz/APTHunter/releases
 ```
 
-如远程项目目录不同，请使用 `--remote-upload-dir` 指定实际目录。
+如远程项目目录不同，请优先使用 `--remote-project-dir` 指定实际项目目录；上传目录会默认跟随为该目录下的 `releases`。如果上传目录需要单独放置，再使用 `--remote-upload-dir` 指定。
 
 ## 3. 通过 GitHub 对齐远程代码
 
@@ -107,11 +107,12 @@ cat releases/manifest-${DEPLOY_TAG}.env
 
 ### 情况 A：只对齐数据库结构
 
-如果远程已有数据需要保留，只让远程执行 migration 和幂等初始化即可。远程部署脚本默认会处理：
+如果远程已有数据需要保留，只让远程执行数据库 bootstrap 即可。远程部署脚本默认会处理：
 
 - 启动 MySQL、Redis、MinIO 基础服务
-- 执行 `backend/db/migrations/*.sql`
-- 执行幂等数据库 bootstrap
+- 通过后端镜像执行 `/app/scripts/db_bootstrap.py`
+- 对齐当前表结构、当前官方模型/初始账号数据，并记录已由 bootstrap 覆盖的历史 migration
+- 自动执行未来新增且尚未记录的 migration
 - 重建 backend、celery-worker、frontend 容器
 
 这种情况不需要导入本地完整数据库，直接执行第 5 步即可。
@@ -175,15 +176,15 @@ cd /home/mlz/APTHunter
 
 - 校验镜像包 sha256
 - `docker load` 导入镜像
-- 确认 `apthunter-mysql/backend/celery-worker/frontend:latest` 镜像存在
+- 按 manifest 中的 `TARGET_IMAGES` 确认目标镜像存在
 - 拉取或复用 Redis、MinIO 镜像
 - 启动基础服务
-- 执行 migration 和 DB bootstrap
+- 通过后端镜像执行 `/app/scripts/db_bootstrap.py`，完成表结构兼容、初始账号/模型数据和后续 migration
 - 使用 `--no-build --force-recreate` 重建应用容器
 - 等待 backend、celery-worker、frontend 健康检查
 - 如存在 `scripts/compose-verify.sh`，执行接口验证
 
-如果只想先执行数据库 migration，不加载镜像和重建应用：
+如果只想先执行数据库 bootstrap/migration，不加载镜像和重建应用：
 
 ```bash
 ./scripts/deploy-remote.sh --migrations-only

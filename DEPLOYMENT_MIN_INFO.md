@@ -38,7 +38,7 @@ For the first scriptable version, keep the workflow small:
 
 1. Git pull/checkout on the remote machine is done manually before deployment.
 2. The local script packages and uploads already-built Docker image archives only. Image builds are done manually before packaging.
-3. The remote script loads uploaded images and starts containers from those images.
+3. The remote script loads uploaded images, bootstraps the database through the backend image, and starts containers from those images.
 4. The remote script does not delete Docker volumes.
 5. The remote script uses the remote `.env` file if present, but does not upload secrets.
 
@@ -64,7 +64,7 @@ For repeatable deployment, consider replacing `minio/minio:latest` with a fixed 
 | Script | Purpose |
 | --- | --- |
 | `scripts/deploy-local.sh` | Package already-built local images into `apthunter-images-${DEPLOY_TAG}.tar.gz`, write checksum/manifest files, and upload them to the remote VM. By default it chooses the newest per-service image between the local Compose image prefix, target `apthunter-*`, and the current local Compose container image, then retags it as `apthunter-*` for remote Compose. |
-| `scripts/deploy-remote.sh` | Load the uploaded image archive on the remote VM, run the migration stage, recreate app containers with `--no-build`, and report health-check failures without rollback. |
+| `scripts/deploy-remote.sh` | Load the uploaded image archive on the remote VM, run the image-contained database bootstrap/migration entrypoint, recreate app containers with `--no-build`, and report health-check failures without rollback. |
 
 ## Local Script Inputs
 

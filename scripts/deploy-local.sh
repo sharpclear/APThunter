@@ -18,6 +18,7 @@ Options:
   --remote-host HOST        Remote host. Default: 192.168.32.219
   --remote-port PORT        Remote SSH port. Default: 22
   --remote-user USER        Remote SSH user. Default: mlz
+  --remote-project-dir DIR  Remote APTHunter project directory. Default: /home/mlz/APTHunter
   --remote-upload-dir DIR   Remote upload directory. Default: /home/mlz/APTHunter/releases
   --ssh-key PATH            SSH private key path. Default: password login
   --output-dir DIR          Local output directory. Default: .deploy/TAG
@@ -104,7 +105,8 @@ DEPLOY_TAG="${DEPLOY_TAG:-manual-$(date +%Y%m%d-%H%M%S)}"
 REMOTE_HOST="${REMOTE_HOST:-192.168.32.219}"
 REMOTE_PORT="${REMOTE_PORT:-22}"
 REMOTE_USER="${REMOTE_USER:-mlz}"
-REMOTE_UPLOAD_DIR="${REMOTE_UPLOAD_DIR:-/home/mlz/APTHunter/releases}"
+REMOTE_PROJECT_DIR="${REMOTE_PROJECT_DIR:-/home/mlz/APTHunter}"
+REMOTE_UPLOAD_DIR="${REMOTE_UPLOAD_DIR:-}"
 SSH_KEY_LOCAL_PATH="${SSH_KEY_LOCAL_PATH:-password login}"
 LOCAL_COMPOSE_PROJECT_NAME="${LOCAL_COMPOSE_PROJECT_NAME:-$(basename "$ROOT")}"
 SOURCE_COMPOSE_PROJECT_NAME="${SOURCE_COMPOSE_PROJECT_NAME:-auto}"
@@ -139,6 +141,10 @@ while [[ $# -gt 0 ]]; do
       REMOTE_USER="${2:?--remote-user requires a value}"
       shift 2
       ;;
+    --remote-project-dir)
+      REMOTE_PROJECT_DIR="${2:?--remote-project-dir requires a value}"
+      shift 2
+      ;;
     --remote-upload-dir)
       REMOTE_UPLOAD_DIR="${2:?--remote-upload-dir requires a value}"
       shift 2
@@ -168,6 +174,10 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -z "$REMOTE_UPLOAD_DIR" ]]; then
+  REMOTE_UPLOAD_DIR="$REMOTE_PROJECT_DIR/releases"
+fi
 
 if [[ -z "$OUTPUT_DIR" ]]; then
   OUTPUT_DIR="$ROOT/.deploy/$DEPLOY_TAG"
@@ -213,6 +223,7 @@ log "local image project: $LOCAL_COMPOSE_PROJECT_NAME"
 log "source image project: $SOURCE_COMPOSE_PROJECT_NAME"
 log "target image project: $TARGET_COMPOSE_PROJECT_NAME"
 log "deployment tag: $DEPLOY_TAG"
+log "remote project directory: $REMOTE_PROJECT_DIR"
 
 if [[ "$DRY_RUN" == "1" ]]; then
   log "dry run selected image mapping"
@@ -259,7 +270,7 @@ ARCHIVE=$(basename "$archive")
 ARCHIVE_SHA256=$archive_sha256
 SOURCE_IMAGES=${source_images[*]}
 TARGET_IMAGES=${target_images[*]}
-REMOTE_PROJECT_DIR=/home/mlz/APTHunter
+REMOTE_PROJECT_DIR=$REMOTE_PROJECT_DIR
 REMOTE_UPLOAD_DIR=$REMOTE_UPLOAD_DIR
 RUN_MIGRATIONS=1
 ROLLBACK_ON_HEALTH_FAILURE=0
@@ -297,7 +308,7 @@ Upload complete.
 After you manually update code on the remote machine, run:
 
   ssh -p $REMOTE_PORT $REMOTE_USER@$REMOTE_HOST
-  cd /home/mlz/APTHunter
+  cd $REMOTE_PROJECT_DIR
   ./scripts/deploy-remote.sh --tag $DEPLOY_TAG
 
 EOF

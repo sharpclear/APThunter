@@ -8,6 +8,8 @@ venv/
 env/
 .venv
 ENV/
+backend/.dga-runtime/
+backend/dga-runtime/
 *.egg-info/
 dist/
 build/

@@ -36,6 +36,15 @@ _DGA_RUNTIME_ENV = "DGA_RUNTIME_PYTHON"
 _DGA_SUBPROCESS_ENV = "DGA_DETECTION_SUBPROCESS"
 
 
+def _candidate_runtime_pythons() -> list[Path]:
+    backend_dir = CURRENT_DIR.parents[1]
+    return [
+        Path("/opt/dga-runtime/bin/python"),
+        backend_dir / ".dga-runtime" / "bin" / "python",
+        backend_dir / "dga-runtime" / "bin" / "python",
+    ]
+
+
 def _resolve_path(value: str | os.PathLike[str]) -> Path:
     path = Path(value)
     if not path.is_absolute():
@@ -250,17 +259,29 @@ def predict_from_domains(
 
 
 def _should_delegate_to_dga_runtime() -> bool:
+    return _resolve_dga_runtime_python() is not None
+
+
+def _resolve_dga_runtime_python() -> str | None:
     if os.environ.get(_DGA_SUBPROCESS_ENV) == "1":
-        return False
+        return None
     runtime_python = os.environ.get(_DGA_RUNTIME_ENV, "").strip()
-    if not runtime_python:
-        return False
+    candidates = [Path(runtime_python).expanduser()] if runtime_python else _candidate_runtime_pythons()
     try:
-        runtime_path = Path(runtime_python).expanduser().absolute()
         current_path = Path(sys.executable).expanduser().absolute()
     except Exception:
-        return False
-    return runtime_path.exists() and runtime_path != current_path
+        current_path = None
+    for candidate in candidates:
+        try:
+            runtime_path = candidate.absolute()
+        except Exception:
+            continue
+        if not runtime_path.exists():
+            continue
+        if current_path is not None and runtime_path == current_path:
+            continue
+        return str(runtime_path)
+    return None
 
 
 def _predict_from_domains_with_dga_runtime(
@@ -269,7 +290,12 @@ def _predict_from_domains_with_dga_runtime(
     model_path: Optional[str],
     candidate_threshold: float,
 ) -> Tuple[bytes, Dict[str, Any], Dict[str, Any]]:
-    runtime_python = os.environ[_DGA_RUNTIME_ENV].strip()
+    runtime_python = _resolve_dga_runtime_python()
+    if not runtime_python:
+        raise RuntimeError(
+            "DGA本地交付模型需要独立运行时。请设置 DGA_RUNTIME_PYTHON，"
+            "或按 requirements_dga.txt 创建 backend/.dga-runtime。"
+        )
     with tempfile.TemporaryDirectory(prefix="apthunter_dga_") as temp_dir:
         temp_path = Path(temp_dir)
         input_path = temp_path / "input.json"

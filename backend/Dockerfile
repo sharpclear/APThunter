@@ -105,6 +105,7 @@ ENV PATH=/root/.local/bin:$PATH
 # 复制应用代码与定时任务脚本（cron / docker exec 可用 /app/scripts/...）
 COPY app/ ./app/
 COPY scripts/ ./scripts/
+COPY db/ ./db/
 COPY 报告模板/ ./报告模板/
 
 # 切换到应用目录（关键修改：与本地运行方式一致）

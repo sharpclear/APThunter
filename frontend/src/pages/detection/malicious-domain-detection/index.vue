@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import MaliciousDetectionForm from '../malicious-detection/malicious-detection-form.vue'
+import UnifiedMaliciousDomainDetectionForm from '../malicious-detection/unified-malicious-domain-detection-form.vue'
 
 defineOptions({
   name: 'MaliciousDomainDetection',
@@ -8,7 +8,7 @@ defineOptions({
 
 <template>
   <page-container class="detection-form-page">
-    <MaliciousDetectionForm />
+    <UnifiedMaliciousDomainDetectionForm />
   </page-container>
 </template>
 

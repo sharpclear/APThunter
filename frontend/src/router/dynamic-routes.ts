@@ -29,6 +29,15 @@ export default [
         },
       },
       {
+        path: '/dashboard/domain-monitor',
+        name: 'DashboardDomainMonitor',
+        component: () => import('~/pages/dashboard/domain-monitor/index.vue'),
+        meta: {
+          title: '域名追踪',
+          locale: 'menu.dashboard.domain-monitor',
+        },
+      },
+      {
         path: '/dashboard/workplace',
         name: 'DashboardWorkplace',
         component: () => import('~/pages/dashboard/workplace/index.vue'),
@@ -50,7 +59,7 @@ export default [
     children: [
       {
         path: '/detection/create-task',
-        redirect: '/detection/impersonation-domain-detection',
+        redirect: '/detection/malicious-domain-detection',
         name: 'CreateDetectionTask',
         component: basicRouteMap.RouteView,
         meta: {
@@ -65,43 +74,55 @@ export default [
             meta: {
               title: '恶意域名检测',
               locale: 'menu.detection.malicious-domain-detection',
-              hideInMenu: true,
+            },
+          },
+          {
+            path: '/detection/focus-impersonation-detection',
+            name: 'FocusImpersonationDetection',
+            component: () => import('~/pages/detection/focus-impersonation-detection/index.vue'),
+            meta: {
+              title: '重点单位仿冒检测',
+              locale: 'menu.detection.focus-impersonation-detection',
             },
           },
           {
             path: '/detection/impersonation-domain-detection',
             name: 'ImpersonationDomainDetection',
-            component: () => import('~/pages/detection/impersonation-domain-detection/index.vue'),
+            redirect: '/detection/malicious-domain-detection',
             meta: {
               title: '仿冒域名检测',
               locale: 'menu.detection.impersonation-domain-detection',
+              hideInMenu: true,
             },
           },
           {
             path: '/detection/dga-domain-detection',
             name: 'DgaDomainDetection',
-            component: () => import('~/pages/detection/dga-domain-detection/index.vue'),
+            redirect: '/detection/malicious-domain-detection',
             meta: {
               title: 'DGA域名检测',
               locale: 'menu.detection.dga-domain-detection',
+              hideInMenu: true,
             },
           },
           {
             path: '/detection/history-similarity-detection',
             name: 'HistorySimilarityDetection',
-            component: () => import('~/pages/detection/history-similarity-detection/index.vue'),
+            redirect: '/detection/malicious-domain-detection',
             meta: {
               title: '历史APT域名相似性检测',
               locale: 'menu.detection.history-similarity-detection',
+              hideInMenu: true,
             },
           },
           {
             path: '/detection/apt-template-nrd-detection',
             name: 'AptTemplateNrdDetection',
-            component: () => import('~/pages/detection/apt-template-nrd-detection/index.vue'),
+            redirect: '/detection/malicious-domain-detection',
             meta: {
               title: '模板化APT域名检测',
               locale: 'menu.detection.apt-template-nrd-detection',
+              hideInMenu: true,
             },
           },
           {
@@ -185,7 +206,7 @@ export default [
   },
   {
     path: '/models',
-    redirect: '/models/model-training',
+    redirect: '/models/model-market',
     name: 'ModleManagement',
     meta: {
       title: '模型管理',
@@ -196,10 +217,11 @@ export default [
       {
         path: '/models/model-training',
         name: 'ModelTraining',
-        component: () => import('~/pages/models/model-training/index.vue'),
+        redirect: '/models/model-market',
         meta: {
           title: '模型训练',
           locale: 'menu.models.model-training',
+          hideInMenu: true,
         },
       },
       {

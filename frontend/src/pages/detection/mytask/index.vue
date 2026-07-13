@@ -9,7 +9,7 @@ import TaskResultModal from './task-result-modal.vue'
 interface TaskItem {
   id: string
   createdAt: string
-  taskType: '恶意域名检测' | '恶意性检测' | '仿冒域名检测' | 'DGA域名检测' | '历史APT域名相似性检测' | '模板化APT域名检测' | '恶意IP检测' | string
+  taskType: '恶意域名检测' | '重点单位仿冒检测' | '仿冒域名检测' | 'DGA域名检测' | '历史APT域名相似性检测' | '模板化APT域名检测' | '恶意IP检测' | string
   model: string
   dataSource: {
     type: '上传文件' | '新注册域名' | '手动输入域名'
@@ -161,6 +161,15 @@ function isImpersonationTask(record: TaskItem) {
   return record.taskType.includes('仿冒')
 }
 
+function isReportTask(record: TaskItem) {
+  return isImpersonationTask(record)
+    || record.taskType === '恶意域名检测'
+    || record.taskType === '重点单位仿冒检测'
+    || record.taskType === '历史APT域名相似性检测'
+    || record.taskType === '模板化APT域名检测'
+    || !!record.resultFileName?.toLowerCase().endsWith('.pdf')
+}
+
 function handleSearch() {
   currentPage.value = 1
 }
@@ -215,7 +224,11 @@ async function downloadResult(record: TaskItem) {
     const blob = await resp.blob()
     const disposition = resp.headers.get('content-disposition') || ''
     const match = disposition.match(/filename\*=utf-8''(.+)/i)
-    const fallbackFilename = isImpersonationTask(record)
+    const fallbackFilename = record.taskType === '恶意域名检测'
+      ? (record.resultFileName || `${record.id}_malicious_domain_report.pdf`)
+      : record.taskType === '重点单位仿冒检测'
+      ? (record.resultFileName || `${record.id}_focus_impersonation_report.pdf`)
+      : isImpersonationTask(record)
       ? `${record.id}_prediction_report.docx`
       : (record.resultFileName || `${record.id}.xlsx`)
     const filename = decodeURIComponent(match?.[1] || fallbackFilename)
@@ -305,6 +318,9 @@ function handleModalDownload(taskId: string) {
           >
             <a-select-option value="恶意域名检测">
               恶意域名检测
+            </a-select-option>
+            <a-select-option value="重点单位仿冒检测">
+              重点单位仿冒检测
             </a-select-option>
             <a-select-option value="仿冒域名检测">
               仿冒域名检测
@@ -456,7 +472,7 @@ function handleModalDownload(taskId: string) {
                 :disabled="record.status !== '已完成' || !record.resultFileKey"
                 @click="() => downloadResult(record)"
               >
-                {{ isImpersonationTask(record) ? '下载报告' : '下载' }}
+                {{ isReportTask(record) ? '下载报告' : '下载' }}
               </a-button>
               <a-button size="small" danger @click="() => confirmDelete(record)">
                 删除

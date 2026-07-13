@@ -4,14 +4,16 @@ import os
 import sys
 import uuid
 import zipfile
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 from app.entities import Model, StoredFile, Task
 from app.infra.minio_client import minio_client
 from app.db.session import SessionLocal
 from app.core.config import MINIO_BUCKET
+from app.core.config import IMPERSONATION_FULL_WHITELIST_PATH
 from app.services.actor_matcher import match_domain_to_actors_v2_infra
 from app.services.apt_template_nrd_report import (
     build_apt_template_nrd_result_json,
@@ -24,10 +26,22 @@ from app.services.dga_report import (
     generate_dga_pdf_report,
 )
 from app.services.domain_infra_collector import collect_missing_domain_infra
+from app.services.domain_monitor import normalize_domain, register_monitor_targets
+from app.services.focus_impersonation_report import (
+    build_focus_impersonation_report_payload,
+    generate_focus_impersonation_pdf_report,
+    normalize_official_domain_rows,
+)
 from app.services.history_similarity_report import (
     build_history_similarity_result_json,
     build_history_similarity_result_payload,
     generate_history_similarity_pdf_report,
+)
+from app.services.unified_malicious_domain_report import (
+    build_impersonation_result_payload,
+    build_unified_malicious_domain_payload,
+    build_unified_malicious_domain_result_json,
+    generate_unified_malicious_domain_pdf_report,
 )
 
 # 添加models目录到路径
@@ -36,7 +50,6 @@ MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "mode
 if MODELS_DIR not in sys.path:
     sys.path.insert(0, MODELS_DIR)
 
-from malicious_detection import predict_from_file, predict_from_domains
 from dga_domain_detection import (
     predict_from_file as dga_predict_from_file,
     predict_from_domains as dga_predict_from_domains,
@@ -95,6 +108,80 @@ def _set_task_progress(db, task: Task, extra_data: dict, progress: int, stage: s
     extra_data["progress_updated_at"] = datetime.utcnow().isoformat()
     task.extra = dict(extra_data)
     db.commit()
+
+
+def _domain_from_monitor_record(record: Mapping[str, Any]) -> Optional[str]:
+    for key in (
+        "域名",
+        "domain",
+        "domain_name",
+        "normalized_domain",
+        "仿冒域名",
+        "钓鱼域名",
+        "phishing_domain",
+        "candidate_domain",
+        "DGA域名",
+        "历史相似域名",
+        "模板化APT域名",
+        "apt_template_nrd_domain",
+    ):
+        domain = normalize_domain(record.get(key))
+        if domain:
+            return domain
+    return None
+
+
+def _domains_from_monitor_records(records: Sequence[Mapping[str, Any]]) -> List[str]:
+    domains: List[str] = []
+    seen = set()
+    for record in records or []:
+        if not isinstance(record, Mapping):
+            continue
+        domain = _domain_from_monitor_record(record)
+        if domain and domain not in seen:
+            seen.add(domain)
+            domains.append(domain)
+    return domains
+
+
+def _register_detection_monitor_targets(
+    db,
+    *,
+    task: Task,
+    records: Sequence[Mapping[str, Any]],
+    extra_data: dict,
+    completed_at: datetime,
+) -> None:
+    if task.created_by is None:
+        return
+    domains = _domains_from_monitor_records(records)
+    if not domains:
+        return
+
+    try:
+        monitor_summary = register_monitor_targets(
+            db,
+            user_id=int(task.created_by),
+            domains=domains,
+            source_type="detection_task",
+            task_id=task.task_id,
+            task_type=task.task_type,
+            model_id=task.model_id,
+            risk_records=records,
+            detected_at=completed_at,
+        )
+        extra_data["domain_monitor_summary"] = monitor_summary
+        task.extra = dict(extra_data)
+        db.commit()
+        logger.info(
+            "检测任务恶意域名已注册持续追踪 task_id=%s task_type=%s summary=%s",
+            task.task_id,
+            task.task_type,
+            monitor_summary,
+        )
+    except Exception:
+        db.rollback()
+        logger.exception("注册检测任务恶意域名持续追踪失败 task_id=%s", task.task_id)
 
 
 def _upload_file_content_to_minio(file_content: bytes, filename: str, content_type: str = None, bucket: str = MINIO_BUCKET) -> str:
@@ -285,19 +372,92 @@ def _collect_daily_domains(date_range: List[str]) -> Tuple[List[str], List[str]]
     return domains, missing_dates
 
 
+UNIFIED_DOMAIN_MODULES = ("impersonation", "dga", "history_similarity", "apt_template_nrd")
+
+
+def _get_active_model_record(db, category: str, model_id: Any = None) -> Model:
+    query = db.query(Model).filter(Model.model_category == category, Model.status == "active")
+    if model_id:
+        try:
+            query = query.filter(Model.id == int(model_id))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{category} 模型ID无效: {model_id}") from exc
+    model_record = query.order_by(Model.model_type.asc(), Model.id.asc()).first()
+    if not model_record:
+        raise ValueError(f"未找到可用的 {category} 检测模型")
+    return model_record
+
+
+def _load_unified_input_domains(extra_data: dict) -> tuple[list[str], dict[str, Any]]:
+    data_source = extra_data.get("dataSource")
+    if data_source == "upload":
+        file_key = extra_data.get("file_object_key")
+        file_bucket = extra_data.get("file_bucket") or MINIO_BUCKET
+        filename = extra_data.get("file_filename") or file_key or "uploaded_domains"
+        if not file_key:
+            raise ValueError("上传文件任务缺少 file_object_key")
+        file_content = _download_file_from_minio(file_key, file_bucket)
+        domains = read_detection_domains_from_file(file_content, filename)
+        return domains, {"input_file": filename}
+
+    if data_source == "newDomain":
+        date_range = extra_data.get("dateRange")
+        if not date_range or len(date_range) < 2:
+            raise ValueError("newDomain 任务缺少 dateRange")
+        domains, missing_dates = _collect_daily_domains(date_range)
+        return domains, {
+            "daily_missing_dates": missing_dates,
+            "daily_domain_count": len(domains),
+        }
+
+    if data_source == "manualInput":
+        domains = extra_data.get("manual_domains") or []
+        if not isinstance(domains, list) or not domains:
+            raise ValueError("manualInput 任务缺少有效域名")
+        return domains, {"manual_domain_count": len(domains)}
+
+    raise ValueError(f"未知 dataSource: {data_source}")
+
+
+def _load_unified_official_domains(extra_data: dict):
+    official_domains = extra_data.get("official_domains") or []
+    if official_domains:
+        return official_domains
+
+    official_key = extra_data.get("official_file_object_key")
+    if official_key:
+        official_bucket = extra_data.get("official_file_bucket") or MINIO_BUCKET
+        official_filename = extra_data.get("official_file_filename") or official_key
+        official_content = _download_file_from_minio(official_key, official_bucket)
+        return read_official_domains_from_file(official_content, official_filename)
+
+    official_file_path = (
+        extra_data.get("official_file_path")
+        or os.path.abspath(os.path.expanduser(IMPERSONATION_FULL_WHITELIST_PATH))
+    )
+    official_file_path = os.path.abspath(os.path.expanduser(str(official_file_path)))
+    if not os.path.isfile(official_file_path):
+        raise ValueError(f"系统全量白名单不存在: {official_file_path}")
+    with open(official_file_path, "rb") as file_handle:
+        official_content = file_handle.read()
+    return read_official_domains_from_file(
+        official_content,
+        extra_data.get("official_file_filename") or os.path.basename(official_file_path),
+    )
+
+
+def _serialize_official_domains_for_extra(official_domains) -> list[dict[str, Any]]:
+    return normalize_official_domain_rows(official_domains)
+
+
 def execute_malicious_task(task_id: str):
     db = SessionLocal()
     try:
         task = db.query(Task).filter(Task.task_id == task_id).first()
         if not task:
             raise ValueError(f"任务不存在: {task_id}")
-        model_record = db.query(Model).filter(Model.id == task.model_id).first()
-        if not model_record:
-            raise ValueError(f"模型不存在: {task.model_id}")
 
         extra_data = dict(task.extra or {})
-
-        # 幂等性：任务已完成且已写入结果文件时，跳过重复执行
         if task.status == "completed" and extra_data.get("result_file_key"):
             logger.info("Skip already completed malicious task_id=%s", task_id)
             return
@@ -306,91 +466,197 @@ def execute_malicious_task(task_id: str):
         _set_task_progress(db, task, extra_data, 10, "任务开始执行")
 
         data_source = extra_data.get("dataSource")
-        model_path_to_use = model_record.model_path or None
-        result_filename = f"result_{task_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 
-        if data_source == "upload":
-            _set_task_progress(db, task, extra_data, 20, "读取上传文件")
-            file_key = extra_data.get("file_object_key")
-            file_bucket = extra_data.get("file_bucket") or MINIO_BUCKET
-            if not file_key:
-                raise ValueError("上传文件任务缺少 file_object_key")
-            file_content = _download_file_from_minio(file_key, file_bucket)
-            original_filename = file_key
-            _set_task_progress(db, task, extra_data, 45, "模型检测中")
-            excel_content, statistics = predict_from_file(
-                file_content,
-                original_filename,
-                model_path_to_use,
-                malicious_only=False,
-            )
-        elif data_source == "newDomain":
-            _set_task_progress(db, task, extra_data, 20, "收集新注册域名")
-            date_range = extra_data.get("dateRange")
-            if not date_range or len(date_range) < 2:
-                raise ValueError("newDomain 任务缺少 dateRange")
-            domains, missing_dates = _collect_daily_domains(date_range)
-            _set_task_progress(db, task, extra_data, 40, "模型检测中")
-            source_label = f"daily_{task_id}"
-            excel_content, statistics = predict_from_domains(
-                domains,
-                source_label,
-                model_path_to_use,
-                malicious_only=True,
-            )
-            extra_data["daily_missing_dates"] = missing_dates
-            extra_data["daily_domain_count"] = len(domains)
-        elif data_source == "manualInput":
-            _set_task_progress(db, task, extra_data, 20, "读取手动输入域名")
-            domains = extra_data.get("manual_domains") or []
-            if not isinstance(domains, list) or not domains:
-                raise ValueError("manualInput 任务缺少有效域名")
-            _set_task_progress(db, task, extra_data, 40, "模型检测中")
-            source_label = f"manual_{task_id}"
-            excel_content, statistics = predict_from_domains(
-                domains,
-                source_label,
-                model_path_to_use,
-                malicious_only=True,
-            )
-        else:
-            raise ValueError(f"未知 dataSource: {data_source}")
+        _set_task_progress(db, task, extra_data, 18, "读取待检测域名")
+        domains, input_meta = _load_unified_input_domains(extra_data)
+        extra_data.update(input_meta)
+        if not domains:
+            raise ValueError("没有可检测的有效域名")
 
-        attribution_results = []
-        if extra_data.get("withAttribution"):
-            malicious_domains = _extract_malicious_domains_from_excel(excel_content)
-            _set_task_progress(db, task, extra_data, 68, "归因前采集基础设施")
-            infra_collection = collect_missing_domain_infra(db, malicious_domains)
-            extra_data["attribution_infra_collection"] = infra_collection
-            _set_task_progress(db, task, extra_data, 75, "组织关联分析中")
-            attribution_results = _run_domain_attribution(db, malicious_domains)
-            excel_content = _append_attribution_sheet(excel_content, attribution_results)
-            extra_data["attribution_enabled"] = True
-            extra_data["attribution_results"] = attribution_results
-            extra_data["attribution_domain_count"] = len(malicious_domains)
-            extra_data["attribution_completed_at"] = datetime.utcnow().isoformat()
-        else:
-            extra_data["attribution_enabled"] = False
+        module_model_ids = extra_data.get("module_model_ids") or {}
+        model_records = {
+            module: _get_active_model_record(db, module, module_model_ids.get(module))
+            for module in UNIFIED_DOMAIN_MODULES
+        }
+        model_names = {module: str(record.name or "") for module, record in model_records.items()}
+        model_paths = {module: record.model_path or None for module, record in model_records.items()}
+        extra_data["module_model_ids"] = {module: record.id for module, record in model_records.items()}
+        extra_data["module_model_names"] = model_names
+        extra_data["unified_detection"] = True
 
-        _set_task_progress(db, task, extra_data, 85, "上传结果文件")
+        _set_task_progress(db, task, extra_data, 28, "仿冒域名检测中")
+        official_domains = _load_unified_official_domains(extra_data)
+        impersonation_excel, impersonation_statistics = phishing_predict_from_domains(
+            official_domains,
+            domains,
+            similarity_threshold=None,
+        )
+        impersonation_payload = build_impersonation_result_payload(
+            impersonation_excel,
+            task_id=task_id,
+            statistics=impersonation_statistics,
+            official_domain_count=len(official_domains),
+        )
+        extra_data["official_domain_count"] = len(official_domains)
+
+        candidate_threshold = float(extra_data.get("candidate_threshold") or 0.90)
+        _set_task_progress(db, task, extra_data, 42, "DGA域名检测中")
+        dga_excel, dga_statistics, dga_meta = dga_predict_from_domains(
+            domains,
+            f"unified_{task_id}",
+            model_paths["dga"],
+            candidate_threshold=candidate_threshold,
+        )
+        dga_payload = build_dga_result_payload(
+            dga_excel,
+            task_id=task_id,
+            dga_meta=dga_meta,
+        )
+
+        min_score = float(extra_data.get("min_score") or 0.65)
+        top_k = int(extra_data.get("top_k") or 10)
+        _set_task_progress(db, task, extra_data, 56, "历史APT域名相似性检测中")
+        history_excel, history_statistics, history_meta, history_alert_rows = history_similarity_predict_from_domains(
+            domains,
+            f"unified_{task_id}",
+            model_paths["history_similarity"],
+            min_score=min_score,
+            top_k=top_k,
+            suspicious_only=False,
+        )
+        history_payload = build_history_similarity_result_payload(
+            history_excel,
+            task_id=task_id,
+            history_meta=history_meta,
+        )
+        extra_data["history_similarity_alert_rows"] = history_alert_rows_to_score_records(history_alert_rows)
+
+        score_threshold = float(extra_data.get("score_threshold") or 0.90)
+        _set_task_progress(db, task, extra_data, 70, "模板化APT域名检测中")
+        apt_excel, apt_statistics, apt_meta, apt_alert_rows = apt_template_nrd_predict_from_domains(
+            domains,
+            f"unified_{task_id}",
+            model_paths["apt_template_nrd"],
+            score_threshold=score_threshold,
+            high_risk_only=False,
+        )
+        apt_payload = build_apt_template_nrd_result_payload(
+            apt_excel,
+            task_id=task_id,
+            apt_meta=apt_meta,
+        )
+        extra_data["apt_template_nrd_alert_rows"] = apt_template_nrd_alert_rows_to_score_records(apt_alert_rows)
+
+        module_payloads = {
+            "impersonation": impersonation_payload,
+            "dga": dga_payload,
+            "history_similarity": history_payload,
+            "apt_template_nrd": apt_payload,
+        }
+        thresholds = {
+            "dga_candidate_threshold": candidate_threshold,
+            "history_min_score": min_score,
+            "history_top_k": top_k,
+            "apt_template_score_threshold": score_threshold,
+        }
+        result_payload = build_unified_malicious_domain_payload(
+            task_id=task_id,
+            input_domains=domains,
+            data_source=str(data_source or ""),
+            module_payloads=module_payloads,
+            model_names=model_names,
+            thresholds=thresholds,
+            date_range=extra_data.get("dateRange") if isinstance(extra_data.get("dateRange"), list) else None,
+            generated_at=datetime.utcnow(),
+        )
+        result_payload["module_statistics"] = {
+            "impersonation": impersonation_statistics,
+            "dga": dga_statistics,
+            "history_similarity": history_statistics,
+            "apt_template_nrd": apt_statistics,
+        }
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        result_filename = f"malicious_domain_detection_report_{task_id}_{timestamp}.pdf"
+        result_data_filename = f"malicious_domain_detection_result_{task_id}_{timestamp}.json"
+        report_content = generate_unified_malicious_domain_pdf_report(result_payload)
+
+        _set_task_progress(db, task, extra_data, 88, "上传统一检测报告")
         result_key = _upload_file_content_to_minio(
-            excel_content,
+            report_content,
             result_filename,
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content_type="application/pdf",
+            bucket=RESULTS_BUCKET,
+        )
+        result_payload["result_file_key"] = result_key
+        result_payload["result_filename"] = result_filename
+        result_data_content = build_unified_malicious_domain_result_json(result_payload)
+        result_data_key = _upload_file_content_to_minio(
+            result_data_content,
+            result_data_filename,
+            content_type="application/json",
             bucket=RESULTS_BUCKET,
         )
 
+        report_file_record = StoredFile(
+            bucket=RESULTS_BUCKET,
+            object_key=result_key,
+            filename=result_filename,
+            content_type="application/pdf",
+            size=len(report_content),
+            uploaded_by=str(task.created_by) if task.created_by is not None else None,
+            metadata_json={
+                "source": "unified_malicious_domain_pdf_report",
+                "task_id": task_id,
+                "task_type": "malicious",
+            },
+        )
+        db.add(report_file_record)
+        db.flush()
+        result_data_file_record = StoredFile(
+            bucket=RESULTS_BUCKET,
+            object_key=result_data_key,
+            filename=result_data_filename,
+            content_type="application/json",
+            size=len(result_data_content),
+            uploaded_by=str(task.created_by) if task.created_by is not None else None,
+            metadata_json={
+                "source": "unified_malicious_domain_result_json",
+                "task_id": task_id,
+                "task_type": "malicious",
+            },
+        )
+        db.add(result_data_file_record)
+        db.flush()
+
         task.status = "completed"
+        extra_data["result_file_id"] = report_file_record.id
         extra_data["result_file_key"] = result_key
         extra_data["result_bucket"] = RESULTS_BUCKET
         extra_data["result_filename"] = result_filename
-        extra_data["statistics"] = statistics
-        extra_data["completed_at"] = datetime.utcnow().isoformat()
+        extra_data["result_content_type"] = "application/pdf"
+        extra_data["result_data_file_id"] = result_data_file_record.id
+        extra_data["result_data_file_key"] = result_data_key
+        extra_data["result_data_bucket"] = RESULTS_BUCKET
+        extra_data["result_data_filename"] = result_data_filename
+        extra_data["result_data_content_type"] = "application/json"
+        extra_data["statistics"] = result_payload.get("statistics") or {}
+        extra_data["label_counts"] = result_payload.get("label_counts") or {}
+        extra_data["overlap_counts"] = result_payload.get("overlap_counts") or {}
+        completed_at = datetime.utcnow()
+        extra_data["completed_at"] = completed_at.isoformat()
         extra_data["progress"] = 100
         extra_data["progress_stage"] = "任务完成"
         extra_data["progress_updated_at"] = datetime.utcnow().isoformat()
         task.extra = extra_data
         db.commit()
+        _register_detection_monitor_targets(
+            db,
+            task=task,
+            records=result_payload.get("unified_malicious_domains") or result_payload.get("malicious_domains") or [],
+            extra_data=extra_data,
+            completed_at=completed_at,
+        )
     except Exception as exc:
         logger.exception("执行恶意检测任务失败 %s: %s", task_id, exc)
         task = db.query(Task).filter(Task.task_id == task_id).first()
@@ -555,12 +821,20 @@ def execute_dga_task(task_id: str):
         extra_data["result_data_filename"] = result_data_filename
         extra_data["result_data_content_type"] = "application/json"
         extra_data["statistics"] = statistics
-        extra_data["completed_at"] = datetime.utcnow().isoformat()
+        completed_at = datetime.utcnow()
+        extra_data["completed_at"] = completed_at.isoformat()
         extra_data["progress"] = 100
         extra_data["progress_stage"] = "任务完成"
         extra_data["progress_updated_at"] = datetime.utcnow().isoformat()
         task.extra = extra_data
         db.commit()
+        _register_detection_monitor_targets(
+            db,
+            task=task,
+            records=result_payload.get("dga_domains") or [],
+            extra_data=extra_data,
+            completed_at=completed_at,
+        )
     except Exception as exc:
         logger.exception("执行DGA检测任务失败 %s: %s", task_id, exc)
         task = db.query(Task).filter(Task.task_id == task_id).first()
@@ -736,12 +1010,20 @@ def execute_history_similarity_task(task_id: str):
         extra_data["result_data_filename"] = result_data_filename
         extra_data["result_data_content_type"] = "application/json"
         extra_data["statistics"] = statistics
-        extra_data["completed_at"] = datetime.utcnow().isoformat()
+        completed_at = datetime.utcnow()
+        extra_data["completed_at"] = completed_at.isoformat()
         extra_data["progress"] = 100
         extra_data["progress_stage"] = "任务完成"
         extra_data["progress_updated_at"] = datetime.utcnow().isoformat()
         task.extra = extra_data
         db.commit()
+        _register_detection_monitor_targets(
+            db,
+            task=task,
+            records=result_payload.get("history_similarity_domains") or [],
+            extra_data=extra_data,
+            completed_at=completed_at,
+        )
     except Exception as exc:
         logger.exception("执行历史APT域名相似性检测任务失败 %s: %s", task_id, exc)
         task = db.query(Task).filter(Task.task_id == task_id).first()
@@ -908,12 +1190,20 @@ def execute_apt_template_nrd_task(task_id: str):
         extra_data["result_data_filename"] = result_data_filename
         extra_data["result_data_content_type"] = "application/json"
         extra_data["statistics"] = statistics
-        extra_data["completed_at"] = datetime.utcnow().isoformat()
+        completed_at = datetime.utcnow()
+        extra_data["completed_at"] = completed_at.isoformat()
         extra_data["progress"] = 100
         extra_data["progress_stage"] = "任务完成"
         extra_data["progress_updated_at"] = datetime.utcnow().isoformat()
         task.extra = extra_data
         db.commit()
+        _register_detection_monitor_targets(
+            db,
+            task=task,
+            records=result_payload.get("apt_template_nrd_domains") or [],
+            extra_data=extra_data,
+            completed_at=completed_at,
+        )
     except Exception as exc:
         logger.exception("执行模板化APT域名检测任务失败 %s: %s", task_id, exc)
         task = db.query(Task).filter(Task.task_id == task_id).first()
@@ -972,10 +1262,7 @@ def execute_impersonation_task(task_id: str):
 
         if official_domains:
             if not loaded_from_full_whitelist_path:
-                extra_data["official_domains"] = [
-                    {"单位名称": str(company or ""), "官方域名": str(domain or "")}
-                    for company, domain, *rest in official_domains
-                ]
+                extra_data["official_domains"] = _serialize_official_domains_for_extra(official_domains)
             extra_data["official_domain_count"] = len(official_domains)
         if not official_domains:
             extra_data["official_domain_resolution_status"] = "pending"
@@ -1054,6 +1341,34 @@ def execute_impersonation_task(task_id: str):
             content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             bucket=RESULTS_BUCKET,
         )
+        if extra_data.get("focus_impersonation_detection"):
+            focus_payload = build_focus_impersonation_report_payload(
+                excel_content,
+                task_id=task_id,
+                query_name=str(extra_data.get("focus_query_name") or extra_data.get("queryName") or ""),
+                official_domains=extra_data.get("official_domains") or official_domains,
+                statistics=statistics,
+                date_range=extra_data.get("dateRange") if isinstance(extra_data.get("dateRange"), list) else None,
+                generated_at=datetime.utcnow(),
+            )
+            focus_report_content = generate_focus_impersonation_pdf_report(focus_payload)
+            focus_report_filename = f"focus_impersonation_report_{task_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            focus_report_key = _upload_file_content_to_minio(
+                focus_report_content,
+                focus_report_filename,
+                content_type="application/pdf",
+                bucket=RESULTS_BUCKET,
+            )
+        else:
+            focus_report_key = None
+            focus_report_filename = None
+
+        impersonation_monitor_payload = build_impersonation_result_payload(
+            excel_content,
+            task_id=task_id,
+            statistics=statistics,
+            official_domain_count=len(official_domains),
+        )
 
         task.status = "completed"
         extra_data["result_file_key"] = result_key
@@ -1062,13 +1377,26 @@ def execute_impersonation_task(task_id: str):
         extra_data["word_report_file_key"] = word_report_key
         extra_data["word_report_bucket"] = RESULTS_BUCKET
         extra_data["word_report_filename"] = word_report_filename
+        if focus_report_key:
+            extra_data["focus_report_file_key"] = focus_report_key
+            extra_data["focus_report_bucket"] = RESULTS_BUCKET
+            extra_data["focus_report_filename"] = focus_report_filename
+            extra_data["focus_report_content_type"] = "application/pdf"
         extra_data["statistics"] = statistics
-        extra_data["completed_at"] = datetime.utcnow().isoformat()
+        completed_at = datetime.utcnow()
+        extra_data["completed_at"] = completed_at.isoformat()
         extra_data["progress"] = 100
         extra_data["progress_stage"] = "任务完成"
         extra_data["progress_updated_at"] = datetime.utcnow().isoformat()
         task.extra = extra_data
         db.commit()
+        _register_detection_monitor_targets(
+            db,
+            task=task,
+            records=impersonation_monitor_payload.get("phishing_domains") or [],
+            extra_data=extra_data,
+            completed_at=completed_at,
+        )
     except Exception as exc:
         logger.exception("执行仿冒检测任务失败 %s: %s", task_id, exc)
         task = db.query(Task).filter(Task.task_id == task_id).first()

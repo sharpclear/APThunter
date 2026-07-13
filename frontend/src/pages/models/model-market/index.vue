@@ -5,7 +5,7 @@ import { useAuthorization } from '~/composables/authorization'
 import { useUserId } from '~/composables/user-id'
 import { getApiBase } from '~/utils/api-public'
 
-type ModelDisplayType = '恶意性检测' | '仿冒域名检测' | 'DGA域名检测' | '历史APT域名相似性检测' | '模板化APT域名检测'
+type ModelDisplayType = '恶意域名检测' | '仿冒域名检测' | 'DGA域名检测' | '历史APT域名相似性检测' | '模板化APT域名检测'
 
 interface MyModel {
   id: number
@@ -141,7 +141,7 @@ async function fetchMarketModels() {
       url.searchParams.set('keyword', searchKeyword.value.trim())
     }
     // 根据筛选条件设置category
-    if (filterCategory.value === '恶意性检测') {
+    if (filterCategory.value === '恶意域名检测') {
       url.searchParams.set('category', 'malicious')
     }
     else if (filterCategory.value === '仿冒域名检测') {
@@ -281,8 +281,8 @@ const filteredMarket = computed(() => {
   // 按类别筛选
   if (filterCategory.value !== '全部') {
     data = data.filter(m => {
-      if (filterCategory.value === '恶意性检测') {
-        return m.type === '恶意性检测'
+      if (filterCategory.value === '恶意域名检测') {
+        return m.type === '恶意域名检测'
       }
       else if (filterCategory.value === '仿冒域名检测') {
         return m.type === '仿冒域名检测'
@@ -297,7 +297,7 @@ const filteredMarket = computed(() => {
         return m.type === '模板化APT域名检测'
       }
       else if (filterCategory.value === '其他') {
-        return m.type === null || !['恶意性检测', '仿冒域名检测', 'DGA域名检测', '历史APT域名相似性检测', '模板化APT域名检测'].includes(m.type)
+        return m.type === null || !['恶意域名检测', '仿冒域名检测', 'DGA域名检测', '历史APT域名相似性检测', '模板化APT域名检测'].includes(m.type)
       }
       return true
     })
@@ -457,8 +457,8 @@ function mapTypeLabel(t: ModelDisplayType | null) {
               <a-radio-button value="全部">
                 全部
               </a-radio-button>
-              <a-radio-button value="恶意性检测">
-                恶意性检测
+              <a-radio-button value="恶意域名检测">
+                恶意域名检测
               </a-radio-button>
               <a-radio-button value="仿冒域名检测">
                 仿冒域名检测

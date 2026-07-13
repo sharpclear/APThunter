@@ -8,8 +8,14 @@ import { getApiBase } from '~/utils/api-public'
 
 interface MaliciousResultItem {
   域名: string
-  预测标签: number
-  预测结果: string
+  预测标签?: number
+  预测结果?: string
+  判定结果?: string
+  恶意类别?: string
+  恶意类别标签?: string[]
+  命中模块数?: number
+  命中详情?: string
+  module_hits?: Record<string, any>
   关联组织?: string
   组织置信度?: string
   组织评分?: number
@@ -146,15 +152,21 @@ type Statistics = MaliciousStatistics | PhishingStatistics | DgaStatistics | His
 interface ResultData {
   task_id: string
   task_type: string
+  unified_detection?: boolean
+  focus_impersonation_detection?: boolean
+  focus_query_name?: string
   statistics: Statistics
   results: ResultItem[]
   malicious_domains?: ResultItem[]
+  unified_malicious_domains?: ResultItem[]
+  normal_domains?: ResultItem[]
   phishing_domains?: ResultItem[]
   official_domains?: OfficialDomainItem[]
   dga_domains?: ResultItem[]
   history_similarity_domains?: ResultItem[]
   apt_template_nrd_domains?: ResultItem[]
   result_filename: string
+  focus_report_filename?: string
   word_report_filename?: string
   total_count: number
   malicious_count?: number
@@ -162,6 +174,9 @@ interface ResultData {
   dga_count?: number
   history_similarity_count?: number
   apt_template_nrd_count?: number
+  normal_count?: number
+  label_counts?: Record<string, number>
+  overlap_counts?: Record<string, number>
   attribution_enabled?: boolean
   attribution_results?: any[]
 }
@@ -316,6 +331,8 @@ function riskLevelColor(level?: string) {
 }
 
 function riskStatTitle(taskType?: string) {
+  if (isUnifiedMalicious(resultData.value))
+    return '恶意域名'
   if (taskType === 'impersonation')
     return '仿冒域名'
   if (taskType === 'dga')
@@ -328,6 +345,8 @@ function riskStatTitle(taskType?: string) {
 }
 
 function riskStatValue(data: ResultData) {
+  if (isUnifiedMalicious(data))
+    return data.statistics['恶意域名数'] || data.malicious_count || data.unified_malicious_domains?.length || 0
   if (data.task_type === 'impersonation')
     return data.statistics['仿冒域名数'] || data.statistics['钓鱼域名数']
   if (data.task_type === 'dga')
@@ -340,6 +359,8 @@ function riskStatValue(data: ResultData) {
 }
 
 function riskRateTitle(taskType?: string) {
+  if (isUnifiedMalicious(resultData.value))
+    return '恶意域名占比'
   if (taskType === 'impersonation')
     return '仿冒域名占比'
   if (taskType === 'dga')
@@ -352,6 +373,8 @@ function riskRateTitle(taskType?: string) {
 }
 
 function riskRateValue(data: ResultData) {
+  if (isUnifiedMalicious(data))
+    return data.statistics['恶意域名占比'] || '0%'
   if (data.task_type === 'impersonation')
     return data.statistics['仿冒域名占比'] || data.statistics['钓鱼域名占比'] || '0%'
   if (data.task_type === 'dga')
@@ -364,7 +387,8 @@ function riskRateValue(data: ResultData) {
 }
 
 function hasRiskDomains(data: ResultData) {
-  return (data.task_type === 'malicious' && !!data.malicious_domains?.length)
+  return (isUnifiedMalicious(data) && (!!data.unified_malicious_domains?.length || !!data.malicious_domains?.length))
+    || (data.task_type === 'malicious' && !!data.malicious_domains?.length)
     || (data.task_type === 'impersonation' && !!data.phishing_domains?.length)
     || (data.task_type === 'dga' && !!data.dga_domains?.length)
     || (data.task_type === 'history_similarity' && !!data.history_similarity_domains?.length)
@@ -372,6 +396,8 @@ function hasRiskDomains(data: ResultData) {
 }
 
 function riskListTitle(taskType?: string) {
+  if (isUnifiedMalicious(resultData.value))
+    return '恶意域名多标签列表'
   if (taskType === 'impersonation')
     return '仿冒域名列表'
   if (taskType === 'dga')
@@ -384,6 +410,8 @@ function riskListTitle(taskType?: string) {
 }
 
 function riskListData(data: ResultData) {
+  if (isUnifiedMalicious(data))
+    return data.unified_malicious_domains || data.malicious_domains
   if (data.task_type === 'impersonation')
     return data.phishing_domains
   if (data.task_type === 'dga')
@@ -407,6 +435,10 @@ function displayAptScore(item: Partial<AptTemplateNrdResultItem>) {
   if (Number.isNaN(score))
     return '未知'
   return score.toFixed(4)
+}
+
+function isUnifiedMalicious(data?: ResultData | null) {
+  return !!data?.unified_detection || data?.task_type === 'malicious' && Array.isArray(data.unified_malicious_domains)
 }
 
 // 计算列配置
@@ -582,7 +614,7 @@ const resultColumns = computed(() => {
       },
     ]
   } else {
-    // 恶意性检测的列
+    // 兼容旧二分类恶意检测的列
     return [
       {
         title: '域名',
@@ -685,7 +717,11 @@ async function handleDownload() {
     const blob = await resp.blob()
     const disposition = resp.headers.get('content-disposition') || ''
     const match = disposition.match(/filename\*=utf-8''(.+)/i)
-    const fallbackFilename = resultData.value?.task_type === 'impersonation'
+    const fallbackFilename = isUnifiedMalicious(resultData.value)
+      ? (resultData.value?.result_filename || `${taskId.value}_malicious_domain_report.pdf`)
+      : resultData.value?.focus_impersonation_detection
+      ? (resultData.value?.focus_report_filename || `${taskId.value}_focus_impersonation_report.pdf`)
+      : resultData.value?.task_type === 'impersonation'
       ? (resultData.value?.word_report_filename || `${taskId.value}_prediction_report.docx`)
       : (resultData.value?.result_filename || `${taskId.value}.xlsx`)
     const filename = decodeURIComponent(match?.[1] || fallbackFilename)
@@ -771,7 +807,11 @@ onMounted(() => {
             </a-col>
           </a-row>
 
-          <a-card v-if="resultData.task_type === 'malicious'" title="组织关联置信度说明" style="margin-bottom: 24px;">
+          <a-card
+            v-if="resultData.task_type === 'malicious' && !isUnifiedMalicious(resultData) && resultData.attribution_enabled"
+            title="组织关联置信度说明"
+            style="margin-bottom: 24px;"
+          >
             <a-list :data-source="confidenceDescriptions" size="small">
               <template #renderItem="{ item }">
                 <a-list-item>
@@ -897,20 +937,35 @@ onMounted(() => {
                       </div>
                     </template>
                     <template v-else #description>
-                      <a-tag color="red">恶意域名</a-tag>
-                      <template v-if="item.关联组织">
-                        <a-tag color="blue">{{ item.关联组织 }}</a-tag>
-                        <a-tag v-if="item.关联状态" :color="associationStatusColor(item.关联状态)">
-                          {{ item.关联状态 }}
+                      <template v-if="isUnifiedMalicious(resultData)">
+                        <a-tag
+                          v-for="label in item.恶意类别标签 || []"
+                          :key="`${item.域名}-${label}`"
+                          color="red"
+                        >
+                          {{ label }}
                         </a-tag>
-                        <span>置信度: {{ displayConfidence(item.组织置信度) }}</span>
-                        <span v-if="item.组织评分 !== undefined"> | 评分: {{ item.组织评分 }}</span>
-                        <div v-if="item.关联说明" style="margin-top: 4px; color: #667085;">
-                          {{ item.关联说明 }}
+                        <span>命中模块数: {{ item.命中模块数 || (item.恶意类别标签 || []).length }}</span>
+                        <div v-if="item.命中详情" style="margin-top: 4px; color: #667085;">
+                          {{ item.命中详情 }}
                         </div>
                       </template>
-                      <template v-else-if="resultData.attribution_enabled">
-                        <a-tag>未关联到组织</a-tag>
+                      <template v-else>
+                        <a-tag color="red">恶意域名</a-tag>
+                        <template v-if="item.关联组织">
+                          <a-tag color="blue">{{ item.关联组织 }}</a-tag>
+                          <a-tag v-if="item.关联状态" :color="associationStatusColor(item.关联状态)">
+                            {{ item.关联状态 }}
+                          </a-tag>
+                          <span>置信度: {{ displayConfidence(item.组织置信度) }}</span>
+                          <span v-if="item.组织评分 !== undefined"> | 评分: {{ item.组织评分 }}</span>
+                          <div v-if="item.关联说明" style="margin-top: 4px; color: #667085;">
+                            {{ item.关联说明 }}
+                          </div>
+                        </template>
+                        <template v-else-if="resultData.attribution_enabled">
+                          <a-tag>未关联到组织</a-tag>
+                        </template>
                       </template>
                     </template>
                   </a-list-item-meta>
@@ -926,7 +981,7 @@ onMounted(() => {
                 <template #icon>
                   <DownloadOutlined />
                 </template>
-                {{ ['history_similarity', 'apt_template_nrd'].includes(resultData.task_type) ? '下载PDF报告' : '下载Excel结果' }}
+                {{ isUnifiedMalicious(resultData) || resultData.focus_impersonation_detection || ['history_similarity', 'apt_template_nrd'].includes(resultData.task_type) ? '下载PDF报告' : '下载Excel结果' }}
               </a-button>
               <a-button size="large" @click="router.back()">
                 返回任务列表

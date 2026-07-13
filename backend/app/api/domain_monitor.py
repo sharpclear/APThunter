@@ -1,8 +1,10 @@
 import logging
+import os
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Optional
 
+import jwt
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlalchemy import or_
 
@@ -13,16 +15,35 @@ from app.services.domain_monitor import DOMAIN_MONITOR_LEASE_MINUTES, dispatch_d
 logger = logging.getLogger("uvicorn.error")
 
 router = APIRouter(prefix="/api/domain-monitor", tags=["domain-monitor"])
+SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
+ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 
 
 def _extract_user_id(request: Request) -> Optional[int]:
     user_id_header = request.headers.get("X-User-Id")
-    if not user_id_header:
+    if user_id_header:
+        try:
+            return int(user_id_header)
+        except ValueError:
+            logger.warning("Invalid X-User-Id header value: %s", user_id_header)
+
+    token = request.headers.get("Authorization")
+    if token and token.lower().startswith("bearer "):
+        token = token.split(" ", 1)[1]
+    if not token:
+        token = request.query_params.get("token") or request.cookies.get("token")
+    if not token:
         return None
+
     try:
-        return int(user_id_header)
-    except ValueError:
-        logger.warning("Invalid X-User-Id header value: %s", user_id_header)
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        return int(user_id) if user_id else None
+    except jwt.ExpiredSignatureError:
+        logger.warning("Domain monitor token expired")
+        return None
+    except Exception as exc:
+        logger.warning("Domain monitor token decode failed: %s", exc)
         return None
 
 
@@ -31,7 +52,7 @@ def _require_user_id(request: Request) -> int:
     if user_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid X-User-Id header",
+            detail="Missing or invalid authentication token",
         )
     return user_id
 

@@ -9,6 +9,7 @@ from typing import Optional
 import json
 import logging
 from app.db.session import engine
+from app.services.apt_event_text import normalize_apt_event_record
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +210,7 @@ def get_organization_detail(org_id: int):
                     'region': event.get('region'),
                     'severity': event.get('severity')
                 }
-                recent_events.append(event_formatted)
+                recent_events.append(normalize_apt_event_record(event_formatted))
             
             org_formatted["recentEvents"] = recent_events
             

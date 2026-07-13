@@ -301,9 +301,6 @@ async function handleSubscribe() {
   if (!formState.frequency) {
     return message.warning('请选择检测频率')
   }
-  if (isPhishingModel.value && !formState.officialFile) {
-    return message.warning('请上传官方域名文件')
-  }
   subLoading.value = true
   try {
     const formData = new FormData()
@@ -566,7 +563,7 @@ async function updateAlertStatus(alertId: string, status: 'pending' | 'processed
                   </div>
                 </a-col>
               </a-row>
-              <a-form-item v-if="isPhishingModel" label="官方域名文件（仅仿冒检测订阅必填）" :required="true">
+              <a-form-item v-if="isPhishingModel" label="官方域名文件（可选）">
                 <a-upload-dragger
                   :before-upload="beforeUpload"
                   :show-upload-list="false"
@@ -581,7 +578,7 @@ async function updateAlertStatus(alertId: string, status: 'pending' | 'processed
                     {{ formState.officialFile.name }}
                   </p>
                   <p v-else>
-                    点击或拖拽上传官方域名文件（csv/txt/xlsx 小于5MB）
+                    可上传自定义官方域名文件；不上传则使用系统全量官方白名单（csv/txt/xlsx 小于5MB）
                   </p>
                 </a-upload-dragger>
               </a-form-item>

@@ -1693,7 +1693,7 @@ def execute_subscription(subscription_id: str):
                 high_risk_domains=high_risk_domains,
                 match_results=match_results_by_domain,
                 results_malicious_subscription=risk_score_records,
-                impersonation_matches=phishing_alert_items,
+                phishing_matches=phishing_alert_items,
                 detected_count=total_count,
                 high_risk_count=high_risk_count,
                 alert_time=alert.created_at or beijing_now(),
@@ -1787,7 +1787,7 @@ def execute_subscription(subscription_id: str):
             db.commit()
             db.refresh(alert)
 
-            if task.task_type in {"malicious", "impersonation"}:
+            if high_risk_domains:
                 try:
                     monitor_risk_records = (
                         phishing_alert_items

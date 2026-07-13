@@ -99,7 +99,19 @@ def _json_compatible(value: Any) -> Any:
 
 
 def _domain_from_risk_record(record: Mapping[str, Any]) -> Optional[str]:
-    for key in ("domain", "域名", "phishing_domain", "钓鱼域名", "candidate_domain", "候选域名"):
+    for key in (
+        "domain",
+        "域名",
+        "phishing_domain",
+        "钓鱼域名",
+        "仿冒域名",
+        "candidate_domain",
+        "候选域名",
+        "DGA域名",
+        "历史相似域名",
+        "模板化APT域名",
+        "apt_template_nrd_domain",
+    ):
         domain = normalize_domain(record.get(key))
         if domain:
             return domain

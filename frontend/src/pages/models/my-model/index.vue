@@ -6,7 +6,7 @@ import { useUserId } from '~/composables/user-id'
 import { getApiBase } from '~/utils/api-public'
 
 type SourceType = 'custom' | 'official' | 'market'
-type ModelDisplayType = '恶意性检测' | '仿冒域名检测' | 'DGA域名检测' | '历史APT域名相似性检测' | '模板化APT域名检测'
+type ModelDisplayType = '恶意域名检测' | '仿冒域名检测' | 'DGA域名检测' | '历史APT域名相似性检测' | '模板化APT域名检测'
 interface ModelItem {
   id: number
   name: string
@@ -349,7 +349,7 @@ onMounted(() => {
           <a-select
             v-model:value="filterType" style="width: 160px" :options="[
               { label: '全部类型', value: '全部' },
-              { label: '恶意性检测', value: '恶意性检测' },
+              { label: '恶意域名检测', value: '恶意域名检测' },
               { label: '仿冒域名检测', value: '仿冒域名检测' },
               { label: 'DGA域名检测', value: 'DGA域名检测' },
               { label: '历史APT域名相似性检测', value: '历史APT域名相似性检测' },

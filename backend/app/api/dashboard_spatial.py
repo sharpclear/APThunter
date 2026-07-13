@@ -9,6 +9,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 from decimal import Decimal
 from app.db.session import engine
+from app.services.apt_event_text import normalize_apt_event_record
 
 router = APIRouter(prefix="/api/dashboard/spatio-temporal", tags=["spatio-temporal"])
 
@@ -110,7 +111,7 @@ def get_events(
             events = []
             for r in results:
                 event = {k: convert_to_json_serializable(v) for k, v in dict(r).items()}
-                events.append(event)
+                events.append(normalize_apt_event_record(event))
             
             return JSONResponse(content={
                 "code": 200,
@@ -218,7 +219,10 @@ def get_timeline(
             ).mappings().all()
             
             # 转换数据类型
-            timeline = [{k: convert_to_json_serializable(v) for k, v in dict(r).items()} for r in results]
+            timeline = [
+                normalize_apt_event_record({k: convert_to_json_serializable(v) for k, v in dict(r).items()})
+                for r in results
+            ]
             
             return JSONResponse(content={
                 "code": 200,
@@ -257,7 +261,10 @@ def get_map_data():
             ).mappings().all()
             
             # 转换数据类型
-            map_data = [{k: convert_to_json_serializable(v) for k, v in dict(r).items()} for r in results]
+            map_data = [
+                normalize_apt_event_record({k: convert_to_json_serializable(v) for k, v in dict(r).items()})
+                for r in results
+            ]
             
             return JSONResponse(content={
                 "code": 200,

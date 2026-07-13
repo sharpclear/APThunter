@@ -83,13 +83,15 @@ export default {
   'menu.dashboard.workplace': '时空分布',
   'menu.dashboard.attributes': '域名属性分析', // 域名属性分析
   'menu.dashboard.profile': '组织画像', // 组织画像
+  'menu.dashboard.domain-monitor': '域名追踪',
   'menu.exception.403': '403',
   'menu.exception.404': '404',
   'menu.exception.500': '500',
   'menu.detection': '检测任务',
-  'menu.detection.malicious-detection': '恶意性检测', // 保留以兼容旧代码
+  'menu.detection.malicious-detection': '恶意域名检测', // 保留以兼容旧代码
   'menu.detection.create-task': '创建检测任务',
   'menu.detection.malicious-domain-detection': '恶意域名检测',
+  'menu.detection.focus-impersonation-detection': '重点单位仿冒检测',
   'menu.detection.impersonation-domain-detection': '仿冒域名检测',
   'menu.detection.dga-domain-detection': 'DGA域名检测',
   'menu.detection.history-similarity-detection': '历史APT域名相似性检测',

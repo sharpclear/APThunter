@@ -43,7 +43,18 @@ from app.services.task_dispatcher import (
     dispatch_impersonation_task,
     dispatch_malicious_task,
 )
-from malicious_detection import predict_from_domains as malicious_predict_from_domains
+from app.services.apt_template_nrd_report import build_apt_template_nrd_result_payload
+from app.services.dga_report import build_dga_result_payload
+from app.services.domain_monitor import register_monitor_targets
+from app.services.focus_impersonation_report import (
+    build_focus_impersonation_report_payload,
+    generate_focus_impersonation_pdf_report,
+)
+from app.services.history_similarity_report import build_history_similarity_result_payload
+from app.services.unified_malicious_domain_report import (
+    build_impersonation_result_payload,
+    build_unified_malicious_domain_payload,
+)
 from dga_domain_detection import predict_from_domains as dga_predict_from_domains
 from history_similarity_detection import (
     predict_from_domains as history_similarity_predict_from_domains,
@@ -51,6 +62,9 @@ from history_similarity_detection import (
 from impersonation_detector import (
     predict_from_domains as impersonation_predict_from_domains,
     read_official_domains_from_file,
+)
+from apt_template_nrd_matcher import (
+    predict_from_domains as apt_template_nrd_predict_from_domains,
 )
 
 logger = logging.getLogger("uvicorn.error")
@@ -102,7 +116,7 @@ def upload_file_content_to_minio(file_content: bytes, filename: str, content_typ
     key = f"{uuid.uuid4().hex}.{ext}"
     # MinIO 的 put_object 需要一个可读对象（有 read 方法），所以需要将 bytes 包装成 BytesIO
     file_stream = io.BytesIO(file_content)
-    
+
     # 确保bucket存在
     if not minio_client.bucket_exists(bucket):
         minio_client.make_bucket(bucket)
@@ -766,6 +780,8 @@ def _resolve_model_record(
             model_record = _get_dga_model_record(db)
         elif model_category == "history_similarity":
             model_record = _get_history_similarity_model_record(db)
+        elif model_category == "apt_template_nrd":
+            model_record = _get_apt_template_nrd_model_record(db)
 
     if not model_record or model_record.model_category != model_category:
         raise HTTPException(
@@ -792,6 +808,124 @@ def _resolve_model_record(
             )
 
     return model_record
+
+
+UNIFIED_DOMAIN_DETECTION_CATEGORIES = (
+    "impersonation",
+    "dga",
+    "history_similarity",
+    "apt_template_nrd",
+)
+
+
+def _resolve_unified_domain_model_records(db, created_by_user_id: Optional[int] = None) -> dict:
+    return {
+        category: _resolve_model_record(
+            db,
+            None,
+            category,
+            created_by_user_id,
+        )
+        for category in UNIFIED_DOMAIN_DETECTION_CATEGORIES
+    }
+
+
+def _unified_domain_thresholds() -> dict:
+    return {
+        "dga_candidate_threshold": 0.90,
+        "history_min_score": 0.65,
+        "history_top_k": 10,
+        "apt_template_score_threshold": 0.90,
+    }
+
+
+def _unified_domain_model_names(model_records: dict) -> dict:
+    return {
+        category: _history_similarity_display_text(record.name)
+        if category == "history_similarity"
+        else str(record.name or "")
+        for category, record in model_records.items()
+    }
+
+
+def _build_unified_domain_preview_payload(
+    *,
+    domains: list[str],
+    model_records: dict,
+    task_id: str,
+    data_source: str,
+    date_range: Optional[list[str]] = None,
+) -> dict:
+    thresholds = _unified_domain_thresholds()
+    model_names = _unified_domain_model_names(model_records)
+    official_domains = _load_full_whitelist_domains()
+
+    impersonation_excel, impersonation_statistics = impersonation_predict_from_domains(
+        official_domains,
+        domains,
+        similarity_threshold=None,
+    )
+    impersonation_payload = build_impersonation_result_payload(
+        impersonation_excel,
+        task_id=task_id,
+        statistics=impersonation_statistics,
+        official_domain_count=len(official_domains),
+    )
+
+    dga_excel, _dga_statistics, dga_meta = dga_predict_from_domains(
+        domains,
+        f"{task_id}_preview",
+        model_records["dga"].model_path or None,
+        candidate_threshold=thresholds["dga_candidate_threshold"],
+    )
+    dga_payload = build_dga_result_payload(
+        dga_excel,
+        task_id=task_id,
+        dga_meta=dga_meta,
+    )
+
+    history_excel, _history_statistics, history_meta, _history_alert_rows = history_similarity_predict_from_domains(
+        domains,
+        f"{task_id}_preview",
+        model_records["history_similarity"].model_path or None,
+        min_score=thresholds["history_min_score"],
+        top_k=thresholds["history_top_k"],
+        suspicious_only=False,
+    )
+    history_payload = build_history_similarity_result_payload(
+        history_excel,
+        task_id=task_id,
+        history_meta=history_meta,
+    )
+
+    apt_excel, _apt_statistics, apt_meta, _apt_alert_rows = apt_template_nrd_predict_from_domains(
+        domains,
+        f"{task_id}_preview",
+        model_records["apt_template_nrd"].model_path or None,
+        score_threshold=thresholds["apt_template_score_threshold"],
+        high_risk_only=False,
+    )
+    apt_payload = build_apt_template_nrd_result_payload(
+        apt_excel,
+        task_id=task_id,
+        apt_meta=apt_meta,
+    )
+
+    return build_unified_malicious_domain_payload(
+        task_id=task_id,
+        input_domains=domains,
+        data_source=data_source,
+        module_payloads={
+            "impersonation": impersonation_payload,
+            "dga": dga_payload,
+            "history_similarity": history_payload,
+            "apt_template_nrd": apt_payload,
+        },
+        model_names=model_names,
+        thresholds=thresholds,
+        date_range=date_range,
+        generated_at=datetime.utcnow(),
+    )
 
 
 def _excel_statistics_dict(excel_file: io.BytesIO) -> dict:
@@ -1136,6 +1270,66 @@ async def preview_manual_domain_detection(
     return JSONResponse(status_code=status.HTTP_200_OK, content=payload)
 
 
+@router.post("/api/unified-malicious-domain-detection/preview")
+async def preview_unified_malicious_domain_detection(
+    request: Request,
+    manualDomains: str = Form(...),
+):
+    """手动输入域名的四模块统一恶意域名检测预览，不创建任务。"""
+    domains, manual_stats = _parse_manual_domains(manualDomains or "")
+    created_by_user_id = _extract_user_id(request)
+
+    db = SessionLocal()
+    try:
+        model_records = _resolve_unified_domain_model_records(db, created_by_user_id)
+    finally:
+        db.close()
+
+    try:
+        payload = _build_unified_domain_preview_payload(
+            domains=domains,
+            model_records=model_records,
+            task_id=f"PREVIEW{int(datetime.utcnow().timestamp())}",
+            data_source="manualInput",
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("四模块统一恶意域名手动预览失败: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"统一检测失败: {str(exc)}",
+        ) from exc
+
+    payload["mode"] = "manualPreview"
+    payload["manual_domain_stats"] = manual_stats
+    payload["model_names"] = _unified_domain_model_names(model_records)
+    if created_by_user_id is not None and payload.get("unified_malicious_domains"):
+        db = SessionLocal()
+        try:
+            monitor_summary = register_monitor_targets(
+                db,
+                user_id=created_by_user_id,
+                domains=[
+                    item.get("域名") or item.get("domain")
+                    for item in payload.get("unified_malicious_domains") or []
+                    if isinstance(item, dict)
+                ],
+                source_type="manual",
+                task_type="malicious",
+                risk_records=payload.get("unified_malicious_domains") or [],
+                detected_at=datetime.utcnow(),
+            )
+            db.commit()
+            payload["domain_monitor_summary"] = monitor_summary
+        except Exception:
+            db.rollback()
+            logger.exception("手动预览恶意域名注册持续追踪失败")
+        finally:
+            db.close()
+    return JSONResponse(status_code=status.HTTP_200_OK, content=payload)
+
+
 @router.post("/api/impersonation-unified-tasks")
 async def create_impersonation_unified_task(
     request: Request,
@@ -1314,10 +1508,206 @@ async def create_impersonation_unified_task(
         ) from exc
 
 
+async def _create_unified_malicious_domain_task(
+    *,
+    request: Request,
+    dataSource: str,
+    file: Optional[UploadFile] = None,
+    dateRange: Optional[str] = None,
+    manualDomains: Optional[str] = None,
+):
+    created_by_user_id: Optional[int] = _extract_user_id(request)
+    uploaded_by_header = request.headers.get("X-User-Name") or request.headers.get("X-User")
+
+    if dataSource not in ["upload", "newDomain", "manualInput"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="dataSource must be 'upload', 'newDomain' or 'manualInput'",
+        )
+    if dataSource == "upload" and file is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="file is required")
+    if dataSource == "newDomain" and (not dateRange or dateRange.strip() == ""):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="dateRange is required")
+
+    whitelist_path = _resolve_full_whitelist_path()
+    if not os.path.isfile(whitelist_path):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"系统全量白名单不存在：{whitelist_path}",
+        )
+
+    date_range_parsed = None
+    if dataSource == "newDomain":
+        date_range_parsed = _parse_detection_date_range_payload(dateRange or "")
+        start_date = _parse_date_string(date_range_parsed[0])
+        end_date = _parse_date_string(date_range_parsed[1])
+        availability = _inspect_daily_domain_availability(start_date, end_date)
+        if not availability["available"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message": "所选日期范围内暂无可用的新注册域名数据，请重新选择日期",
+                    **availability,
+                },
+            )
+
+    manual_domain_list = None
+    manual_domain_stats = None
+    if dataSource == "manualInput":
+        manual_domain_list, manual_domain_stats = _parse_manual_domains(manualDomains or "")
+
+    uploaded_file_meta = None
+    if file is not None:
+        file_ext = file.filename.split(".")[-1].lower() if file.filename else ""
+        allowed_extensions = ["csv", "txt", "xlsx"]
+        if file_ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File type not allowed. Only {', '.join(allowed_extensions)} are supported",
+            )
+        file_content = await file.read()
+        file_size = len(file_content)
+        max_size = 5 * 1024 * 1024
+        if file_size > max_size:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File size exceeds maximum allowed size of {max_size / 1024 / 1024}MB",
+            )
+        file_key = upload_file_content_to_minio(
+            file_content,
+            file.filename or "unknown",
+            file.content_type,
+        )
+        uploaded_file_meta = {
+            "bucket": MINIO_BUCKET,
+            "object_key": file_key,
+            "filename": file.filename or "unknown",
+            "content_type": file.content_type,
+            "size": file_size,
+        }
+
+    db = SessionLocal()
+    try:
+        model_records = _resolve_unified_domain_model_records(db, created_by_user_id)
+        model_ids = {category: record.id for category, record in model_records.items()}
+        model_names = _unified_domain_model_names(model_records)
+        primary_model = model_records["impersonation"]
+
+        file_record = None
+        if uploaded_file_meta:
+            file_record = StoredFile(
+                bucket=uploaded_file_meta["bucket"],
+                object_key=uploaded_file_meta["object_key"],
+                filename=uploaded_file_meta["filename"],
+                content_type=uploaded_file_meta["content_type"],
+                size=uploaded_file_meta["size"],
+                uploaded_by=uploaded_by_header,
+                metadata_json={
+                    "source": "unified_malicious_domain_detection",
+                    "role": "detection_domains",
+                    "original_filename": uploaded_file_meta["filename"],
+                },
+            )
+            db.add(file_record)
+            db.flush()
+
+        thresholds = _unified_domain_thresholds()
+        extra_data = {
+            "unified_detection": True,
+            "dataSource": dataSource,
+            "dateRange": date_range_parsed,
+            "module_model_ids": model_ids,
+            "module_model_names": model_names,
+            "official_file_path": whitelist_path,
+            "official_file_filename": os.path.basename(whitelist_path) or "full_whitelist.csv",
+            "official_domain_resolution_status": "full_whitelist",
+            "official_domain_resolution_pending": False,
+            "official_domain_resolution_method": "full_whitelist",
+            "official_domain_resolution_message": "已使用系统全量官方白名单",
+            "candidate_threshold": thresholds["dga_candidate_threshold"],
+            "min_score": thresholds["history_min_score"],
+            "top_k": thresholds["history_top_k"],
+            "score_threshold": thresholds["apt_template_score_threshold"],
+        }
+        if uploaded_file_meta:
+            extra_data["file_bucket"] = uploaded_file_meta["bucket"]
+            extra_data["file_object_key"] = uploaded_file_meta["object_key"]
+            extra_data["file_filename"] = uploaded_file_meta["filename"]
+            extra_data["file_id"] = file_record.id if file_record else None
+        if manual_domain_list is not None:
+            extra_data["manual_domains"] = manual_domain_list
+            extra_data["manual_domain_stats"] = manual_domain_stats
+
+        task_id = f"MAL{int(datetime.utcnow().timestamp())}{uuid.uuid4().hex[:6]}"
+        task = Task(
+            task_id=task_id,
+            task_type="malicious",
+            model_id=primary_model.id,
+            file_id=file_record.id if file_record else None,
+            extra=extra_data,
+            status="pending",
+            created_by=created_by_user_id,
+        )
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+
+        try:
+            dispatch_malicious_task(task.task_id)
+        except Exception as exc:
+            logger.exception("enqueue unified malicious domain task failed: %s", exc)
+            task.status = "failed"
+            extra_data_failed = dict(task.extra or {})
+            extra_data_failed["error"] = str(exc)
+            extra_data_failed["enqueue_failed"] = True
+            extra_data_failed["enqueue_failed_at"] = datetime.utcnow().isoformat()
+            task.extra = extra_data_failed
+            db.commit()
+            db.refresh(task)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to enqueue task",
+            ) from exc
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={"ok": True, "task_id": task.task_id, "status": "pending"},
+        )
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Failed to create unified malicious domain task: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create unified malicious domain task",
+        ) from exc
+    finally:
+        db.close()
+
+
+@router.post("/api/unified-malicious-domain-tasks")
+async def create_unified_malicious_domain_task(
+    request: Request,
+    dataSource: str = Form(...),
+    file: Optional[UploadFile] = File(None),
+    dateRange: Optional[str] = Form(None),
+    manualDomains: Optional[str] = Form(None),
+):
+    return await _create_unified_malicious_domain_task(
+        request=request,
+        dataSource=dataSource,
+        file=file,
+        dateRange=dateRange,
+        manualDomains=manualDomains,
+    )
+
+
 @router.post("/api/tasks")
 async def create_detection_task(
     request: Request,
-    model: str = Form(...),
+    model: Optional[str] = Form(None),
     dataSource: str = Form(...),
     withAttribution: str = Form("false"),
     file: Optional[UploadFile] = File(None),
@@ -1325,250 +1715,23 @@ async def create_detection_task(
     manualDomains: Optional[str] = Form(None),
 ):
     """
-    创建恶意性检测任务
-    
+    创建统一恶意域名检测任务。
+
     参数:
-    - model: 检测模型ID
+    - model: 兼容旧前端保留，统一检测会自动使用四个模块的当前可用模型
     - dataSource: 数据来源 ('upload'、'newDomain' 或 'manualInput')
-    - withAttribution: 是否包含归因分析 ('true' 或 'false')
+    - withAttribution: 兼容旧前端保留，统一检测不再执行旧二分类归因流程
     - file: 上传的文件（当 dataSource 为 'upload' 时必填）
     - dateRange: 日期范围JSON字符串（当 dataSource 为 'newDomain' 时必填）
     - manualDomains: 用户手动输入的域名或 URL（当 dataSource 为 'manualInput' 时必填）
     """
-    try:
-        created_by_user_id: Optional[int] = _extract_user_id(request)
-        uploaded_by_header = request.headers.get("X-User-Name") or request.headers.get("X-User")
-        uploaded_file_meta = None
-
-        # 记录接收到的参数
-        file_info = None
-        if file is not None:
-            file_info = {
-                "filename": file.filename,
-                "content_type": file.content_type,
-                "size": getattr(file, 'size', 'unknown')
-            }
-        logger.info(f"Received task creation request: model={model}, dataSource={dataSource}, withAttribution={withAttribution}, file={file_info}, dateRange={dateRange}")
-        # 验证数据来源参数
-        if dataSource not in ["upload", "newDomain", "manualInput"]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="dataSource must be 'upload', 'newDomain' or 'manualInput'"
-            )
-        
-        # 验证文件上传
-        if dataSource == "upload" and file is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="file is required when dataSource is 'upload'"
-            )
-        
-        # 验证日期范围
-        if dataSource == "newDomain" and (not dateRange or dateRange.strip() == ""):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="dateRange is required when dataSource is 'newDomain'"
-            )
-        date_range_parsed = None
-        if dataSource == "newDomain":
-            date_range_parsed = _parse_detection_date_range_payload(dateRange or "")
-            start_date = _parse_date_string(date_range_parsed[0])
-            end_date = _parse_date_string(date_range_parsed[1])
-            availability = _inspect_daily_domain_availability(start_date, end_date)
-            if not availability["available"]:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail={
-                        "message": "所选日期范围内暂无可用的新注册域名数据，请重新选择日期",
-                        **availability,
-                    },
-                )
-
-        manual_domain_list = None
-        manual_domain_stats = None
-        if dataSource == "manualInput":
-            manual_domain_list, manual_domain_stats = _parse_manual_domains(manualDomains or "")
-        
-        # 处理文件上传
-        file_key = None
-        if file is not None:
-            # 验证文件类型
-            file_ext = file.filename.split(".")[-1].lower() if file.filename else ""
-            allowed_extensions = ["csv", "txt", "xlsx"]
-            if file_ext not in allowed_extensions:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"File type not allowed. Only {', '.join(allowed_extensions)} are supported"
-                )
-            
-            # 读取文件内容验证大小
-            file_content = await file.read()
-            file_size = len(file_content)
-            max_size = 5 * 1024 * 1024  # 5MB
-            
-            if file_size > max_size:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"File size exceeds maximum allowed size of {max_size / 1024 / 1024}MB"
-                )
-            
-            # 直接使用文件内容上传到 MinIO
-            file_key = upload_file_content_to_minio(
-                file_content,
-                file.filename or "unknown",
-                file.content_type
-            )
-            uploaded_file_meta = {
-                "bucket": MINIO_BUCKET,
-                "object_key": file_key,
-                "filename": file.filename or "unknown",
-                "content_type": file.content_type,
-                "size": file_size,
-            }
-        
-        # 解析日期范围（如果提供）
-        if dateRange:
-            try:
-                date_range_parsed = date_range_parsed or json.loads(dateRange)
-            except json.JSONDecodeError:
-                logger.warning(f"Failed to parse dateRange: {dateRange}")
-        
-        # 构建 extra 字段
-        extra_data = {
-            "dataSource": dataSource,
-            "dateRange": date_range_parsed,
-            "withAttribution": withAttribution.lower() == "true"
-        }
-        if uploaded_file_meta:
-            extra_data["file_bucket"] = uploaded_file_meta["bucket"]
-            extra_data["file_object_key"] = uploaded_file_meta["object_key"]
-        if manual_domain_list is not None:
-            extra_data["manual_domains"] = manual_domain_list
-            extra_data["manual_domain_stats"] = manual_domain_stats
-        
-        # 生成任务ID
-        task_id = f"T{int(datetime.utcnow().timestamp())}"
-        
-        # 保存任务到数据库
-        db = SessionLocal()
-        try:
-            # 先尝试将model参数作为ID（整数）查找，如果失败则作为name查找（保持向后兼容）
-            model_record = None
-            model_id_int = None
-            try:
-                model_id_int = int(model)
-                model_record = db.query(Model).filter(Model.id == model_id_int).first()
-            except ValueError:
-                # 如果不是整数，则作为name查找
-                model_record = db.query(Model).filter(Model.name == model).first()
-                if model_record:
-                    model_id_int = model_record.id
-            
-            if not model_record:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"模型 {model} 不存在"
-                )
-            
-            # 验证用户是否有权限使用该模型（从user_models表检查）
-            if created_by_user_id is not None:
-                with engine.connect() as conn:
-                    user_model_query = text("""
-                        SELECT um.id 
-                        FROM user_models um
-                        WHERE um.user_id = :user_id 
-                          AND um.model_id = :model_id 
-                          AND um.is_active = 1
-                    """)
-                    user_model_result = conn.execute(
-                        user_model_query, 
-                        {"user_id": created_by_user_id, "model_id": model_record.id}
-                    ).first()
-                    
-                    if not user_model_result:
-                        raise HTTPException(
-                            status_code=status.HTTP_403_FORBIDDEN,
-                            detail=f"您没有权限使用模型 {model_record.name}，请从模型市场获取或创建自己的模型"
-                        )
-
-            file_record = None
-            if uploaded_file_meta:
-                file_record = StoredFile(
-                    bucket=uploaded_file_meta["bucket"],
-                    object_key=uploaded_file_meta["object_key"],
-                    filename=uploaded_file_meta["filename"],
-                    content_type=uploaded_file_meta["content_type"],
-                    size=uploaded_file_meta["size"],
-                    uploaded_by=uploaded_by_header,
-                    metadata_json={
-                        "source": "malicious_detection",
-                        "original_filename": uploaded_file_meta["filename"],
-                    },
-                )
-                db.add(file_record)
-                db.flush()
-
-            task = Task(
-                task_id=task_id,
-                task_type="malicious",
-                model_id=model_record.id,
-                file_id=file_record.id if file_record else None,
-                extra=extra_data,
-                status="pending",
-                created_by=created_by_user_id,
-            )
-            db.add(task)
-            db.commit()
-            db.refresh(task)
-            
-            # 通过 Celery 异步执行检测，接口仅负责创建任务并入队
-            try:
-                dispatch_malicious_task(task.task_id)
-            except Exception as exc:
-                # 处理入队失败：避免任务长期停留在 pending（DB 已创建但 Redis 未入队）
-                logger.exception("enqueue malicious task failed: %s", exc)
-                task.status = "failed"
-                extra_data_failed = dict(task.extra or {})
-                extra_data_failed["error"] = str(exc)
-                extra_data_failed["enqueue_failed"] = True
-                extra_data_failed["enqueue_failed_at"] = datetime.utcnow().isoformat()
-                task.extra = extra_data_failed
-                db.commit()
-                db.refresh(task)
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to enqueue task",
-                ) from exc
-            
-            return JSONResponse(
-                status_code=status.HTTP_200_OK,
-                content={
-                    "ok": True,
-                    "task_id": task.task_id,
-                    "status": "pending"
-                }
-            )
-        except HTTPException:
-            # 入队失败或参数异常：已根据具体情况落库/处理
-            raise
-        except Exception as e:
-            db.rollback()
-            logger.exception(f"Failed to create task: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create task"
-            )
-        finally:
-            db.close()
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"Unexpected error in create_detection_task: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred"
-        )
+    return await _create_unified_malicious_domain_task(
+        request=request,
+        dataSource=dataSource,
+        file=file,
+        dateRange=dateRange,
+        manualDomains=manualDomains,
+    )
 
 
 @router.post("/api/dga-tasks")
@@ -2204,6 +2367,8 @@ async def list_tasks(
         for task, model, stored_file in records:
             extra_data = _normalize_extra(task.extra)
             task_type_label = TASK_TYPE_LABEL_MAP.get(task.task_type, task.task_type)
+            if task.task_type == "impersonation" and extra_data.get("focus_impersonation_detection"):
+                task_type_label = "重点单位仿冒检测"
             status_label = STATUS_LABEL_MAP.get(task.status, task.status)
             progress = STATUS_PROGRESS_MAP.get(task.status, 0)
             raw_progress = extra_data.get("progress")
@@ -2244,7 +2409,7 @@ async def list_tasks(
                         # 只有官方文件
                         data_source_payload["fileName"] = stored_file.filename if stored_file else None
                 else:
-                    # 恶意性检测任务：使用主文件
+                    # 通用检测任务：使用主文件
                     data_source_payload["fileName"] = stored_file.filename if stored_file else None
             elif data_source_type == "newDomain":
                 date_range = extra_data.get("dateRange") or []
@@ -2254,6 +2419,13 @@ async def list_tasks(
                 manual_stats = extra_data.get("manual_domain_stats") or {}
                 data_source_payload["domainCount"] = manual_stats.get("valid_count") or len(extra_data.get("manual_domains") or [])
             model_name = model.name if model else ""
+            if task.task_type == "malicious" and extra_data.get("unified_detection"):
+                module_names = extra_data.get("module_model_names") or {}
+                model_name = " / ".join(
+                    str(module_names.get(category) or "")
+                    for category in UNIFIED_DOMAIN_DETECTION_CATEGORIES
+                    if module_names.get(category)
+                ) or "四模块统一检测"
             if task.task_type == "history_similarity":
                 model_name = _history_similarity_display_text(model_name)
             items.append({
@@ -2267,7 +2439,11 @@ async def list_tasks(
                 "eta": "",
                 "resultFileKey": extra_data.get("result_file_key"),
                 "resultBucket": extra_data.get("result_bucket"),
-                "resultFileName": extra_data.get("result_filename") or extra_data.get("result_file_key"),
+                "resultFileName": (
+                    extra_data.get("focus_report_filename")
+                    if task.task_type == "impersonation" and extra_data.get("focus_impersonation_detection")
+                    else extra_data.get("result_filename")
+                ) or extra_data.get("result_file_key"),
                 "rawStatus": task.status,
             })
         return {"items": items, "total": total}
@@ -2325,6 +2501,31 @@ async def get_task_result_json(task_id: str, request: Request):
             )
 
         result_bucket = extra_data.get("result_bucket") or RESULTS_BUCKET
+
+        if (
+            task.task_type == "malicious"
+            and extra_data.get("unified_detection")
+            and extra_data.get("result_data_file_key")
+        ):
+            try:
+                result_data_bytes = download_file_from_minio(
+                    extra_data.get("result_data_file_key"),
+                    extra_data.get("result_data_bucket") or RESULTS_BUCKET,
+                )
+                result_payload = json.loads(result_data_bytes.decode("utf-8"))
+                result_payload["result_file_key"] = result_key
+                result_payload["result_filename"] = extra_data.get("result_filename") or result_payload.get("result_filename") or f"{task.task_id}_report.pdf"
+                result_payload["unified_detection"] = True
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content=_json_safe_value(result_payload),
+                )
+            except Exception as exc:
+                logger.exception("读取统一恶意域名检测JSON结果失败 task_id=%s: %s", task.task_id, exc)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to parse unified malicious domain result data",
+                ) from exc
 
         if task.task_type == "history_similarity" and extra_data.get("result_data_file_key"):
             try:
@@ -2609,12 +2810,16 @@ async def get_task_result_json(task_id: str, request: Request):
                         "ok": True,
                         "task_id": task.task_id,
                         "task_type": task.task_type,
+                        "focus_impersonation_detection": bool(extra_data.get("focus_impersonation_detection")),
+                        "focus_query_name": extra_data.get("focus_query_name") or extra_data.get("queryName"),
                         "statistics": statistics_dict,
                         "results": results_list,
                         "phishing_domains": phishing_list,
                         "official_domains": official_domain_rows,
                         "result_file_key": result_key,
                         "result_filename": extra_data.get("result_filename") or f"{task.task_id}_result.xlsx",
+                        "focus_report_file_key": extra_data.get("focus_report_file_key"),
+                        "focus_report_filename": extra_data.get("focus_report_filename"),
                         "word_report_file_key": extra_data.get("word_report_file_key"),
                         "word_report_filename": extra_data.get("word_report_filename"),
                         "total_count": len(results_list),
@@ -2623,7 +2828,7 @@ async def get_task_result_json(task_id: str, request: Request):
                     })
                 )
             else:
-                # 恶意性检测结果（原有的逻辑）
+                # 兼容旧二分类恶意检测结果
                 # 读取预测结果表
                 results_df = pd.read_excel(excel_file, sheet_name='预测结果')
 
@@ -2704,24 +2909,66 @@ async def download_task_result(task_id: str, request: Request):
         result_bucket = extra_data.get("result_bucket") or RESULTS_BUCKET
         filename = extra_data.get("result_filename") or f"{task.task_id}_result.xlsx"
         media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        is_word_report_download = False
-        if task.task_type == "impersonation" and extra_data.get("word_report_file_key"):
+        is_report_download = False
+        if task.task_type == "impersonation" and extra_data.get("focus_impersonation_detection"):
+            filename = extra_data.get("focus_report_filename") or f"{task.task_id}_focus_impersonation_report.pdf"
+            media_type = "application/pdf"
+            is_report_download = True
+            try:
+                excel_bytes = download_file_from_minio(result_key, result_bucket)
+                official_domains = extra_data.get("official_domains") or []
+                if not official_domains and extra_data.get("official_file_object_key"):
+                    official_file_content = download_file_from_minio(
+                        extra_data.get("official_file_object_key"),
+                        extra_data.get("official_file_bucket") or MINIO_BUCKET,
+                    )
+                    official_domains = read_official_domains_from_file(
+                        official_file_content,
+                        extra_data.get("official_file_filename") or "official_domains",
+                    )
+                statistics = extra_data.get("statistics") if isinstance(extra_data.get("statistics"), dict) else None
+                date_range = extra_data.get("dateRange") if isinstance(extra_data.get("dateRange"), list) else None
+                focus_payload = build_focus_impersonation_report_payload(
+                    excel_bytes,
+                    task_id=task.task_id,
+                    query_name=str(extra_data.get("focus_query_name") or extra_data.get("queryName") or ""),
+                    official_domains=official_domains,
+                    statistics=statistics,
+                    date_range=date_range,
+                    generated_at=datetime.utcnow(),
+                )
+                file_bytes = generate_focus_impersonation_pdf_report(focus_payload)
+            except HTTPException:
+                raise
+            except Exception as exc:
+                logger.exception("生成重点单位仿冒检测PDF报告失败 task_id=%s: %s", task.task_id, exc)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to generate focus impersonation report",
+                )
+            response = StreamingResponse(
+                io.BytesIO(file_bytes),
+                media_type=media_type,
+            )
+            response.headers["Content-Disposition"] = f"attachment; filename*=utf-8''{quote(filename)}"
+            return response
+        elif task.task_type == "impersonation" and extra_data.get("word_report_file_key"):
             result_key = extra_data.get("word_report_file_key")
             result_bucket = extra_data.get("word_report_bucket") or RESULTS_BUCKET
             filename = extra_data.get("word_report_filename") or f"{task.task_id}_prediction_report.docx"
             media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            is_word_report_download = True
+            is_report_download = True
         result_content_type = extra_data.get("result_content_type") or (
             "application/pdf" if str(filename).lower().endswith(".pdf") else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-        if not is_word_report_download:
+        if not is_report_download:
             media_type = result_content_type
         try:
             file_bytes = download_file_from_minio(result_key, result_bucket)
         except Exception as exc:
             logger.exception("下载结果文件失败: %s", exc)
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch result file")
-        if task.task_type == "history_similarity" and not is_word_report_download and media_type != "application/pdf":
+        if task.task_type == "history_similarity" and not is_report_download and media_type != "application/pdf":
             try:
                 file_bytes = _dedupe_history_similarity_sheet(file_bytes)
             except Exception:
@@ -2730,7 +2977,7 @@ async def download_task_result(task_id: str, request: Request):
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Failed to deduplicate history similarity sheet",
                 )
-        if task.task_type == "impersonation" and not is_word_report_download:
+        if task.task_type == "impersonation" and not is_report_download:
             official_domain_rows = _normalize_official_domain_rows(extra_data.get("official_domains") or [])
             if not official_domain_rows and extra_data.get("official_file_object_key"):
                 try:
@@ -2760,6 +3007,144 @@ async def download_task_result(task_id: str, request: Request):
         )
         response.headers["Content-Disposition"] = f"attachment; filename*=utf-8''{quote(filename)}"
         return response
+    finally:
+        db.close()
+
+
+@router.post("/api/focus-impersonation-tasks")
+async def create_focus_impersonation_task(
+    request: Request,
+    queryName: str = Form(...),
+    detectionDateRange: str = Form(...),
+    useCustomThreshold: str = Form("false"),
+    threshold: Optional[str] = Form(None),
+):
+    """创建重点单位仿冒检测任务：DeepSeek 检索官方域名后执行仿冒检测。"""
+    created_by_user_id: Optional[int] = _extract_user_id(request)
+    query_name = (queryName or "").strip()
+    if not query_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="请输入单位名或热点事件名",
+        )
+    if len(query_name) > 120:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="单位名或热点事件名长度不能超过120个字符",
+        )
+    if not detectionDateRange or detectionDateRange.strip() == "":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="detectionDateRange is required",
+        )
+
+    date_range_parsed = _parse_detection_date_range_payload(detectionDateRange)
+    start_date = _parse_date_string(date_range_parsed[0])
+    end_date = _parse_date_string(date_range_parsed[1])
+    availability = _inspect_daily_domain_availability(start_date, end_date)
+    if not availability["available"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "message": "所选日期范围内暂无可用的新注册域名数据，请重新选择日期",
+                **availability,
+            },
+        )
+    similarity_threshold, threshold_meta = _parse_similarity_threshold(useCustomThreshold, threshold)
+
+    try:
+        official_domains = resolve_official_domains(query_name)
+    except OfficialDomainResolutionError as exc:
+        status_code = (
+            status.HTTP_500_INTERNAL_SERVER_ERROR
+            if isinstance(exc, OfficialDomainResolverConfigError)
+            else status.HTTP_502_BAD_GATEWAY
+        )
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+    official_domain_rows = _normalize_official_domain_rows(official_domains)
+    if not official_domain_rows:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未检索到有效官方域名或子域名，请调整输入后重试",
+        )
+
+    db = SessionLocal()
+    try:
+        model_record = _get_impersonation_model_record(db)
+        if not model_record:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="No active impersonation model configured",
+            )
+
+        task_id = f"FIMP{int(datetime.utcnow().timestamp())}{uuid.uuid4().hex[:6]}"
+        extra_data = {
+            "focus_impersonation_detection": True,
+            "focus_query_name": query_name,
+            "detectionSource": "newDomain",
+            "queryName": query_name,
+            "dateRange": date_range_parsed,
+            "official_domains": official_domain_rows,
+            "official_domain_resolution_status": "resolved",
+            "official_domain_resolution_pending": False,
+            "official_domain_resolution_method": "deepseek",
+            "official_domain_resolution_message": f"DeepSeek已解析到 {len(official_domain_rows)} 个官方域名或子域名",
+            "official_domain_count": len(official_domain_rows),
+            "threshold_policy": "custom" if similarity_threshold is not None else "adaptive",
+            "similarity_threshold": similarity_threshold,
+            "threshold_percent": threshold_meta["threshold_percent"],
+        }
+        task = Task(
+            task_id=task_id,
+            task_type="impersonation",
+            model_id=model_record.id,
+            file_id=None,
+            extra=extra_data,
+            status="pending",
+            created_by=created_by_user_id,
+        )
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+
+        try:
+            dispatch_impersonation_task(task.task_id)
+        except Exception as exc:
+            logger.exception("enqueue focus impersonation task failed: %s", exc)
+            task.status = "failed"
+            failed_extra = dict(task.extra or {})
+            failed_extra["error"] = str(exc)
+            failed_extra["enqueue_failed"] = True
+            failed_extra["enqueue_failed_at"] = datetime.utcnow().isoformat()
+            task.extra = failed_extra
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to enqueue task",
+            ) from exc
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "ok": True,
+                "task_id": task.task_id,
+                "status": "pending",
+                "queryName": query_name,
+                "officialDomains": official_domain_rows,
+                "officialDomainCount": len(official_domain_rows),
+            },
+        )
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Failed to create focus impersonation task: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create focus impersonation task",
+        ) from exc
     finally:
         db.close()
 

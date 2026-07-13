@@ -69,7 +69,7 @@ def get_current_user_id(request: Request, authorization: Optional[str] = None) -
 def map_model_category_to_type(category: Optional[str]) -> Optional[str]:
     """将数据库的model_category映射到前端显示的type"""
     if category == "malicious":
-        return "恶意性检测"
+        return "恶意域名检测"
     elif category == "impersonation":
         return "仿冒域名检测"
     elif category == "dga":

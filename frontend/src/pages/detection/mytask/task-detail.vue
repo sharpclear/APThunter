@@ -167,6 +167,7 @@ interface ResultData {
   apt_template_nrd_domains?: ResultItem[]
   result_filename: string
   focus_report_filename?: string
+  pdf_report_filename?: string
   word_report_filename?: string
   total_count: number
   malicious_count?: number
@@ -722,7 +723,7 @@ async function handleDownload() {
       : resultData.value?.focus_impersonation_detection
       ? (resultData.value?.focus_report_filename || `${taskId.value}_focus_impersonation_report.pdf`)
       : resultData.value?.task_type === 'impersonation'
-      ? (resultData.value?.word_report_filename || `${taskId.value}_prediction_report.docx`)
+      ? (resultData.value?.pdf_report_filename || resultData.value?.word_report_filename || `${taskId.value}_prediction_report.pdf`)
       : (resultData.value?.result_filename || `${taskId.value}.xlsx`)
     const filename = decodeURIComponent(match?.[1] || fallbackFilename)
     const url = window.URL.createObjectURL(blob)
@@ -981,7 +982,7 @@ onMounted(() => {
                 <template #icon>
                   <DownloadOutlined />
                 </template>
-                {{ isUnifiedMalicious(resultData) || resultData.focus_impersonation_detection || ['history_similarity', 'apt_template_nrd'].includes(resultData.task_type) ? '下载PDF报告' : '下载Excel结果' }}
+                {{ isUnifiedMalicious(resultData) || resultData.focus_impersonation_detection || ['impersonation', 'history_similarity', 'apt_template_nrd'].includes(resultData.task_type) ? '下载PDF报告' : '下载Excel结果' }}
               </a-button>
               <a-button size="large" @click="router.back()">
                 返回任务列表

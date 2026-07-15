@@ -229,7 +229,7 @@ async function downloadResult(record: TaskItem) {
       : record.taskType === '重点单位仿冒检测'
       ? (record.resultFileName || `${record.id}_focus_impersonation_report.pdf`)
       : isImpersonationTask(record)
-      ? `${record.id}_prediction_report.docx`
+      ? `${record.id}_prediction_report.pdf`
       : (record.resultFileName || `${record.id}.xlsx`)
     const filename = decodeURIComponent(match?.[1] || fallbackFilename)
     const url = window.URL.createObjectURL(blob)

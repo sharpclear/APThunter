@@ -5,6 +5,7 @@ import copy
 from datetime import datetime, timezone
 import re
 from pathlib import Path
+import time
 from typing import Any, Sequence
 import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape as xml_escape
@@ -639,7 +640,7 @@ def read_report_csv(path_value: Any) -> pd.DataFrame:
 
 
 def report_task_date(summary: dict[str, Any]) -> str:
-    for key in ("output", "unique_output", "report_output"):
+    for key in ("output", "unique_output", "pdf_report_output", "report_output", "word_report_output"):
         path_text = str(summary.get(key, ""))
         match = re.search(r"(20\d{2}-\d{2}-\d{2})", path_text)
         if match:
@@ -1632,6 +1633,827 @@ def write_prediction_word_report(summary: dict[str, Any], output: str | Path) ->
     ]
     write_docx_package(output, "".join(body))
 
+
+def convert_docx_to_pdf_with_word(source_docx: str | Path, output_pdf: str | Path) -> None:
+    """Convert a DOCX report to PDF through Microsoft Word COM automation."""
+    import pythoncom
+    import win32com.client
+
+    source_path = Path(source_docx).resolve()
+    output_path = Path(output_pdf).resolve()
+    if not source_path.exists():
+        raise FileNotFoundError(f"source docx not found: {source_path}")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def com_call(func: Any, retries: int = 20, delay_seconds: float = 0.5) -> Any:
+        last_error: Exception | None = None
+        for _ in range(retries):
+            try:
+                return func()
+            except Exception as exc:  # pragma: no cover - depends on local Office state
+                last_error = exc
+                error_code = exc.args[0] if getattr(exc, "args", None) else None
+                if error_code != -2147418111:
+                    raise
+                pythoncom.PumpWaitingMessages()
+                time.sleep(delay_seconds)
+        if last_error is not None:
+            raise last_error
+        return None
+
+    pythoncom.CoInitialize()
+    word = None
+    document = None
+    try:
+        word = com_call(lambda: win32com.client.DispatchEx("Word.Application"))
+        word.Visible = False
+        word.DisplayAlerts = 0
+        document = com_call(
+            lambda: word.Documents.Open(
+                FileName=str(source_path),
+                ConfirmConversions=False,
+                ReadOnly=True,
+                AddToRecentFiles=False,
+                OpenAndRepair=True,
+            )
+        )
+        com_call(
+            lambda: document.ExportAsFixedFormat(
+                OutputFileName=str(output_path),
+                ExportFormat=17,
+                OpenAfterExport=False,
+                OptimizeFor=0,
+                Range=0,
+                Item=0,
+                IncludeDocProps=True,
+                KeepIRM=True,
+                CreateBookmarks=1,
+                DocStructureTags=True,
+                BitmapMissingFonts=True,
+                UseISO19005_1=False,
+            )
+        )
+    finally:
+        if document is not None:
+            try:
+                com_call(lambda: document.Close(False), retries=5)
+            except Exception:
+                pass
+        if word is not None:
+            try:
+                com_call(lambda: word.Quit(), retries=5)
+            except Exception:
+                pass
+        pythoncom.CoUninitialize()
+
+
+def write_prediction_pdf_report(
+    summary: dict[str, Any],
+    output: str | Path,
+    source_docx: str | Path | None = None,
+) -> None:
+    """Write a direct PDF report for one prediction task.
+
+    The PDF renderer intentionally does not depend on Word automation. The
+    optional ``source_docx`` argument is kept for backward-compatible callers
+    and is ignored.
+    """
+    output_path = Path(output)
+
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.enums import TA_CENTER
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+        from reportlab.lib.units import cm
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+        from reportlab.platypus import (
+            CondPageBreak,
+            LongTable,
+            PageBreak,
+            Paragraph,
+            SimpleDocTemplate,
+            Spacer,
+            TableStyle,
+        )
+    except ImportError as exc:  # pragma: no cover - exercised only when dependency is missing
+        raise RuntimeError("PDF report output requires the 'reportlab' package. Install requirements.txt.") from exc
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+    except Exception:
+        pass
+
+    font_name = "STSong-Light"
+    page_size = landscape(A4)
+    doc = SimpleDocTemplate(
+        str(output_path),
+        pagesize=page_size,
+        rightMargin=1.0 * cm,
+        leftMargin=1.0 * cm,
+        topMargin=1.0 * cm,
+        bottomMargin=1.0 * cm,
+        title="APTHunter 仿冒域名检测总览报告",
+        author="APTHunter",
+    )
+
+    sample_styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "ChineseTitle",
+        parent=sample_styles["Title"],
+        fontName=font_name,
+        fontSize=20,
+        leading=26,
+        alignment=TA_CENTER,
+        spaceAfter=10,
+        textColor=colors.HexColor("#0F172A"),
+    )
+    subtitle_style = ParagraphStyle(
+        "ChineseSubtitle",
+        parent=sample_styles["Normal"],
+        fontName=font_name,
+        fontSize=10,
+        leading=14,
+        alignment=TA_CENTER,
+        textColor=colors.HexColor("#475569"),
+        spaceAfter=14,
+    )
+    heading_style = ParagraphStyle(
+        "ChineseHeading",
+        parent=sample_styles["Heading2"],
+        fontName=font_name,
+        fontSize=13,
+        leading=17,
+        spaceBefore=10,
+        spaceAfter=6,
+        keepWithNext=True,
+        textColor=colors.HexColor("#1E3A8A"),
+    )
+    subheading_style = ParagraphStyle(
+        "ChineseSubHeading",
+        parent=sample_styles["Heading3"],
+        fontName=font_name,
+        fontSize=10.5,
+        leading=14,
+        spaceBefore=6,
+        spaceAfter=4,
+        keepWithNext=False,
+        textColor=colors.HexColor("#334155"),
+    )
+    body_style = ParagraphStyle(
+        "ChineseBody",
+        parent=sample_styles["Normal"],
+        fontName=font_name,
+        fontSize=9,
+        leading=13,
+        spaceAfter=6,
+        textColor=colors.HexColor("#1F2937"),
+    )
+    cell_style = ParagraphStyle(
+        "ChineseCell",
+        parent=sample_styles["Normal"],
+        fontName=font_name,
+        fontSize=7.2,
+        leading=9,
+        textColor=colors.HexColor("#1F2937"),
+    )
+    header_style = ParagraphStyle(
+        "ChineseHeaderCell",
+        parent=cell_style,
+        fontName=font_name,
+        fontSize=7.4,
+        leading=9,
+        textColor=colors.white,
+        alignment=TA_CENTER,
+    )
+
+    result_df = read_report_csv(summary.get("output", ""))
+    unique_df = read_report_csv(summary.get("unique_output", ""))
+    high_value_review_df = read_report_csv(summary.get("high_value_review_output", ""))
+    formal_df = unique_df if not unique_df.empty else result_df
+
+    def inferred_row_count(path_value: Any) -> int:
+        df = read_report_csv(path_value)
+        return int(len(df)) if not df.empty else 0
+
+    def summary_count(key: str, fallback: int = 0) -> int:
+        try:
+            value = int(float(summary.get(key, 0) or 0))
+        except (TypeError, ValueError):
+            value = 0
+        return value if value > 0 else int(fallback)
+
+    task_date = report_task_date(summary)
+    task_name = report_task_name(summary)
+    input_domain_count = summary_count("input_domain_count", inferred_row_count(summary.get("input", "")))
+    target_count = summary_count(
+        "target_count",
+        inferred_row_count(summary.get("targets", "")) or inferred_row_count("data/interim/target_profiles.csv"),
+    )
+    output_count = summary_count("output_count", len(result_df))
+    unique_candidate_count = summary_count("unique_candidate_count", len(formal_df))
+    high_value_review_count = summary_count("high_value_review_count", len(high_value_review_df))
+    scored_count = summary_count("scored_count", len(result_df))
+    recalled_count = summary_count("recalled_count", scored_count or output_count)
+    high_count = risk_count(formal_df, "high")
+    medium_count = risk_count(formal_df, "medium")
+    low_count = risk_count(formal_df, "low")
+    formal_scores = score_series(formal_df)
+    risk_labels = {"high": "高风险", "medium": "中风险", "low": "低风险", "ignore": "忽略"}
+    risk_actions = {
+        "high": "优先人工复核并进入处置流程",
+        "medium": "结合目标重要性分层复核",
+        "low": "持续观察，必要时补充样本",
+        "ignore": "默认不告警",
+    }
+    category_labels = {
+        "brand_combo": "品牌组合",
+        "prefix_suffix": "前后缀仿冒",
+        "service_entry": "业务入口仿冒",
+        "typo": "拼写错误",
+        "confusable": "视觉混淆",
+        "hyphenation": "连字符变体",
+        "tld_replace": "后缀替换",
+        "subdomain_deception": "子域名欺骗",
+        "pinyin_abbr": "拼音/缩写仿冒",
+        "template_reuse": "历史模板复用",
+        "high_value_generic_impersonation": "高价值泛化仿冒",
+        "other_suspicious": "其他可疑",
+    }
+    category_descriptions = {
+        "brand_combo": "目标品牌词与其他词组合。",
+        "prefix_suffix": "目标词位于前缀或后缀，并拼接诱导词。",
+        "service_entry": "包含 login、auth、mail、vpn、support 等入口词。",
+        "typo": "与目标主体存在少字、多字、换字或相邻字符交换。",
+        "confusable": "存在 0/o、1/l、q/g、punycode 等视觉混淆。",
+        "hyphenation": "通过连字符拆分或拼接目标词。",
+        "tld_replace": "主体相同或相近，但后缀发生变化。",
+        "subdomain_deception": "目标词出现在子域名位置。",
+        "pinyin_abbr": "命中中文单位拼音、首字母或缩写。",
+        "template_reuse": "复用历史高频仿冒模板。",
+        "high_value_generic_impersonation": "包含政府、教育、金融等泛化高价值语义。",
+        "other_suspicious": "存在可疑证据但未归入具体类型。",
+    }
+    tier_labels = {
+        "gov": "政府",
+        "edu": "教育",
+        "finance": "金融",
+        "cloud": "云服务",
+        "ecommerce": "电商",
+        "media": "媒体",
+        "brand": "品牌",
+        "other": "其他",
+    }
+
+    def para(value: Any, style: ParagraphStyle = body_style) -> Paragraph:
+        safe = xml_escape(text(value)).replace("\n", "<br/>")
+        return Paragraph(safe or "-", style)
+
+    def pdf_risk_label(value: Any) -> str:
+        return risk_labels.get(text(value).lower(), text(value) or "-")
+
+    def pdf_category_label(value: Any) -> str:
+        return category_labels.get(text(value), text(value) or "其他可疑")
+
+    def pdf_target_type(row: pd.Series) -> str:
+        tier = text(row.get("target_tier")).lower()
+        if tier:
+            return tier_labels.get(tier, tier)
+        subtype = text(row.get("target_subtype"))
+        if subtype:
+            return subtype
+        return text(row.get("matched_target_type")) or "其他"
+
+    def pdf_evidence(row: pd.Series) -> str:
+        features = text(row.get("matched_features")).lower()
+        recall = text(row.get("recall_reason")).lower()
+        parts: list[str] = []
+        if recall == "risk_word_combo" or "risk_words:" in features:
+            parts.append("风险词组合")
+        elif recall == "spelling_variant_match":
+            parts.append("拼写变体")
+        elif recall == "transposition_match":
+            parts.append("字符交换")
+        elif recall == "confusable_match":
+            parts.append("视觉混淆")
+        elif recall == "tld_replace":
+            parts.append("后缀替换")
+        elif recall == "subdomain_deception":
+            parts.append("子域名欺骗")
+        elif recall == "exact_match" or "contains_target_sld" in features:
+            parts.append("目标词命中")
+        elif recall:
+            parts.append("规则命中")
+        for feature_key, label in [
+            ("suspicious_tld", "可疑后缀"),
+            ("suffix_changed", "后缀变化"),
+            ("hyphenation", "连字符"),
+            ("contains_target_sld_confusable_norm", "混淆归一命中"),
+            ("contains_target_sld", "包含目标主体"),
+            ("strong_rule_fallback", "强规则兜底"),
+        ]:
+            if feature_key in features and label not in parts:
+                parts.append(label)
+        return " / ".join(parts[:4]) or pdf_category_label(row.get("main_category"))
+
+    def pdf_risk_summary_rows(df: pd.DataFrame) -> list[list[str]]:
+        total = len(df)
+        rows: list[list[str]] = []
+        for level in ("high", "medium", "low"):
+            subset = df[df.get("risk_level", pd.Series(dtype=str)).fillna("").astype(str) == level]
+            rows.append(
+                [
+                    pdf_risk_label(level),
+                    fmt_int(len(subset)),
+                    fmt_percent(len(subset), total),
+                    fmt_float(score_series(subset).mean() if not subset.empty else 0.0),
+                    risk_actions[level],
+                ]
+            )
+        return rows
+
+    def pdf_category_summary_rows(df: pd.DataFrame, limit: int = 12) -> list[list[str]]:
+        if df.empty or "main_category" not in df.columns:
+            return []
+        total = len(df)
+        rows: list[list[str]] = []
+        grouped = df.groupby(df["main_category"].fillna("other_suspicious").astype(str), dropna=False)
+        for category, group in sorted(grouped, key=lambda item: len(item[1]), reverse=True)[:limit]:
+            rows.append(
+                [
+                    pdf_category_label(category),
+                    fmt_int(len(group)),
+                    fmt_percent(len(group), total),
+                    fmt_float(score_series(group).mean()),
+                    fmt_int(risk_count(group, "high")),
+                    category_descriptions.get(category, ""),
+                ]
+            )
+        return rows
+
+    def pdf_target_type_summary_rows(df: pd.DataFrame, limit: int = 12) -> list[list[str]]:
+        if df.empty:
+            return []
+        typed = df.copy()
+        typed["_pdf_target_type"] = typed.apply(pdf_target_type, axis=1)
+        total = len(typed)
+        rows: list[list[str]] = []
+        grouped = typed.groupby("_pdf_target_type", dropna=False)
+        for target_type, group in sorted(grouped, key=lambda item: len(item[1]), reverse=True)[:limit]:
+            rows.append(
+                [
+                    text(target_type) or "其他",
+                    fmt_int(len(group)),
+                    fmt_percent(len(group), total),
+                    fmt_float(score_series(group).mean()),
+                    f"{risk_count(group, 'high')}/{risk_count(group, 'medium')}/{risk_count(group, 'low')}",
+                ]
+            )
+        return rows
+
+    def pdf_detail_rows(df: pd.DataFrame, limit: int | None = None) -> list[list[str]]:
+        if df.empty:
+            return []
+        report_df = df.copy()
+        report_df["_score"] = score_series(report_df)
+        report_df = report_df.sort_values("_score", ascending=False)
+        if limit is not None:
+            report_df = report_df.head(limit)
+        rows: list[list[str]] = []
+        for index, (_, row) in enumerate(report_df.iterrows(), start=1):
+            rows.append(
+                [
+                    index,
+                    text(row.get("candidate_domain")) or "-",
+                    text(row.get("matched_target_name")) or text(row.get("matched_target_domain")) or "-",
+                    fmt_float(row.get("final_score")),
+                    pdf_category_label(row.get("main_category")),
+                    pdf_evidence(row),
+                ]
+            )
+        return rows
+
+    def pdf_high_value_rows(review_df: pd.DataFrame, limit: int = 20) -> list[list[str]]:
+        if review_df.empty:
+            return []
+        report_df = review_df.copy()
+        report_df["_review_score"] = pd.to_numeric(
+            report_df.get("high_value_review_score", 0), errors="coerce"
+        ).fillna(0.0)
+        report_df["_score"] = score_series(report_df)
+        report_df = report_df.sort_values(["_review_score", "_score"], ascending=[False, False]).head(limit)
+        rows: list[list[str]] = []
+        for index, (_, row) in enumerate(report_df.iterrows(), start=1):
+            rows.append(
+                [
+                    index,
+                    text(row.get("candidate_domain")) or "-",
+                    text(row.get("matched_target_name")) or "高价值泛化候选",
+                    text(row.get("matched_target_domain")) or "-",
+                    fmt_float(row.get("final_score")),
+                    pdf_risk_label(row.get("risk_level")),
+                    pdf_category_label(row.get("main_category")),
+                ]
+            )
+        return rows
+
+    def pdf_review_suggestion_rows() -> list[list[str]]:
+        return [
+            ["高风险候选", "优先人工复核", "核验目标归属、风险词、后缀变化和是否存在登录/支付/账号诱导。"],
+            ["中风险候选", "分层复核", "优先处理金融、政府、教育、云服务等高价值目标。"],
+            ["低风险候选", "持续观察", "结合重复出现、人工复核和后续样本回灌再升级。"],
+            ["高价值 review 池", "独立抽查", "不等同正式告警，用于发现低分漏报和目标错配。"],
+            ["人工回灌", "闭环优化", "确认正样本写入 review_label=1，确认误报写入 review_label=0。"],
+        ]
+
+    def table(headers: Sequence[Any], rows: Sequence[Sequence[Any]], widths: Sequence[float] | None = None) -> LongTable:
+        data = [[para(header, header_style) for header in headers]]
+        data.extend([[para(item, cell_style) for item in row] for row in rows])
+        col_widths = list(widths) if widths else None
+        result = LongTable(data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+        style_commands = [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1E3A8A")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CBD5E1")),
+            ("BACKGROUND", (0, 1), (-1, -1), colors.white),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]
+        result.setStyle(TableStyle(style_commands))
+        setattr(result, "_apthunter_data", data)
+        setattr(result, "_apthunter_col_widths", col_widths)
+        setattr(result, "_apthunter_style_commands", style_commands)
+        return result
+
+    def stabilize_pdf_story(flowables: Sequence[Any]) -> list[Any]:
+        """Add report pagination hints without coupling to section text."""
+        stabilized: list[Any] = []
+        for flowable in flowables:
+            style_name = getattr(getattr(flowable, "style", None), "name", "")
+            if style_name == "ChineseHeading":
+                stabilized.append(CondPageBreak(1.4 * cm))
+                stabilized.append(flowable)
+                continue
+            if style_name == "ChineseSubHeading":
+                stabilized.append(CondPageBreak(2.2 * cm))
+                stabilized.append(flowable)
+                continue
+            stabilized.append(flowable)
+        return stabilized
+
+    def build_word_like_pdf_story() -> list[Any]:
+        """Build a PDF report with the same chapter logic as the legacy Word report."""
+        category_rows = pdf_category_summary_rows(formal_df)
+        target_type_rows = pdf_target_type_summary_rows(formal_df)
+        top_targets = top_target_rows(formal_df, limit=20)
+
+        category_names = [row[0] for row in category_rows[:4]]
+        category_text = "、".join(category_names) if category_names else "多类型疑似仿冒"
+        target_type_names = [row[0] for row in target_type_rows[:4]]
+        target_type_text = "、".join(target_type_names) if target_type_names else "品牌、金融、云服务等目标"
+
+        category_series = (
+            formal_df["main_category"].fillna("").astype(str)
+            if "main_category" in formal_df.columns
+            else pd.Series(dtype=str)
+        )
+        prefix_count = int((category_series == "prefix_suffix").sum())
+        service_count = int((category_series == "service_entry").sum())
+        typo_count = int((category_series == "typo").sum())
+        confusable_count = int((category_series == "confusable").sum())
+        hyphen_count = int((category_series == "hyphenation").sum())
+        tld_count = int((category_series == "tld_replace").sum())
+
+        high_df = (
+            formal_df[formal_df["risk_level"].fillna("").astype(str) == "high"]
+            if "risk_level" in formal_df.columns
+            else formal_df.iloc[0:0]
+        )
+        high_category_series = (
+            high_df["main_category"].fillna("").astype(str)
+            if "main_category" in high_df.columns
+            else pd.Series(dtype=str)
+        )
+        high_main_text = (
+            "、".join(
+                pdf_category_label(category)
+                for category in high_category_series.value_counts().head(3).index.tolist()
+                if category
+            )
+            or "高风险品牌组合与业务入口仿冒"
+        )
+
+        return [
+            Paragraph("APTHunter 仿冒域名检测总览报告", title_style),
+            Paragraph(f"检测任务：{task_name}　检测日期：{task_date or '-'}", subtitle_style),
+            Paragraph("一、报告基本信息", heading_style),
+            Paragraph(
+                "本报告基于 APTHunter 仿冒域名检测任务结果编制，面向新注册域名，"
+                "识别与受保护单位、品牌、机构官方域名高度相似且具有误导性的疑似仿冒域名。"
+                "报告内容包括总体检测结论、风险等级分布、仿冒类型统计、目标类型分析、重点样本清单及处置建议。",
+                body_style,
+            ),
+            table(
+                ["项目", "内容"],
+                [
+                    ["项目名称", "APTHunter 仿冒域名检测"],
+                    ["报告编号", f"APTHunter-IMD-Summary-{task_date.replace('-', '') or 'unknown'}-001"],
+                    ["检测任务", task_name],
+                    ["检测日期", task_date or "-"],
+                    ["数据来源", f"{task_date or '-'} APTHunter 新注册域名检测任务结果"],
+                    ["模型版本", "2026-06-29 typo word guard retrain"],
+                    ["检测边界", "仅基于域名字符串、目标画像、历史样本、人工复核标签和本地传统机器学习模型。"],
+                ],
+                widths=[4.2 * cm, 21.0 * cm],
+            ),
+            Paragraph("二、总体检测结论", heading_style),
+            Paragraph(
+                (
+                    f"本次检测共处理 {fmt_int(input_domain_count)} 条新注册域名，"
+                    f"基于 {fmt_int(target_count)} 个受保护目标画像进行规则召回，"
+                    f"形成 {fmt_int(recalled_count)} 个候选对并完成模型融合打分。"
+                ),
+                body_style,
+            ),
+            Paragraph(
+                (
+                    f"检测后正式输出疑似仿冒候选对 {fmt_int(output_count)} 条，"
+                    f"按候选域名去重后为 {fmt_int(unique_candidate_count)} 条。"
+                    f"其中高风险 {fmt_int(high_count)} 条、中风险 {fmt_int(medium_count)} 条、低风险 {fmt_int(low_count)} 条。"
+                ),
+                body_style,
+            ),
+            Paragraph(
+                (
+                    f"从类型上看，本轮结果主要集中在 {category_text}；"
+                    f"从被仿冒目标看，主要涉及 {target_type_text}。"
+                    "低风险和高价值 review 池结果主要用于人工抽查与样本回灌，不等同于全部直接告警。"
+                ),
+                body_style,
+            ),
+            Paragraph("三、仿冒域名类型统计", heading_style),
+            Paragraph(
+                "本节按照模型输出的主要仿冒类型进行统计。一个域名可能同时命中多个规则或模型类别，"
+                "表中主要类型用于报告展示，完整多标签结果以 all_categories 字段为准。",
+                body_style,
+            ),
+            table(
+                ["仿冒类型", "数量", "占比", "平均风险分", "高风险数量", "说明"],
+                category_rows,
+                widths=[3.0 * cm, 1.8 * cm, 1.8 * cm, 2.2 * cm, 2.0 * cm, 15.0 * cm],
+            ),
+            Paragraph("四、风险等级分布", heading_style),
+            Paragraph(
+                "风险等级由最终融合分数映射生成：高风险优先处置，中风险结合目标重要性复核，"
+                "低风险用于观察和主动学习。该分级不依赖 WHOIS、DNS、网页内容或外部威胁情报。",
+                body_style,
+            ),
+            table(["风险等级", "数量", "占比", "平均风险分", "建议动作"], pdf_risk_summary_rows(formal_df)),
+            Paragraph("五、被仿冒目标类型分析", heading_style),
+            Paragraph(
+                "本节从被仿冒目标维度观察候选分布，用于判断风险是否集中在金融、政府、教育、云服务等高价值目标，"
+                "并辅助后续制定分层处置策略。",
+                body_style,
+            ),
+            table(
+                ["目标类型", "数量", "占比", "平均风险分", "高/中/低风险"],
+                target_type_rows,
+            ),
+            Paragraph("5.1 匹配目标分布（Top 20）", subheading_style),
+            table(
+                ["目标名称", "目标域名", "目标类型", "数量", "平均风险分", "高/中/低风险"],
+                top_targets,
+                widths=[5.0 * cm, 5.0 * cm, 2.6 * cm, 1.8 * cm, 2.2 * cm, 2.4 * cm],
+            ),
+            Paragraph("5.2 高价值目标观察", subheading_style),
+            Paragraph(
+                (
+                    f"本轮高价值目标人工 review 池共包含 {fmt_int(high_value_review_count)} 条候选。"
+                    "该池主要用于发现低分漏报、目标错配和高价值泛化仿冒，不作为正式告警直接下发。"
+                ),
+                body_style,
+            ),
+            Paragraph("六、各类疑似仿冒域名分析", heading_style),
+            Paragraph("6.1 前后缀与业务入口仿冒", subheading_style),
+            Paragraph(
+                (
+                    f"前后缀仿冒和业务入口仿冒分别检出 {fmt_int(prefix_count)} 条、"
+                    f"{fmt_int(service_count)} 条。这类样本通常在目标主体前后拼接 login、auth、support、account、mail、vpn 等诱导词，"
+                    "容易被误认为官方登录、客服、账号或运维入口。"
+                ),
+                body_style,
+            ),
+            Paragraph("6.2 拼写错误与视觉混淆", subheading_style),
+            Paragraph(
+                (
+                    f"拼写错误与视觉混淆分别检出 {fmt_int(typo_count)} 条、{fmt_int(confusable_count)} 条。"
+                    "系统会结合编辑距离、相邻字符交换、重复字符、视觉混淆字符和字符 n-gram 模型识别该类样本。"
+                    "对 tiger、cloud、chain 等泛词驱动的拼写相似误报，已通过可配置 token policy 和规则阻断进行压制。"
+                ),
+                body_style,
+            ),
+            Paragraph("6.3 后缀替换与结构欺骗", subheading_style),
+            Paragraph(
+                (
+                    f"后缀替换和连字符变体分别检出 {fmt_int(tld_count)} 条、{fmt_int(hyphen_count)} 条。"
+                    "该类样本常见于主体相同或高度相似但顶级域变化、使用可疑 TLD、或通过连字符拆分目标主体的场景。"
+                ),
+                body_style,
+            ),
+            Paragraph("6.4 高风险类别集中性", subheading_style),
+            Paragraph(
+                (
+                    f"高风险样本主要集中在 {high_main_text}。这些样本通常同时满足目标词命中、诱导词组合、"
+                    "可疑后缀、视觉混淆或强规则兜底等多项证据，因此进入优先复核和处置队列。"
+                ),
+                body_style,
+            ),
+            Paragraph("七、重点疑似仿冒域名清单", heading_style),
+            Paragraph("7.1 正式疑似仿冒域名全量清单", subheading_style),
+            Paragraph(
+                "下表列出本次正式输出的疑似仿冒域名清单。为控制版面，主要依据字段进行了摘要化展示；"
+                "更完整的命中特征与模型分数可在 CSV 结果文件中查看。",
+                body_style,
+            ),
+            table(
+                ["序号", "候选域名", "匹配目标", "最终分", "主要类型", "主要依据"],
+                pdf_detail_rows(formal_df, limit=None),
+                widths=[1.1 * cm, 5.4 * cm, 5.2 * cm, 1.7 * cm, 3.0 * cm, 9.8 * cm],
+            ),
+            Paragraph("7.2 高价值目标候选人工复核池（Top 20）", subheading_style),
+            Paragraph(
+                "下表展示高价值目标人工复核池中的 Top 20 候选。该列表用于发现潜在漏报和目标错配，"
+                "其中样本需经人工确认后再回灌训练集。",
+                body_style,
+            ),
+            table(
+                ["序号", "候选域名", "目标名称", "目标域名", "最终分", "风险", "类型"],
+                pdf_high_value_rows(high_value_review_df, limit=20),
+                widths=[1.1 * cm, 5.0 * cm, 5.0 * cm, 4.4 * cm, 1.6 * cm, 1.4 * cm, 4.0 * cm],
+            ),
+            Paragraph("7.3 中低风险候选处置原则", subheading_style),
+            Paragraph("中风险候选建议结合目标类型、命中特征和历史复核结果进行人工确认。", body_style),
+            Paragraph("低风险候选默认不直接告警，可纳入主动学习抽样或持续观察。", body_style),
+            Paragraph("高价值目标相关低分样本应保留在 review 通道中，避免因阈值过高造成漏报。", body_style),
+            Paragraph("八、检测证据说明与报告边界", heading_style),
+            Paragraph(
+                "本报告的检测证据来自域名字符串、官方目标画像、规则召回、传统机器学习模型分数和历史人工复核样本。"
+                "报告不会编造 DNS、WHOIS、证书、网页内容或外部情报结论。",
+                body_style,
+            ),
+            Paragraph("8.1 报告边界", subheading_style),
+            Paragraph("本报告仅用于仿冒域名风险研判和人工复核辅助，不代表域名已经实际投递攻击。", body_style),
+            Paragraph("若需进入封禁、通报或执法流程，建议结合访问日志、解析记录、页面内容、证书和业务侧确认进一步核验。", body_style),
+            Paragraph("低分但涉及政府、教育、金融等目标的候选，应优先通过人工 review 池进行抽查。", body_style),
+            Paragraph("九、总体处置建议", heading_style),
+            Paragraph(
+                "建议优先复核高风险候选；对高价值目标的中低风险候选进行分层抽查；"
+                "对确认误报和确认仿冒样本持续写入人工复核标签，用于压制泛词误报并增强高价值目标召回能力。",
+                body_style,
+            ),
+            table(["对象", "动作", "说明"], pdf_review_suggestion_rows()),
+            Paragraph("十、报告结论", heading_style),
+            Paragraph(
+                (
+                    f"本次检测在 {fmt_int(input_domain_count)} 条新注册域名中，"
+                    f"识别出 {fmt_int(unique_candidate_count)} 条去重后的疑似仿冒候选，"
+                    f"其中高风险 {fmt_int(high_count)} 条。整体看，检测结果主要集中在 {category_text}，"
+                    "符合近期仿冒域名以品牌词拼接、业务入口诱导和拼写变体为主的特征。"
+                ),
+                body_style,
+            ),
+            Paragraph(
+                "本轮输出结果建议作为安全运营和人工复核的优先级参考。对高风险候选应尽快确认与处置；"
+                "对中低风险和高价值 review 池候选，应结合业务上下文进行抽查，确认后回灌人工标签。",
+                body_style,
+            ),
+            Paragraph(
+                "后续优化重点仍然是：持续清理泛词目标和官方别名、补充高价值目标真实正样本、"
+                "校准拼写错误类模型阈值，并通过每日人工复核闭环降低误报与漏报。",
+                body_style,
+            ),
+        ]
+
+    story: list[Any] = [
+        Paragraph("APTHunter 仿冒域名检测总览报告", title_style),
+        Paragraph(f"检测任务：{task_name}　检测日期：{task_date or '-'}", subtitle_style),
+        Paragraph("一、任务基本信息", heading_style),
+        table(
+            ["项目", "内容"],
+            [
+                ["项目名称", "APTHunter 仿冒域名检测"],
+                ["报告编号", f"APTHunter-IMD-Summary-{task_date.replace('-', '') or 'unknown'}-001"],
+                ["检测任务", task_name],
+                ["检测日期", task_date or "-"],
+                ["数据来源", f"{task_date or '-'} APTHunter 新注册域名检测任务结果"],
+                ["模型版本", "2026-06-29 typo word guard retrain"],
+                ["输入边界", "仅使用域名字符串、目标画像、历史样本、人工复核标签和本地传统模型"],
+            ],
+            widths=[4.2 * cm, 21.0 * cm],
+        ),
+        Spacer(1, 8),
+        Paragraph("二、执行摘要", heading_style),
+        Paragraph(
+            (
+                f"本次检测共处理 {fmt_int(summary.get('input_domain_count', 0))} 条新注册域名，"
+                f"基于 {fmt_int(summary.get('target_count', 0))} 个受保护目标画像进行规则召回，"
+                f"形成 {fmt_int(summary.get('recalled_count', 0))} 个候选对并完成模型打分。"
+            ),
+            body_style,
+        ),
+        Paragraph(
+            (
+                f"正式候选对 {fmt_int(summary.get('output_count', 0))} 条，"
+                f"按候选域名去重后 {fmt_int(summary.get('unique_candidate_count', 0))} 条；"
+                f"其中高风险 {fmt_int(high_count)} 条，中风险 {fmt_int(medium_count)} 条，低风险 {fmt_int(low_count)} 条。"
+            ),
+            body_style,
+        ),
+        Paragraph("三、关键指标", heading_style),
+        table(
+            ["指标", "数值"],
+            [
+                ["受保护目标数", fmt_int(summary.get("target_count", 0))],
+                ["原始新注册域名数", fmt_int(summary.get("input_domain_count", 0))],
+                ["规则召回候选对", fmt_int(summary.get("recalled_count", 0))],
+                ["模型打分候选对", fmt_int(summary.get("scored_count", 0))],
+                ["正式输出候选对", fmt_int(summary.get("output_count", 0))],
+                ["去重正式候选域名", fmt_int(summary.get("unique_candidate_count", 0))],
+                ["高价值目标人工 review 池", fmt_int(summary.get("high_value_review_count", 0))],
+                ["平均最终风险分", fmt_float(formal_scores.mean() if len(formal_scores) else 0.0)],
+                ["最高最终风险分", fmt_float(formal_scores.max() if len(formal_scores) else 0.0)],
+            ],
+            widths=[7.0 * cm, 5.5 * cm],
+        ),
+        Spacer(1, 6),
+        Paragraph("四、风险等级分布", heading_style),
+        table(["风险等级", "数量", "占比", "平均风险分", "建议动作"], pdf_risk_summary_rows(formal_df)),
+        Paragraph("五、仿冒类型统计", heading_style),
+        table(
+            ["仿冒类型", "数量", "占比", "平均风险分", "高风险数量", "说明"],
+            pdf_category_summary_rows(formal_df),
+            widths=[3.0 * cm, 1.8 * cm, 1.8 * cm, 2.2 * cm, 2.0 * cm, 15.0 * cm],
+        ),
+        Paragraph("六、被仿冒目标类型分析", heading_style),
+        table(
+            ["目标类型", "数量", "占比", "平均风险分", "高/中/低风险"],
+            pdf_target_type_summary_rows(formal_df),
+        ),
+        PageBreak(),
+        Paragraph("七、正式疑似仿冒域名明细（按候选域名去重）", heading_style),
+        table(
+            ["序号", "候选域名", "匹配目标", "最终分", "主要类型", "主要依据"],
+            pdf_detail_rows(formal_df, limit=None),
+            widths=[1.1 * cm, 5.4 * cm, 5.2 * cm, 1.7 * cm, 3.0 * cm, 9.8 * cm],
+        ),
+        PageBreak(),
+        Paragraph("八、高价值目标人工 review 池（Top 20）", heading_style),
+        Paragraph(
+            "该部分包含部分未达到正式告警阈值但涉及政府、教育、金融、云服务等目标的候选，仅用于人工抽查，不等同于正式告警。",
+            body_style,
+        ),
+        table(
+            ["序号", "候选域名", "目标名称", "目标域名", "最终分", "风险", "类型"],
+            pdf_high_value_rows(high_value_review_df, limit=20),
+            widths=[1.1 * cm, 5.0 * cm, 5.0 * cm, 4.4 * cm, 1.6 * cm, 1.4 * cm, 4.0 * cm],
+        ),
+        Paragraph("九、复核建议", heading_style),
+        table(["对象", "动作", "说明"], pdf_review_suggestion_rows()),
+        Paragraph("十、报告结论", heading_style),
+        Paragraph(
+            "本次检测结果建议作为安全运营和人工复核的优先级参考。"
+            "后续应继续通过人工复核标签回灌、泛词误报压制和高价值目标样本补齐来优化检测效果。",
+            body_style,
+        ),
+    ]
+
+    story = build_word_like_pdf_story()
+    doc.build(stabilize_pdf_story(story))
+
+
+def write_pdf_report_with_word_layout(
+    summary: dict[str, Any],
+    output: str | Path,
+    word_output: str | Path | None = None,
+) -> None:
+    """Create the official PDF report directly, with optional DOCX debug output."""
+    output_path = Path(output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    report_summary = {
+        **summary,
+        "pdf_report_output": str(output_path),
+        "word_report_output": str(word_output) if word_output else "",
+    }
+    if word_output:
+        write_prediction_word_report(report_summary, word_output)
+    write_prediction_pdf_report(report_summary, output_path)
 
 def write_prediction_report(summary: dict[str, Any], output: str | Path) -> None:
     output_path = Path(output)

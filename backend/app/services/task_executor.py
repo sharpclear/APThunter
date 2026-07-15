@@ -1334,11 +1334,11 @@ def execute_impersonation_task(task_id: str):
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             bucket=RESULTS_BUCKET,
         )
-        word_report_filename = f"prediction_report_{task_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+        word_report_filename = f"prediction_report_{task_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         word_report_key = _upload_file_content_to_minio(
             word_report_content,
             word_report_filename,
-            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            content_type="application/pdf",
             bucket=RESULTS_BUCKET,
         )
         if extra_data.get("focus_impersonation_detection"):
@@ -1374,6 +1374,10 @@ def execute_impersonation_task(task_id: str):
         extra_data["result_file_key"] = result_key
         extra_data["result_bucket"] = RESULTS_BUCKET
         extra_data["result_filename"] = result_filename
+        extra_data["pdf_report_file_key"] = word_report_key
+        extra_data["pdf_report_bucket"] = RESULTS_BUCKET
+        extra_data["pdf_report_filename"] = word_report_filename
+        # Keep aliases so existing task consumers can still find the report.
         extra_data["word_report_file_key"] = word_report_key
         extra_data["word_report_bucket"] = RESULTS_BUCKET
         extra_data["word_report_filename"] = word_report_filename

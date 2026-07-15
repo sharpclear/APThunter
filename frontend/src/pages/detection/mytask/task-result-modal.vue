@@ -191,6 +191,7 @@ interface ResultData {
   apt_template_nrd_domains?: ResultItem[]
   result_filename: string
   focus_report_filename?: string
+  pdf_report_filename?: string
   word_report_filename?: string
   total_count: number
   malicious_count?: number
@@ -638,7 +639,7 @@ function downloadButtonText() {
   if (resultData.value?.focus_impersonation_detection)
     return '下载PDF报告'
   if (resultData.value?.task_type === 'impersonation')
-    return '下载Word报告'
+    return '下载PDF报告'
   if (['history_similarity', 'apt_template_nrd'].includes(resultData.value?.task_type || ''))
     return '下载PDF报告'
   return '下载Excel'

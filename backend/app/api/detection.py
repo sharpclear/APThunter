@@ -2820,6 +2820,8 @@ async def get_task_result_json(task_id: str, request: Request):
                         "result_filename": extra_data.get("result_filename") or f"{task.task_id}_result.xlsx",
                         "focus_report_file_key": extra_data.get("focus_report_file_key"),
                         "focus_report_filename": extra_data.get("focus_report_filename"),
+                        "pdf_report_file_key": extra_data.get("pdf_report_file_key") or extra_data.get("word_report_file_key"),
+                        "pdf_report_filename": extra_data.get("pdf_report_filename") or extra_data.get("word_report_filename"),
                         "word_report_file_key": extra_data.get("word_report_file_key"),
                         "word_report_filename": extra_data.get("word_report_filename"),
                         "total_count": len(results_list),
@@ -2952,11 +2954,25 @@ async def download_task_result(task_id: str, request: Request):
             )
             response.headers["Content-Disposition"] = f"attachment; filename*=utf-8''{quote(filename)}"
             return response
-        elif task.task_type == "impersonation" and extra_data.get("word_report_file_key"):
-            result_key = extra_data.get("word_report_file_key")
-            result_bucket = extra_data.get("word_report_bucket") or RESULTS_BUCKET
-            filename = extra_data.get("word_report_filename") or f"{task.task_id}_prediction_report.docx"
-            media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        elif task.task_type == "impersonation" and (
+            extra_data.get("pdf_report_file_key") or extra_data.get("word_report_file_key")
+        ):
+            result_key = extra_data.get("pdf_report_file_key") or extra_data.get("word_report_file_key")
+            result_bucket = (
+                extra_data.get("pdf_report_bucket")
+                or extra_data.get("word_report_bucket")
+                or RESULTS_BUCKET
+            )
+            filename = (
+                extra_data.get("pdf_report_filename")
+                or extra_data.get("word_report_filename")
+                or f"{task.task_id}_prediction_report.pdf"
+            )
+            media_type = (
+                "application/pdf"
+                if str(filename).lower().endswith(".pdf")
+                else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
             is_report_download = True
         result_content_type = extra_data.get("result_content_type") or (
             "application/pdf" if str(filename).lower().endswith(".pdf") else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

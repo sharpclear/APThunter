@@ -53,7 +53,7 @@ def resolve_official_domains(query_name: str) -> List[dict[str, Any]]:
 
     api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
     if not api_key:
-        raise OfficialDomainResolverConfigError("未配置 DEEPSEEK_API_KEY，无法通过 DeepSeek 解析官方域名")
+        raise OfficialDomainResolverConfigError("官方域名检索服务未配置，无法检索官方域名")
 
     max_domains = _env_int("OFFICIAL_DOMAIN_RESOLVER_MAX_DOMAINS", DEFAULT_MAX_DOMAINS)
     max_domains = max(1, min(max_domains, 30))
@@ -77,10 +77,10 @@ def resolve_official_domains(query_name: str) -> List[dict[str, Any]]:
         content = str(response_json["choices"][0]["message"]["content"])
         parsed = _parse_json_object(content)
     except Exception as exc:
-        raise OfficialDomainResolutionError(f"DeepSeek 官方域名解析响应格式无效：{exc}") from exc
+        raise OfficialDomainResolutionError(f"官方域名检索响应格式无效：{exc}") from exc
     results = parsed.get("results") or []
     if not isinstance(results, list):
-        raise OfficialDomainResolutionError("DeepSeek 官方域名解析结果格式无效：results 不是数组")
+        raise OfficialDomainResolutionError("官方域名检索结果格式无效：results 不是数组")
     return _normalize_results(results, query, max_domains)
 
 
@@ -108,18 +108,18 @@ def _post_deepseek(payload: dict[str, Any], headers: dict[str, str]) -> dict[str
             response = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds)
             if response.status_code >= 400:
                 raise OfficialDomainResolutionError(
-                    f"DeepSeek API HTTP {response.status_code}: {response.text[:500]}"
+                    f"官方域名检索接口暂时不可用（HTTP {response.status_code}）"
                 )
             data = response.json()
             if not isinstance(data, dict):
-                raise OfficialDomainResolutionError("DeepSeek API 响应不是 JSON 对象")
+                raise OfficialDomainResolutionError("官方域名检索接口响应不是 JSON 对象")
             return data
         except Exception as exc:
             last_error = exc
             if attempt < max_retries:
                 time.sleep(retry_sleep_seconds)
 
-    raise OfficialDomainResolutionError(f"DeepSeek 官方域名解析失败：{last_error}") from last_error
+    raise OfficialDomainResolutionError("官方域名检索失败，请稍后重试") from last_error
 
 
 def _parse_json_object(text: str) -> dict[str, Any]:
@@ -136,7 +136,7 @@ def _parse_json_object(text: str) -> dict[str, Any]:
             raise
         parsed = json.loads(cleaned[start : end + 1])
     if not isinstance(parsed, dict):
-        raise OfficialDomainResolutionError("DeepSeek 官方域名解析结果不是 JSON 对象")
+        raise OfficialDomainResolutionError("官方域名检索结果不是 JSON 对象")
     return parsed
 
 
@@ -180,7 +180,6 @@ def _normalize_results(results: list[Any], query: str, max_domains: int) -> List
                 "单位名称": organization or query,
                 "官方域名": domain,
                 "confidence": round(confidence, 4),
-                "source": "deepseek",
                 "reason": reason[:80],
             }
         )

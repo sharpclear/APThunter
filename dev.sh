@@ -126,6 +126,30 @@ check_basic_commands() {
     command -v redis-cli >/dev/null 2>&1 || die "redis-cli is not installed or not in PATH"
 }
 
+port_available() {
+    "$BACKEND_VENV_DIR/bin/python" - "$1" <<'PY'
+import socket
+import sys
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        sock.bind(("0.0.0.0", int(sys.argv[1])))
+    except OSError:
+        raise SystemExit(1)
+PY
+}
+
+check_service_ports() {
+    [[ "$BACKEND_PORT" != "$FRONTEND_PORT" ]] \
+        || die "BACKEND_PORT and FRONTEND_PORT cannot both use port $BACKEND_PORT"
+
+    port_available "$BACKEND_PORT" \
+        || die "FastAPI port $BACKEND_PORT is already in use; stop the existing process or set BACKEND_PORT"
+    port_available "$FRONTEND_PORT" \
+        || die "Frontend port $FRONTEND_PORT is already in use; stop the existing process or set FRONTEND_PORT"
+}
+
 redis_ready() {
     redis-cli -u "$REDIS_URL" ping >/dev/null 2>&1 || redis-cli ping >/dev/null 2>&1
 }
@@ -224,6 +248,7 @@ main() {
     init_env
     repair_venv_paths
     check_basic_commands
+    check_service_ports
     ensure_redis
 
     log "starting APTHunter local development services"

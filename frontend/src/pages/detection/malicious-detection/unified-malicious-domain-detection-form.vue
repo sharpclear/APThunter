@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { LoadingOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useAuthorization } from '~/composables/authorization'
 import { useUserId } from '~/composables/user-id'
 import { getApiBase } from '~/utils/api-public'
@@ -22,8 +23,15 @@ interface UnifiedResultItem {
 }
 
 interface UnifiedPreviewResult {
+  ok?: boolean
   task_id: string
   task_type: string
+  status?: string
+  rawStatus?: string
+  message?: string
+  error?: string
+  progress?: number
+  progress_stage?: string
   statistics: Record<string, string | number>
   malicious_count?: number
   normal_count?: number
@@ -40,15 +48,28 @@ interface UnifiedPreviewResult {
   }
 }
 
+interface PersistedDirectTask {
+  taskId: string
+  manualDomains: string
+}
+
 const API_BASE = getApiBase()
 const userId = useUserId()
 const token = useAuthorization()
+const DIRECT_TASK_STORAGE_PREFIX = 'apthunter:unified-malicious-direct-task'
 
 const dataSource = ref<DataSource>('manualInput')
 const submitLoading = ref(false)
 const manualDomains = ref('')
 const uploadFile = ref<File | null>(null)
 const previewResult = ref<UnifiedPreviewResult | null>(null)
+const directTaskId = ref('')
+const directTaskStatus = ref('')
+const directTaskProgress = ref(0)
+const directTaskStage = ref('')
+const directTaskError = ref('')
+let directTaskPollTimer: number | null = null
+let componentUnmounted = false
 
 const MIN_START_DATE = dayjs('2024-09-01')
 const dateRange = ref<[string, string] | null>(null)
@@ -85,6 +106,22 @@ const labelCountEntries = computed(() => {
   return Object.entries(counts).filter(([, count]) => Number(count) > 0)
 })
 
+const directTaskStorageKey = computed(() =>
+  `${DIRECT_TASK_STORAGE_PREFIX}:${userId.value || 'anonymous'}`,
+)
+const isManualDetecting = computed(() =>
+  ['submitting', 'pending', 'processing'].includes(directTaskStatus.value),
+)
+const directTaskStatusText = computed(() => {
+  if (directTaskStage.value)
+    return directTaskStage.value
+  if (directTaskStatus.value === 'submitting')
+    return '正在提交检测任务'
+  if (directTaskStatus.value === 'pending')
+    return '任务等待执行中'
+  return '正在执行恶意域名检测'
+})
+
 function buildHeaders(extra: Record<string, string> = {}) {
   const headers: Record<string, string> = { ...extra }
   if (userId.value)
@@ -92,6 +129,116 @@ function buildHeaders(extra: Record<string, string> = {}) {
   if (token.value)
     headers.Authorization = `Bearer ${token.value}`
   return headers
+}
+
+function persistDirectTask(taskId: string, domains: string) {
+  try {
+    const state: PersistedDirectTask = {
+      taskId,
+      manualDomains: domains,
+    }
+    localStorage.setItem(directTaskStorageKey.value, JSON.stringify(state))
+  }
+  catch {}
+}
+
+function removePersistedDirectTask() {
+  try {
+    localStorage.removeItem(directTaskStorageKey.value)
+  }
+  catch {}
+}
+
+function clearDirectTaskPoll() {
+  if (directTaskPollTimer) {
+    window.clearTimeout(directTaskPollTimer)
+    directTaskPollTimer = null
+  }
+}
+
+function scheduleDirectTaskPoll(taskId: string, delay = 2000) {
+  clearDirectTaskPoll()
+  if (componentUnmounted)
+    return
+  directTaskPollTimer = window.setTimeout(() => {
+    void fetchDirectTaskResult(taskId)
+  }, delay)
+}
+
+async function fetchDirectTaskResult(taskId = directTaskId.value) {
+  if (!taskId || directTaskId.value !== taskId)
+    return
+
+  let retryable = true
+  try {
+    const resp = await fetch(`${API_BASE}/tasks/${taskId}/result`, {
+      method: 'GET',
+      headers: buildHeaders(),
+    })
+    const json = await resp.json().catch(() => null)
+    if (!resp.ok) {
+      retryable = resp.status >= 500
+      throw new Error(json?.detail || json?.message || `HTTP ${resp.status}`)
+    }
+    if (directTaskId.value !== taskId)
+      return
+
+    if (json?.ok && json?.task_id) {
+      clearDirectTaskPoll()
+      previewResult.value = json as UnifiedPreviewResult
+      directTaskStatus.value = 'completed'
+      directTaskProgress.value = 100
+      directTaskStage.value = '检测完成'
+      directTaskError.value = ''
+      return
+    }
+
+    directTaskStatus.value = json?.status || json?.rawStatus || 'processing'
+    const progress = Number(json?.progress)
+    directTaskProgress.value = Number.isFinite(progress) ? Math.max(0, Math.min(100, progress)) : 0
+    directTaskStage.value = json?.progress_stage || json?.message || ''
+    directTaskError.value = ''
+
+    if (directTaskStatus.value === 'failed' || directTaskStatus.value === 'completed') {
+      clearDirectTaskPoll()
+      directTaskError.value = json?.error || json?.message || '任务结果不可用'
+      return
+    }
+    scheduleDirectTaskPoll(taskId)
+  }
+  catch (e: any) {
+    if (directTaskId.value !== taskId)
+      return
+    directTaskError.value = e?.message || '获取检测进度失败'
+    if (retryable && isManualDetecting.value) {
+      scheduleDirectTaskPoll(taskId, 3000)
+    }
+    else {
+      clearDirectTaskPoll()
+      directTaskStatus.value = 'failed'
+    }
+  }
+}
+
+function restoreDirectTask() {
+  try {
+    const raw = localStorage.getItem(directTaskStorageKey.value)
+    if (!raw)
+      return
+    const state = JSON.parse(raw) as PersistedDirectTask
+    if (!state.taskId)
+      return
+    directTaskId.value = state.taskId
+    manualDomains.value = state.manualDomains || ''
+    dataSource.value = 'manualInput'
+    directTaskStatus.value = 'pending'
+    directTaskStage.value = '正在恢复检测进度'
+    directTaskError.value = ''
+    void fetchDirectTaskResult(state.taskId)
+  }
+  catch {
+    removePersistedDirectTask()
+  }
 }
 
 function disabledNewDomainDate(current: dayjs.Dayjs) {
@@ -162,7 +309,6 @@ async function ensureNewDomainDataAvailable(range: [string, string]) {
 
 function setDataSource(source: DataSource) {
   dataSource.value = source
-  previewResult.value = null
 }
 
 function beforeUpload(file: File) {
@@ -189,15 +335,26 @@ function handleUpload(info: any) {
 }
 
 async function handleManualPreview() {
+  if (isManualDetecting.value)
+    return message.info('当前直接检测任务尚未完成')
   if (manualDomainItems.value.length === 0)
     return message.warning('请输入待检测域名或URL')
 
+  const submittedDomains = manualDomains.value
+  clearDirectTaskPoll()
+  removePersistedDirectTask()
   submitLoading.value = true
   previewResult.value = null
+  directTaskId.value = ''
+  directTaskStatus.value = 'submitting'
+  directTaskProgress.value = 0
+  directTaskStage.value = '正在提交检测任务'
+  directTaskError.value = ''
   try {
     const fd = new FormData()
+    fd.append('dataSource', 'manualInput')
     fd.append('manualDomains', manualDomains.value)
-    const resp = await fetch(`${API_BASE}/unified-malicious-domain-detection/preview`, {
+    const resp = await fetch(`${API_BASE}/unified-malicious-domain-tasks`, {
       method: 'POST',
       body: fd,
       headers: buildHeaders(),
@@ -205,12 +362,21 @@ async function handleManualPreview() {
     const json = await resp.json().catch(() => null)
     if (!resp.ok)
       throw new Error(json?.detail || json?.message || '检测失败')
-    previewResult.value = json
+
+    directTaskId.value = json.task_id || ''
+    directTaskStatus.value = json.status || 'pending'
+    directTaskStage.value = '任务已提交，等待执行'
     dataSource.value = 'manualInput'
-    message.success('恶意域名检测完成')
+    persistDirectTask(directTaskId.value, submittedDomains)
+    message.success('恶意域名检测任务已提交')
+    if (!componentUnmounted)
+      void fetchDirectTaskResult(directTaskId.value)
   }
   catch (e: any) {
-    message.error(`检测失败：${e?.message || '未知错误'}`)
+    directTaskStatus.value = 'failed'
+    directTaskStage.value = ''
+    directTaskError.value = e?.message || '未知错误'
+    message.error(`检测提交失败：${directTaskError.value}`)
   }
   finally {
     submitLoading.value = false
@@ -257,7 +423,7 @@ async function handleAsyncSubmit() {
       throw new Error(json?.detail || json?.message || '提交失败')
 
     message.success(`恶意域名检测任务已提交，可在“我的任务”查看结果。task: ${json.task_id || ''}`)
-    resetForm(false)
+    resetForm()
   }
   catch (e: any) {
     message.error(`提交失败：${e?.message || '未知错误'}`)
@@ -273,14 +439,22 @@ function handleSubmit() {
   return handleAsyncSubmit()
 }
 
-function resetForm(clearPreview = true) {
+function resetForm() {
   dataSource.value = 'manualInput'
   uploadFile.value = null
   dateRange.value = null
   manualDomains.value = ''
-  if (clearPreview)
-    previewResult.value = null
 }
+
+onMounted(() => {
+  componentUnmounted = false
+  restoreDirectTask()
+})
+
+onBeforeUnmount(() => {
+  componentUnmounted = true
+  clearDirectTaskPoll()
+})
 </script>
 
 <template>
@@ -316,7 +490,7 @@ function resetForm(clearPreview = true) {
                   class="manual-search"
                   placeholder="手动输入域名，多个域名可用空格、逗号或换行分隔"
                   enter-button="直接检测"
-                  :loading="submitLoading && dataSource === 'manualInput'"
+                  :loading="isManualDetecting"
                   @focus="setDataSource('manualInput')"
                   @search="handleManualPreview"
                 />
@@ -364,7 +538,12 @@ function resetForm(clearPreview = true) {
             </div>
 
             <div class="action-footer">
-              <a-button type="primary" :loading="submitLoading" class="submit-btn" @click="handleSubmit">
+              <a-button
+                type="primary"
+                :loading="dataSource === 'manualInput' ? isManualDetecting : submitLoading"
+                class="submit-btn"
+                @click="handleSubmit"
+              >
                 {{ dataSource === 'manualInput' ? '直接检测并查看结果' : '提交任务' }}
               </a-button>
               <a-button
@@ -389,7 +568,14 @@ function resetForm(clearPreview = true) {
                 手动输入域名检测结果，仅展示统一判定和多标签命中信息。
               </div>
             </div>
-            <a-button v-if="previewResult" @click="previewResult = null">清空结果</a-button>
+            <div class="result-actions">
+              <div v-if="isManualDetecting" class="detecting-status">
+                <LoadingOutlined spin />
+                <span>检测中</span>
+              </div>
+              <a-tag v-else-if="directTaskStatus === 'completed'" color="green">检测完成</a-tag>
+              <a-tag v-else-if="directTaskStatus === 'failed'" color="red">检测失败</a-tag>
+            </div>
           </div>
 
           <a-row :gutter="[12, 12]" class="stat-row">
@@ -414,7 +600,22 @@ function resetForm(clearPreview = true) {
           </div>
 
           <div class="report-block">
-            <template v-if="previewResult && maliciousRows.length > 0">
+            <div v-if="isManualDetecting" class="detecting-placeholder">
+              <LoadingOutlined class="detecting-icon" spin />
+              <div class="detecting-title">{{ directTaskStatusText }}</div>
+              <a-progress
+                class="detecting-progress"
+                :percent="directTaskProgress"
+                :show-info="directTaskProgress > 0"
+              />
+            </div>
+            <a-alert
+              v-else-if="directTaskError"
+              type="error"
+              show-icon
+              :message="directTaskError"
+            />
+            <template v-else-if="previewResult && maliciousRows.length > 0">
               <div v-for="(item, index) in maliciousRows.slice(0, 50)" :key="item.域名" class="report-item">
                 <div class="domain-line">{{ index + 1 }}. {{ item.域名 }}</div>
                 <div class="tag-line">
@@ -466,6 +667,18 @@ function resetForm(clearPreview = true) {
   display: flex;
   justify-content: space-between;
   gap: 16px;
+}
+
+.result-actions,
+.detecting-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detecting-status {
+  color: #1677ff;
+  white-space: nowrap;
 }
 
 .card-title {
@@ -606,6 +819,33 @@ function resetForm(clearPreview = true) {
   margin-top: 16px;
 }
 
+.detecting-placeholder {
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #667085;
+}
+
+.detecting-icon {
+  margin-bottom: 12px;
+  color: #1677ff;
+  font-size: 32px;
+}
+
+.detecting-title {
+  color: #1f2937;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.detecting-progress {
+  width: min(320px, 100%);
+  margin-top: 16px;
+}
+
 .report-item {
   padding: 12px 0;
   border-bottom: 1px solid #e5e7eb;
@@ -633,6 +873,10 @@ function resetForm(clearPreview = true) {
 @media (max-width: 768px) {
   .source-toolbar {
     align-items: stretch;
+    flex-direction: column;
+  }
+
+  .result-header {
     flex-direction: column;
   }
 

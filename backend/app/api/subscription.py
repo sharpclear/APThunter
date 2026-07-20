@@ -534,7 +534,7 @@ def _task_type_to_subscription_type(task_type: Optional[str]) -> str:
 def _extract_impersonation_alert_items(rows) -> List[dict]:
     """
     从仿冒检测结果 DataFrame 提取飞书/邮件附件预警明细。
-    兼容列：仿冒域名、钓鱼域名、官方域名/目标域名、公司名称、单位类型、相似度、匹配类型、风险等级、最终风险分、命中原因、LLM研判标签、LLM研判分数、研判原因、LLM处置结果。
+    兼容列：仿冒域名、钓鱼域名、官方域名/目标域名、公司名称、单位类型、相似度、匹配类型、风险等级、最终风险分、命中原因、研判原因、处置结果。
     """
     keep_dispositions = {"保留人工复核", "保留高危告警"}
     items: List[dict] = []
@@ -732,7 +732,7 @@ def _build_alert_attachment_excel(
 
     rows = []
     if task_type == "impersonation":
-        columns = ["疑似仿冒域名", "目标域名", "单位名称", "单位类型", "风险等级", "最终风险分", "LLM研判标签", "LLM研判分数", "研判原因", "LLM处置结果", "命中原因"]
+        columns = ["疑似仿冒域名", "目标域名", "单位名称", "单位类型", "风险等级", "最终风险分", "研判原因", "命中原因"]
         if phishing_alert_items:
             for item in phishing_alert_items:
                 rows.append(
@@ -743,10 +743,7 @@ def _build_alert_attachment_excel(
                         "单位类型": item.get("official_unit_type", ""),
                         "风险等级": item.get("risk_level", ""),
                         "最终风险分": item.get("final_risk_score", ""),
-                        "LLM研判标签": item.get("llm_label", ""),
-                        "LLM研判分数": item.get("llm_score", ""),
                         "研判原因": item.get("llm_reason", ""),
-                        "LLM处置结果": item.get("llm_disposition", ""),
                         "命中原因": item.get("hit_reason", ""),
                     }
                 )

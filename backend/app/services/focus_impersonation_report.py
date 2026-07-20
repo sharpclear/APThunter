@@ -107,13 +107,11 @@ def normalize_official_domain_rows(official_domains: Any) -> list[dict[str, Any]
         company = ""
         domain = ""
         confidence: Any = ""
-        source = ""
         reason = ""
         if isinstance(item, dict):
             company = item.get("单位名称") or item.get("公司名称") or item.get("organization") or item.get("company") or ""
             domain = item.get("官方域名") or item.get("域名") or item.get("domain") or item.get("target_domain") or ""
             confidence = item.get("confidence") if item.get("confidence") is not None else item.get("置信度", "")
-            source = item.get("source") or item.get("来源") or ""
             reason = item.get("reason") or item.get("说明") or item.get("evidence") or ""
         elif isinstance(item, (list, tuple)):
             if len(item) >= 2:
@@ -131,7 +129,6 @@ def normalize_official_domain_rows(official_domains: Any) -> list[dict[str, Any]
             "单位名称": _cell_text(company),
             "官方域名": domain,
             "置信度": confidence,
-            "来源": _cell_text(source),
             "说明": _cell_text(reason),
         })
     return _json_safe_value(rows)

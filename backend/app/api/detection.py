@@ -376,13 +376,11 @@ def _normalize_official_domain_rows(official_domains) -> list:
         company = ""
         domain = ""
         confidence = ""
-        source = ""
         reason = ""
         if isinstance(item, dict):
             company = item.get("单位名称") or item.get("公司名称") or item.get("company") or item.get("organization") or ""
             domain = item.get("官方域名") or item.get("域名") or item.get("domain") or item.get("目标域名") or item.get("target_domain") or ""
             confidence = item.get("confidence") if item.get("confidence") is not None else ""
-            source = item.get("source") or ""
             reason = item.get("reason") or item.get("evidence") or ""
         elif isinstance(item, (list, tuple)):
             if len(item) >= 2:
@@ -399,7 +397,6 @@ def _normalize_official_domain_rows(official_domains) -> list:
             "单位名称": str(company or "").strip(),
             "官方域名": domain,
             "置信度": confidence,
-            "来源": source,
             "说明": str(reason or "").strip(),
         })
     return rows
@@ -413,7 +410,7 @@ def _replace_impersonation_official_sheet(file_bytes: bytes, official_domain_row
     output = io.BytesIO()
     official_df = pd.DataFrame(
         official_domain_rows,
-        columns=["单位名称", "官方域名", "置信度", "来源", "说明"],
+        columns=["单位名称", "官方域名", "置信度", "说明"],
     )
     official_written = False
     kept_count = 0
@@ -423,6 +420,7 @@ def _replace_impersonation_official_sheet(file_bytes: bytes, official_domain_row
                 continue
             excel_input.seek(0)
             sheet_df = pd.read_excel(excel_input, sheet_name=sheet_name)
+            sheet_df = _drop_public_hidden_columns(sheet_df)
             sheet_df.to_excel(writer, sheet_name=sheet_name, index=False)
             kept_count += 1
             if kept_count == 2:
@@ -450,10 +448,29 @@ def _dedupe_history_similarity_sheet(file_bytes: bytes) -> bytes:
     return output.getvalue()
 
 
+def _sanitize_public_status_text(value):
+    if value is None:
+        return None
+    text = str(value)
+    replacements = {
+        "deepseek-v4-flash": "official-domain-resolver",
+        "DeepSeek": "官方域名检索服务",
+        "deepseek": "official-domain-resolver",
+        "DEEPSEEK_API_KEY": "官方域名检索服务配置",
+    }
+    for raw, replacement in replacements.items():
+        text = text.replace(raw, replacement)
+    return text
+
+
 def _task_result_status_payload(task: Task, extra_data: dict) -> dict:
     """pending / processing / failed，或 completed 但缺少结果文件时的统一 JSON 结构。"""
     raw = task.status
     err = extra_data.get("error")
+    raw_progress = extra_data.get("progress")
+    progress = int(raw_progress) if isinstance(raw_progress, (int, float)) else 0
+    progress = max(0, min(100, progress))
+    progress_stage = _sanitize_public_status_text(extra_data.get("progress_stage"))
     if raw == "pending":
         msg = "任务等待执行中"
         err_out = None
@@ -461,16 +478,16 @@ def _task_result_status_payload(task: Task, extra_data: dict) -> dict:
         msg = "任务正在执行中，请稍后重试"
         err_out = None
     elif raw == "failed":
-        err_out = err if err is not None else None
+        err_out = _sanitize_public_status_text(err) if err is not None else None
         msg = str(err_out) if err_out else "任务执行失败"
     elif raw == "completed":
-        err_out = err if err is not None else None
+        err_out = _sanitize_public_status_text(err) if err is not None else None
         msg = "任务已完成，但结果文件不可用或尚未写入"
     else:
         err_out = None
         msg = f"未知任务状态: {raw}"
 
-    return {
+    payload = {
         "ok": False,
         "task_id": task.task_id,
         "task_type": task.task_type,
@@ -479,13 +496,67 @@ def _task_result_status_payload(task: Task, extra_data: dict) -> dict:
         "message": msg,
         "result": None,
         "error": err_out,
+        "progress": progress,
+        "progress_stage": progress_stage,
     }
+    if task.task_type == "impersonation" and extra_data.get("focus_impersonation_detection"):
+        official_domains = _normalize_official_domain_rows(extra_data.get("official_domains") or [])
+        payload["focus_impersonation_detection"] = True
+        payload["focus_query_name"] = extra_data.get("focus_query_name") or extra_data.get("queryName")
+        payload["official_domains"] = official_domains
+        payload["official_domain_count"] = len(official_domains)
+    return payload
+
+
+_PUBLIC_IMPERSONATION_HIDDEN_KEYS = {
+    "来源",
+    "source",
+    "official_source",
+    "official_domain_source",
+    "LLM研判标签",
+    "LLM研判分数",
+    "LLM处置结果",
+    "LLM处置建议",
+    "LLM研判模型",
+    "LLM研判状态",
+    "LLM已研判数",
+    "llm_label",
+    "llm_score",
+    "llm_disposition",
+    "llm_key_features",
+    "llm_reason",
+}
+
+
+def _sanitize_public_impersonation_item(item: dict) -> dict:
+    return {
+        key: value
+        for key, value in dict(item or {}).items()
+        if key not in _PUBLIC_IMPERSONATION_HIDDEN_KEYS
+    }
+
+
+def _sanitize_public_impersonation_statistics(statistics: dict) -> dict:
+    return {
+        key: value
+        for key, value in dict(statistics or {}).items()
+        if key not in _PUBLIC_IMPERSONATION_HIDDEN_KEYS
+    }
+
+
+def _drop_public_hidden_columns(df):
+    hidden_columns = [column for column in getattr(df, "columns", []) if column in _PUBLIC_IMPERSONATION_HIDDEN_KEYS]
+    if hidden_columns:
+        df = df.drop(columns=hidden_columns)
+    if "统计项" in getattr(df, "columns", []):
+        df = df[~df["统计项"].astype(str).isin(_PUBLIC_IMPERSONATION_HIDDEN_KEYS)]
+    return df
 
 
 def _normalize_impersonation_result_rows(rows):
     normalized = []
     for row in rows or []:
-        item = dict(row)
+        item = _sanitize_public_impersonation_item(row)
         impersonation_domain = item.get("仿冒域名") or item.get("钓鱼域名") or item.get("candidate_domain")
         official_domain = item.get("官方域名") or item.get("目标域名") or item.get("target_domain")
         organization = (
@@ -2778,6 +2849,7 @@ async def get_task_result_json(task_id: str, request: Request):
                 statistics_dict = {}
                 for _, row in stats_df.iterrows():
                     statistics_dict[row['统计项']] = row['数值']
+                statistics_dict = _sanitize_public_impersonation_statistics(statistics_dict)
 
                 official_domain_rows = _normalize_official_domain_rows(extra_data.get("official_domains") or [])
                 if not official_domain_rows and extra_data.get("official_file_object_key"):
@@ -3019,7 +3091,7 @@ async def create_focus_impersonation_task(
     useCustomThreshold: str = Form("false"),
     threshold: Optional[str] = Form(None),
 ):
-    """创建重点单位仿冒检测任务：DeepSeek 检索官方域名后执行仿冒检测。"""
+    """创建重点单位仿冒检测任务：检索官方域名后执行仿冒检测。"""
     created_by_user_id: Optional[int] = _extract_user_id(request)
     query_name = (queryName or "").strip()
     if not query_name:
@@ -3052,23 +3124,6 @@ async def create_focus_impersonation_task(
         )
     similarity_threshold, threshold_meta = _parse_similarity_threshold(useCustomThreshold, threshold)
 
-    try:
-        official_domains = resolve_official_domains(query_name)
-    except OfficialDomainResolutionError as exc:
-        status_code = (
-            status.HTTP_500_INTERNAL_SERVER_ERROR
-            if isinstance(exc, OfficialDomainResolverConfigError)
-            else status.HTTP_502_BAD_GATEWAY
-        )
-        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
-
-    official_domain_rows = _normalize_official_domain_rows(official_domains)
-    if not official_domain_rows:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="未检索到有效官方域名或子域名，请调整输入后重试",
-        )
-
     db = SessionLocal()
     try:
         model_record = _get_impersonation_model_record(db)
@@ -3085,15 +3140,17 @@ async def create_focus_impersonation_task(
             "detectionSource": "newDomain",
             "queryName": query_name,
             "dateRange": date_range_parsed,
-            "official_domains": official_domain_rows,
-            "official_domain_resolution_status": "resolved",
-            "official_domain_resolution_pending": False,
-            "official_domain_resolution_method": "deepseek",
-            "official_domain_resolution_message": f"DeepSeek已解析到 {len(official_domain_rows)} 个官方域名或子域名",
-            "official_domain_count": len(official_domain_rows),
+            "official_domains": [],
+            "official_domain_resolution_status": "pending",
+            "official_domain_resolution_pending": True,
+            "official_domain_resolution_method": "system",
+            "official_domain_resolution_message": "等待检索相关官方域名",
+            "official_domain_count": 0,
             "threshold_policy": "custom" if similarity_threshold is not None else "adaptive",
             "similarity_threshold": similarity_threshold,
             "threshold_percent": threshold_meta["threshold_percent"],
+            "progress": 0,
+            "progress_stage": "等待检索相关官方域名",
         }
         task = Task(
             task_id=task_id,
@@ -3131,8 +3188,8 @@ async def create_focus_impersonation_task(
                 "task_id": task.task_id,
                 "status": "pending",
                 "queryName": query_name,
-                "officialDomains": official_domain_rows,
-                "officialDomainCount": len(official_domain_rows),
+                "officialDomains": [],
+                "officialDomainCount": 0,
             },
         )
     except HTTPException:
@@ -3162,7 +3219,7 @@ async def create_impersonation_task(
     创建仿冒域名检测任务
     
     参数:
-    - queryName: 事件名或单位名（首选，使用 DeepSeek 解析相关官方域名）
+    - queryName: 事件名或单位名（首选，自动检索相关官方域名）
     - officialFile: 官方域名文件（当事件名未解析出官方域名时可使用）
     - detectionDateRange: 新注册域名日期范围JSON字符串
     - useCustomThreshold: 是否使用自定义阈值
@@ -3204,14 +3261,14 @@ async def create_impersonation_task(
             try:
                 official_domains = resolve_official_domains(query_name)
                 logger.info(
-                    "DeepSeek解析官方域名完成 query=%s count=%s",
+                    "官方域名检索完成 query=%s count=%s",
                     query_name,
                     len(official_domains),
                 )
             except OfficialDomainResolutionError as exc:
                 official_domain_resolution_error = str(exc)
                 logger.warning(
-                    "DeepSeek解析官方域名失败 query=%s error=%s",
+                    "官方域名检索失败 query=%s error=%s",
                     query_name,
                     official_domain_resolution_error,
                 )
@@ -3290,7 +3347,7 @@ async def create_impersonation_task(
                 "official_domains": official_domains,
                 "official_domain_resolution_status": official_domain_resolution_status,
                 "official_domain_resolution_pending": False,
-                "official_domain_resolution_method": "deepseek" if official_domains else "file",
+                "official_domain_resolution_method": "system" if official_domains else "file",
                 "official_domain_count": len(official_domains),
                 "threshold_policy": "custom" if similarity_threshold is not None else "adaptive",
                 "similarity_threshold": similarity_threshold,
@@ -3320,7 +3377,7 @@ async def create_impersonation_task(
                 extra_data["official_file_filename"] = official_file_meta["filename"]
             if official_domains:
                 extra_data["official_domain_resolution_message"] = (
-                    f"DeepSeek已解析到 {len(official_domains)} 个官方域名"
+                    f"已检索到 {len(official_domains)} 个官方域名"
                 )
             elif not official_domains and official_file_meta is not None:
                 extra_data["official_domain_resolution_message"] = "已使用上传的官方域名文件"

@@ -27,6 +27,25 @@ MODULE_LABELS = {
     "apt_template_nrd": "模板化APT域名",
 }
 
+PUBLIC_IMPERSONATION_HIDDEN_KEYS = {
+    "来源",
+    "source",
+    "official_source",
+    "official_domain_source",
+    "LLM研判标签",
+    "LLM研判分数",
+    "LLM处置结果",
+    "LLM处置建议",
+    "LLM研判模型",
+    "LLM研判状态",
+    "LLM已研判数",
+    "llm_label",
+    "llm_score",
+    "llm_disposition",
+    "llm_key_features",
+    "llm_reason",
+}
+
 
 def _cell_text(value: Any) -> str:
     if value is None:
@@ -122,13 +141,21 @@ def _excel_statistics(excel_content: bytes, fallback: Optional[dict[str, Any]] =
         statistics = {}
     if not statistics and fallback:
         statistics = dict(fallback)
-    return statistics
+    return {
+        key: value
+        for key, value in statistics.items()
+        if key not in PUBLIC_IMPERSONATION_HIDDEN_KEYS
+    }
 
 
 def _normalize_impersonation_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     normalized = []
     for row in rows or []:
-        item = dict(row)
+        item = {
+            key: value
+            for key, value in dict(row).items()
+            if key not in PUBLIC_IMPERSONATION_HIDDEN_KEYS
+        }
         domain = item.get("仿冒域名") or item.get("钓鱼域名") or item.get("candidate_domain")
         official_domain = item.get("官方域名") or item.get("目标域名") or item.get("target_domain")
         organization = (

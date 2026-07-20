@@ -37,6 +37,7 @@ from app.services.history_similarity_report import (
     build_history_similarity_result_payload,
     generate_history_similarity_pdf_report,
 )
+from app.services.official_domain_resolver import resolve_official_domains
 from app.services.unified_malicious_domain_report import (
     build_impersonation_result_payload,
     build_unified_malicious_domain_payload,
@@ -1220,7 +1221,7 @@ def execute_apt_template_nrd_task(task_id: str):
         db.close()
 
 
-def execute_impersonation_task(task_id: str):
+def execute_impersonation_task(task_id: str, *, mark_failed_on_error: bool = True):
     db = SessionLocal()
     try:
         task = db.query(Task).filter(Task.task_id == task_id).first()
@@ -1228,6 +1229,8 @@ def execute_impersonation_task(task_id: str):
             raise ValueError(f"任务不存在: {task_id}")
 
         extra_data = dict(task.extra or {})
+        extra_data.pop("error", None)
+        extra_data.pop("retry_pending", None)
 
         # 幂等性：任务已完成且已写入结果文件时，跳过重复执行
         if task.status == "completed" and extra_data.get("result_file_key"):
@@ -1241,6 +1244,25 @@ def execute_impersonation_task(task_id: str):
         official_file_content = None
         official_filename = extra_data.get("official_file_filename") or official_key
         loaded_from_full_whitelist_path = False
+        query_name = str(extra_data.get("focus_query_name") or extra_data.get("queryName") or "").strip()
+        if not official_domains and extra_data.get("focus_impersonation_detection") and query_name:
+            task.status = "processing"
+            extra_data["official_domain_resolution_status"] = "processing"
+            extra_data["official_domain_resolution_pending"] = True
+            extra_data["official_domain_resolution_message"] = "正在检索相关官方域名"
+            _set_task_progress(db, task, extra_data, 5, "检索相关官方域名")
+            official_domains = resolve_official_domains(query_name)
+            official_domains = _serialize_official_domains_for_extra(official_domains)
+            if not official_domains:
+                raise ValueError("未检索到有效官方域名或子域名，请调整输入后重试")
+            extra_data["official_domains"] = official_domains
+            extra_data["official_domain_count"] = len(official_domains)
+            extra_data["official_domain_resolution_status"] = "resolved"
+            extra_data["official_domain_resolution_pending"] = False
+            extra_data["official_domain_resolution_message"] = (
+                f"已检索到 {len(official_domains)} 个官方域名或子域名"
+            )
+            _set_task_progress(db, task, extra_data, 10, "官方域名检索完成")
         if not official_domains and official_key:
             official_file_content = _download_file_from_minio(official_key, official_bucket)
             official_domains = read_official_domains_from_file(
@@ -1277,7 +1299,8 @@ def execute_impersonation_task(task_id: str):
             return
 
         task.status = "processing"
-        _set_task_progress(db, task, extra_data, 10, "任务开始执行")
+        start_progress = 15 if extra_data.get("focus_impersonation_detection") else 10
+        _set_task_progress(db, task, extra_data, start_progress, "任务开始执行")
 
         detection_source = extra_data.get("detectionSource")
         similarity_threshold = extra_data.get("similarity_threshold")
@@ -1402,10 +1425,16 @@ def execute_impersonation_task(task_id: str):
         task = db.query(Task).filter(Task.task_id == task_id).first()
         if task:
             extra_data = dict(task.extra or {})
-            task.status = "failed"
-            extra_data["progress"] = 0
-            extra_data["progress_stage"] = "任务失败"
-            extra_data["error"] = str(exc)
+            if mark_failed_on_error:
+                task.status = "failed"
+                extra_data["progress"] = 0
+                extra_data["progress_stage"] = "任务失败"
+                extra_data["error"] = str(exc)
+                extra_data.pop("retry_pending", None)
+            else:
+                task.status = "processing"
+                extra_data["progress_stage"] = "任务执行异常，等待自动重试"
+                extra_data["retry_pending"] = True
             task.extra = extra_data
             db.commit()
         raise

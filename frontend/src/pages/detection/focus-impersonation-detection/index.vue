@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { LoadingOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useAuthorization } from '~/composables/authorization'
 import { useUserId } from '~/composables/user-id'
 import { getApiBase } from '~/utils/api-public'
@@ -14,7 +15,6 @@ interface OfficialDomainItem {
   单位名称?: string
   官方域名: string
   置信度?: string | number
-  来源?: string
   说明?: string
 }
 
@@ -37,7 +37,11 @@ interface FocusResultData {
   task_id?: string
   task_type?: string
   status?: string
+  rawStatus?: string
   message?: string
+  error?: string
+  progress?: number
+  progress_stage?: string
   focus_impersonation_detection?: boolean
   focus_query_name?: string
   statistics?: Record<string, string | number>
@@ -48,9 +52,16 @@ interface FocusResultData {
   focus_report_filename?: string
 }
 
+interface PersistedFocusTask {
+  taskId: string
+  queryName: string
+  dateRange: [string, string] | null
+}
+
 const API_BASE = getApiBase()
 const userId = useUserId()
 const token = useAuthorization()
+const FOCUS_TASK_STORAGE_PREFIX = 'apthunter:focus-impersonation-task'
 
 const queryName = ref('')
 const dateRange = ref<[string, string] | null>(null)
@@ -58,6 +69,8 @@ const submitLoading = ref(false)
 const resultLoading = ref(false)
 const currentTaskId = ref('')
 const taskStatus = ref('')
+const taskProgress = ref(0)
+const taskStage = ref('')
 const officialDomains = ref<OfficialDomainItem[]>([])
 const resultData = ref<FocusResultData | null>(null)
 const lastError = ref('')
@@ -66,16 +79,42 @@ const MIN_START_DATE = dayjs('2024-09-01')
 const pickedAnchorDate = ref<dayjs.Dayjs | null>(null)
 const pickedAnchorType = ref<'start' | 'end' | null>(null)
 let pollingTimer: number | null = null
+let componentUnmounted = false
 
 const phishingRows = computed(() => resultData.value?.phishing_domains || [])
 const statistics = computed(() => resultData.value?.statistics || {})
 const hasCompleted = computed(() => taskStatus.value === 'completed' || !!resultData.value?.ok)
+const focusTaskStorageKey = computed(() =>
+  `${FOCUS_TASK_STORAGE_PREFIX}:${userId.value || 'anonymous'}`,
+)
+const isTaskRunning = computed(() =>
+  ['submitting', 'pending', 'processing'].includes(taskStatus.value),
+)
+const taskStatusText = computed(() => {
+  if (taskStage.value)
+    return taskStage.value
+  if (taskStatus.value === 'submitting')
+    return '正在提交检测任务'
+  if (taskStatus.value === 'pending')
+    return '任务等待执行中'
+  return '正在执行重点单位仿冒检测'
+})
+const taskStatusLabel = computed(() => {
+  if (hasCompleted.value)
+    return '已完成'
+  if (taskStatus.value === 'failed')
+    return '失败'
+  if (taskStatus.value === 'submitting')
+    return '提交中'
+  if (taskStatus.value === 'processing')
+    return '执行中'
+  return '待执行'
+})
 
 const officialDomainColumns = [
-  { title: '单位/对象', dataIndex: '单位名称', key: 'name', width: '24%', ellipsis: true },
-  { title: '官方域名或子域名', dataIndex: '官方域名', key: 'domain', width: '28%', ellipsis: true },
-  { title: '置信度', dataIndex: '置信度', key: 'confidence', width: '12%', align: 'center' as const },
-  { title: '来源', dataIndex: '来源', key: 'source', width: '12%', align: 'center' as const },
+  { title: '单位/对象', dataIndex: '单位名称', key: 'name', width: '28%', ellipsis: true },
+  { title: '官方域名或子域名', dataIndex: '官方域名', key: 'domain', width: '34%', ellipsis: true },
+  { title: '置信度', dataIndex: '置信度', key: 'confidence', width: '14%', align: 'center' as const },
   { title: '说明', dataIndex: '说明', key: 'reason', width: '24%', ellipsis: true },
 ]
 
@@ -86,6 +125,46 @@ function buildHeaders(extra: Record<string, string> = {}) {
   if (token.value)
     headers.Authorization = `Bearer ${token.value}`
   return headers
+}
+
+function persistFocusTask(taskId: string, query: string, range: [string, string] | null) {
+  try {
+    const state: PersistedFocusTask = {
+      taskId,
+      queryName: query,
+      dateRange: range,
+    }
+    localStorage.setItem(focusTaskStorageKey.value, JSON.stringify(state))
+  }
+  catch {}
+}
+
+function removePersistedFocusTask() {
+  try {
+    localStorage.removeItem(focusTaskStorageKey.value)
+  }
+  catch {}
+}
+
+function restoreFocusTask() {
+  try {
+    const raw = localStorage.getItem(focusTaskStorageKey.value)
+    if (!raw)
+      return
+    const state = JSON.parse(raw) as PersistedFocusTask
+    if (!state.taskId)
+      return
+    currentTaskId.value = state.taskId
+    queryName.value = state.queryName || ''
+    dateRange.value = state.dateRange || null
+    taskStatus.value = 'pending'
+    taskStage.value = '正在恢复检测进度'
+    lastError.value = ''
+    void fetchResult(state.taskId)
+  }
+  catch {
+    removePersistedFocusTask()
+  }
 }
 
 function disabledNewDomainDate(current: dayjs.Dayjs) {
@@ -156,18 +235,23 @@ async function ensureNewDomainDataAvailable(range: [string, string]) {
 
 function stopPolling() {
   if (pollingTimer) {
-    window.clearInterval(pollingTimer)
+    window.clearTimeout(pollingTimer)
     pollingTimer = null
   }
 }
 
-function startPolling(taskId: string) {
+function schedulePolling(taskId: string, delay = 2000) {
   stopPolling()
-  fetchResult(taskId)
-  pollingTimer = window.setInterval(() => fetchResult(taskId, true), 3000)
+  if (componentUnmounted)
+    return
+  pollingTimer = window.setTimeout(() => {
+    void fetchResult(taskId, true)
+  }, delay)
 }
 
 async function submitTask() {
+  if (isTaskRunning.value)
+    return message.info('当前重点单位仿冒检测任务尚未完成')
   const query = queryName.value.trim()
   if (!query)
     return message.warning('请输入单位名或热点事件名')
@@ -177,20 +261,17 @@ async function submitTask() {
   if (days > 30)
     return message.warning('日期范围最多为一个月')
 
+  const submittedRange: [string, string] = [dateRange.value[0], dateRange.value[1]]
   submitLoading.value = true
-  resultData.value = null
-  officialDomains.value = []
-  currentTaskId.value = ''
-  taskStatus.value = ''
   lastError.value = ''
   try {
-    const available = await ensureNewDomainDataAvailable(dateRange.value)
+    const available = await ensureNewDomainDataAvailable(submittedRange)
     if (!available)
       return
 
     const fd = new FormData()
     fd.append('queryName', query)
-    fd.append('detectionDateRange', JSON.stringify(dateRange.value))
+    fd.append('detectionDateRange', JSON.stringify(submittedRange))
     const resp = await fetch(`${API_BASE}/focus-impersonation-tasks`, {
       method: 'POST',
       body: fd,
@@ -202,11 +283,19 @@ async function submitTask() {
       const detailMessage = typeof detail === 'object' ? detail?.message : detail
       throw new Error(detailMessage || json?.message || '提交失败')
     }
+    stopPolling()
+    removePersistedFocusTask()
+    resultData.value = null
+    officialDomains.value = []
     currentTaskId.value = json.task_id
     officialDomains.value = json.officialDomains || []
-    taskStatus.value = 'pending'
+    taskStatus.value = json.status || 'pending'
+    taskProgress.value = 0
+    taskStage.value = '任务已提交，等待执行'
+    persistFocusTask(currentTaskId.value, query, submittedRange)
     message.success('重点单位仿冒检测任务已提交')
-    startPolling(json.task_id)
+    if (!componentUnmounted)
+      void fetchResult(json.task_id)
   }
   catch (e: any) {
     lastError.value = e?.message || '未知错误'
@@ -218,34 +307,64 @@ async function submitTask() {
 }
 
 async function fetchResult(taskId = currentTaskId.value, silent = false) {
-  if (!taskId)
+  if (!taskId || currentTaskId.value !== taskId)
     return
   if (!silent)
     resultLoading.value = true
+  let retryable = true
   try {
     const resp = await fetch(`${API_BASE}/tasks/${taskId}/result`, {
       method: 'GET',
       headers: buildHeaders(),
     })
     const json = await resp.json().catch(() => null)
-    if (!resp.ok)
+    if (!resp.ok) {
+      retryable = resp.status >= 500
       throw new Error(json?.detail || json?.message || '获取任务结果失败')
-    taskStatus.value = json?.status || (json?.ok ? 'completed' : taskStatus.value)
+    }
+    if (currentTaskId.value !== taskId)
+      return
+
+    if (Array.isArray(json?.official_domains))
+      officialDomains.value = json.official_domains
+
     if (json?.ok && json?.statistics) {
       resultData.value = json
       officialDomains.value = json.official_domains || officialDomains.value
       taskStatus.value = 'completed'
+      taskProgress.value = 100
+      taskStage.value = '检测完成'
+      lastError.value = ''
       stopPolling()
+      return
     }
-    else if (json?.status === 'failed') {
-      lastError.value = json?.message || '任务执行失败'
+
+    taskStatus.value = json?.status || json?.rawStatus || 'processing'
+    const progress = Number(json?.progress)
+    taskProgress.value = Number.isFinite(progress) ? Math.max(0, Math.min(100, progress)) : 0
+    taskStage.value = json?.progress_stage || json?.message || ''
+    lastError.value = ''
+    if (taskStatus.value === 'failed' || taskStatus.value === 'completed') {
+      lastError.value = json?.error || json?.message || '任务结果不可用'
       stopPolling()
+      return
     }
+    schedulePolling(taskId)
   }
   catch (e: any) {
+    if (currentTaskId.value !== taskId)
+      return
     lastError.value = e?.message || '未知错误'
     if (!silent)
       message.error(`获取结果失败：${lastError.value}`)
+    if (retryable && isTaskRunning.value) {
+      schedulePolling(taskId, 3000)
+    }
+    else {
+      taskStatus.value = 'failed'
+      taskStage.value = ''
+      stopPolling()
+    }
   }
   finally {
     if (!silent)
@@ -299,7 +418,15 @@ function riskLevelColor(level?: string) {
   return 'default'
 }
 
-onBeforeUnmount(stopPolling)
+onMounted(() => {
+  componentUnmounted = false
+  restoreFocusTask()
+})
+
+onBeforeUnmount(() => {
+  componentUnmounted = true
+  stopPolling()
+})
 </script>
 
 <template>
@@ -318,7 +445,7 @@ onBeforeUnmount(stopPolling)
                 allow-clear
                 placeholder="例如：中国人民银行、杭州亚运会、某某大学"
                 :maxlength="120"
-                :loading="submitLoading"
+                :loading="submitLoading || isTaskRunning"
                 @search="submitTask"
               />
             </a-form-item>
@@ -334,7 +461,7 @@ onBeforeUnmount(stopPolling)
               />
             </a-form-item>
             <div class="action-row">
-              <a-button type="primary" :loading="submitLoading" @click="submitTask">
+              <a-button type="primary" :loading="submitLoading || isTaskRunning" @click="submitTask">
                 创建检测任务
               </a-button>
               <a-button :disabled="!currentTaskId" @click="fetchResult()">
@@ -348,9 +475,15 @@ onBeforeUnmount(stopPolling)
             <div class="state-line">
               当前状态：
               <a-tag :color="hasCompleted ? 'success' : taskStatus === 'failed' ? 'error' : 'processing'">
-                {{ hasCompleted ? '已完成' : taskStatus || '待执行' }}
+                {{ taskStatusLabel }}
               </a-tag>
             </div>
+            <a-progress
+              v-if="isTaskRunning"
+              :percent="taskProgress"
+              :show-info="taskProgress > 0"
+              size="small"
+            />
             <div v-if="lastError" class="error-text">{{ lastError }}</div>
           </div>
         </a-card>
@@ -365,9 +498,17 @@ onBeforeUnmount(stopPolling)
                 展示检索到的官方域名基线，以及仿冒检测命中的重点对象。
               </div>
             </div>
-            <a-button type="primary" :disabled="!hasCompleted" @click="downloadReport">
-              下载PDF报告
-            </a-button>
+            <div class="result-actions">
+              <div v-if="isTaskRunning" class="detecting-status">
+                <LoadingOutlined spin />
+                <span>检测中</span>
+              </div>
+              <a-tag v-else-if="hasCompleted" color="green">检测完成</a-tag>
+              <a-tag v-else-if="taskStatus === 'failed'" color="red">检测失败</a-tag>
+              <a-button type="primary" :disabled="!hasCompleted" @click="downloadReport">
+                下载PDF报告
+              </a-button>
+            </div>
           </div>
 
           <a-spin :spinning="resultLoading">
@@ -385,6 +526,23 @@ onBeforeUnmount(stopPolling)
                 <a-statistic title="仿冒占比" :value="statistics['仿冒域名占比'] || statistics['钓鱼域名占比'] || '0.00%'" />
               </a-col>
             </a-row>
+
+            <div v-if="isTaskRunning" class="detecting-placeholder">
+              <LoadingOutlined class="detecting-icon" spin />
+              <div class="detecting-title">{{ taskStatusText }}</div>
+              <a-progress
+                class="detecting-progress"
+                :percent="taskProgress"
+                :show-info="taskProgress > 0"
+              />
+            </div>
+            <a-alert
+              v-else-if="lastError"
+              class="result-error"
+              type="error"
+              show-icon
+              :message="lastError"
+            />
 
             <div class="inner-section">
               <div class="section-title">相关官方域名及子域名</div>
@@ -474,6 +632,18 @@ onBeforeUnmount(stopPolling)
   gap: 12px;
 }
 
+.result-actions,
+.detecting-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detecting-status {
+  color: #1677ff;
+  white-space: nowrap;
+}
+
 .task-state {
   margin-top: 18px;
   padding: 12px;
@@ -493,6 +663,37 @@ onBeforeUnmount(stopPolling)
 }
 
 .stat-row {
+  margin-top: 16px;
+}
+
+.detecting-placeholder {
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #667085;
+}
+
+.detecting-icon {
+  margin-bottom: 12px;
+  color: #1677ff;
+  font-size: 32px;
+}
+
+.detecting-title {
+  color: #1f2937;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.detecting-progress {
+  width: min(320px, 100%);
+  margin-top: 16px;
+}
+
+.result-error {
   margin-top: 16px;
 }
 

@@ -74,6 +74,7 @@ export default [
             meta: {
               title: '恶意域名检测',
               locale: 'menu.detection.malicious-domain-detection',
+              keepAlive: true,
             },
           },
           {
@@ -83,6 +84,7 @@ export default [
             meta: {
               title: '重点单位仿冒检测',
               locale: 'menu.detection.focus-impersonation-detection',
+              keepAlive: true,
             },
           },
           {

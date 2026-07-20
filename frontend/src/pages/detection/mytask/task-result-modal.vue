@@ -59,9 +59,6 @@ interface PhishingResultItem {
   相似度?: string
   匹配类型?: string
   风险等级?: string
-  LLM研判标签?: string
-  LLM研判分数?: string | number
-  LLM处置结果?: string
   研判原因?: string
   关键特征?: string
 }
@@ -70,7 +67,6 @@ interface OfficialDomainItem {
   单位名称?: string
   官方域名: string
   置信度?: string | number
-  来源?: string
   说明?: string
 }
 
@@ -131,9 +127,6 @@ interface PhishingStatistics {
   钓鱼域名数?: string | number
   正常域名数?: string | number
   钓鱼域名占比?: string
-  LLM研判状态?: string
-  LLM研判模型?: string
-  LLM已研判数?: string | number
 }
 
 interface DgaStatistics {
@@ -261,35 +254,28 @@ const officialDomainColumns = [
     title: '官方域名',
     dataIndex: '官方域名',
     key: 'official_domain',
-    width: '30%',
+    width: '34%',
     ellipsis: true,
   },
   {
     title: '单位名称',
     dataIndex: '单位名称',
     key: 'organization',
-    width: '24%',
+    width: '28%',
     ellipsis: true,
   },
   {
     title: '置信度',
     dataIndex: '置信度',
     key: 'confidence',
-    width: '12%',
-    align: 'center' as const,
-  },
-  {
-    title: '来源',
-    dataIndex: '来源',
-    key: 'source',
-    width: '12%',
+    width: '14%',
     align: 'center' as const,
   },
   {
     title: '说明',
     dataIndex: '说明',
     key: 'reason',
-    width: '22%',
+    width: '24%',
     ellipsis: true,
   },
 ]

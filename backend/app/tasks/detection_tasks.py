@@ -90,7 +90,10 @@ def execute_apt_template_nrd_task_job(self, task_id: str):
 )
 def execute_impersonation_task_job(self, task_id: str):
     try:
-        execute_impersonation_task(task_id)
+        execute_impersonation_task(
+            task_id,
+            mark_failed_on_error=self.request.retries >= self.max_retries,
+        )
         return {"ok": True, "task_id": task_id}
     except Exception as exc:
         logger.exception("Celery impersonation task failed: %s", exc)

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { Pie } from '@antv/g2plot'
-import { SearchOutlined } from '@ant-design/icons-vue'
+import { DownloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import { onMounted, nextTick, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { OrganizationProfile } from '~/api/dashboard/profile'
-import { queryOrganizationsApi } from '~/api/dashboard/profile'
+import { exportOrganizationCsvApi, queryOrganizationsApi } from '~/api/dashboard/profile'
 import { queryEventsApi } from '~/api/dashboard/spatial'
 import type { DomainListItem } from '~/api/dashboard/attributes'
 import { getDomainListApi } from '~/api/dashboard/attributes'
@@ -14,11 +14,11 @@ import AptTimeline, { type AptEvent } from '~/components/apt-timeline/index.vue'
 
 defineOptions({ name: 'DashboardProfile' })
 
-function formatIocCount(count?: number | string | null) {
+function formatMaliciousDomainCount(count?: number | string | null) {
   const value = Number(count ?? 0)
   if (!Number.isFinite(value))
-    return 0
-  return value === 100 ? '100+' : value
+    return '0'
+  return Math.max(0, Math.trunc(value)).toLocaleString()
 }
 
 // 搜索关键词
@@ -34,6 +34,7 @@ const selectedOrganization = ref<OrganizationProfile | null>(null)
 const selectedOrgEvents = ref<AptEvent[]>([])
 const selectedOrgDomains = ref<DomainListItem[]>([])
 const selectedOrgDomainsLoading = ref(false)
+const exportLoading = ref(false)
 const router = useRouter()
 const route = useRoute()
 const activeOnly = ref(false)
@@ -460,6 +461,30 @@ function goToOrganizationDomains(org: OrganizationProfile) {
   })
 }
 
+async function exportOrganizationInfo(org: OrganizationProfile) {
+  exportLoading.value = true
+  try {
+    const blob = await exportOrganizationCsvApi(org.id)
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    const safeName = org.name.replace(/[\\/:*?"<>|]/g, '_').replace(/[. ]+$/g, '') || '组织信息'
+    link.href = url
+    link.download = `${safeName}.csv`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    message.success('组织信息已开始下载')
+  }
+  catch (error) {
+    console.error('导出组织信息失败:', error)
+    message.error('导出组织信息失败，请稍后重试')
+  }
+  finally {
+    exportLoading.value = false
+  }
+}
+
 // 搜索防抖定时器
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -676,10 +701,10 @@ watch(
                 <a-space :size="24">
                   <span>
                     <a-typography-text type="secondary">
-                      关联IOC：
+                      关联恶意域名：
                     </a-typography-text>
                     <a-typography-text strong>
-                      {{ formatIocCount(org.iocCount) }} 个
+                      {{ formatMaliciousDomainCount(org.maliciousDomainCount ?? org.iocCount) }} 个
                     </a-typography-text>
                   </span>
                   <span>
@@ -814,9 +839,20 @@ watch(
                     {{ selectedOrganization.name }}
                   </a-typography-title>
                 </div>
-                <a-button type="primary" @click="goToOrganizationDomains(selectedOrganization)">
-                  查看该组织域名
-                </a-button>
+                <a-space>
+                  <a-button
+                    :loading="exportLoading"
+                    @click="exportOrganizationInfo(selectedOrganization)"
+                  >
+                    <template #icon>
+                      <DownloadOutlined />
+                    </template>
+                    导出信息
+                  </a-button>
+                  <a-button type="primary" @click="goToOrganizationDomains(selectedOrganization)">
+                    查看该组织域名
+                  </a-button>
+                </a-space>
               </div>
             </template>
 
@@ -841,8 +877,10 @@ watch(
               <div class="org-section">
                 <a-space :size="24">
                   <span>
-                    <a-typography-text type="secondary">关联IOC：</a-typography-text>
-                    <a-typography-text strong>{{ formatIocCount(selectedOrganization.iocCount) }} 个</a-typography-text>
+                    <a-typography-text type="secondary">关联恶意域名：</a-typography-text>
+                    <a-typography-text strong>
+                      {{ formatMaliciousDomainCount(selectedOrganization.maliciousDomainCount ?? selectedOrganization.iocCount) }} 个
+                    </a-typography-text>
                   </span>
                   <span>
                     <a-typography-text type="secondary">关联事件：</a-typography-text>

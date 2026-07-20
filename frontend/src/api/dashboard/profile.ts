@@ -13,6 +13,8 @@ export interface OrganizationProfile {
 	name: string
 	alias?: string[]
 	description: string
+	maliciousDomainCount?: number
+	/** @deprecated 兼容旧接口字段，请优先使用 maliciousDomainCount */
 	iocCount?: number
 	eventCount?: number
 	updateTime?: string
@@ -70,4 +72,11 @@ export async function queryOrganizationDetailApi(id: string | number) {
 	return useGet<OrganizationProfile>(`/dashboard/org-profile/${id}`, undefined, {
 		loading: true,
 	})
+}
+
+// 导出单个组织的基本信息 CSV
+export async function exportOrganizationCsvApi(id: string | number): Promise<Blob> {
+	return useGet<Blob>(`/dashboard/org-profile/${id}/export`, undefined, {
+		responseType: 'blob',
+	}) as unknown as Promise<Blob>
 }

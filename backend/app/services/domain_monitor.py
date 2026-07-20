@@ -14,6 +14,7 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.domain_lookup import DomainLookupRequest, lookup_all
@@ -182,6 +183,19 @@ def _source_exists(
     return db.query(query.exists()).scalar()
 
 
+def _upsert_monitored_domain_as_malicious(db: Session, domain: str) -> None:
+    db.execute(
+        text(
+            """
+            INSERT INTO domains (domain_name, is_malicious)
+            VALUES (:domain_name, 1)
+            ON DUPLICATE KEY UPDATE is_malicious = 1
+            """
+        ),
+        {"domain_name": domain},
+    )
+
+
 def register_monitor_targets(
     db: Session,
     *,
@@ -230,6 +244,8 @@ def register_monitor_targets(
     reused_targets = 0
     created_sources = 0
     for display_domain, normalized in normalized_domains:
+        _upsert_monitored_domain_as_malicious(db, normalized)
+
         target = (
             db.query(DomainMonitorTarget)
             .filter(

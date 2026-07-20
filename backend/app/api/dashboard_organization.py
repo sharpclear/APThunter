@@ -2,10 +2,14 @@
 组织画像API
 提供APT组织的列表、详情、搜索等服务
 """
-from fastapi import APIRouter, Query
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, HTTPException, Query, Response
 from sqlalchemy import text
 from typing import Optional
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from urllib.parse import quote
+import csv
+import io
 import json
 import logging
 from app.db.session import engine
@@ -14,6 +18,129 @@ from app.services.apt_event_text import normalize_apt_event_record
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/dashboard/org-profile", tags=["organization-profile"])
+
+
+def _format_export_list(value) -> str:
+    """将 JSON 数组格式化为便于表格软件阅读的竖线分隔文本。"""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return value
+    if isinstance(value, list):
+        return "|".join(str(item) for item in value if item is not None)
+    if isinstance(value, dict):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
+def _format_export_date(value) -> str:
+    if value is None:
+        return ""
+    if hasattr(value, "strftime"):
+        value = value.strftime("%Y-%m-%d")
+    else:
+        value = str(value)
+    # CSV 无法保存列宽；以 Excel 文本公式输出，避免日期列宽不足时显示 ####。
+    return f'="{value}"'
+
+
+@router.get("/{org_id}/export")
+def export_organization_csv(org_id: int):
+    """导出单个 APT 组织的基本信息 CSV。"""
+    with engine.connect() as conn:
+        organization = conn.execute(
+            text("""
+                SELECT o.name AS organization_name,
+                       o.alias AS aliases,
+                       o.origin,
+                       o.region,
+                       o.target_countries,
+                       o.target_industries,
+                       o.description,
+                       (
+                           SELECT MIN(e.event_date)
+                           FROM apt_events e
+                           WHERE e.organization_id = o.id
+                       ) AS first_event_date,
+                       (
+                           SELECT MAX(e.event_date)
+                           FROM apt_events e
+                           WHERE e.organization_id = o.id
+                       ) AS latest_event_date,
+                       (
+                           SELECT COUNT(*)
+                           FROM domains d
+                           WHERE d.organization_id = o.id
+                             AND d.is_malicious = 1
+                       ) AS malicious_domain_count,
+                       (
+                           SELECT COUNT(*)
+                           FROM apt_events e
+                           WHERE e.organization_id = o.id
+                       ) AS event_count,
+                       o.update_time
+                FROM apt_organizations o
+                WHERE o.id = :org_id
+            """),
+            {"org_id": org_id},
+        ).mappings().fetchone()
+
+        if not organization:
+            raise HTTPException(status_code=404, detail="组织不存在")
+
+    exported_at = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M:%S")
+    basic_info = {
+        "organization_name": organization["organization_name"] or "",
+        "aliases": _format_export_list(organization["aliases"]),
+        "origin": organization["origin"] or "",
+        "region": organization["region"] or "",
+        "target_countries": _format_export_list(organization["target_countries"]),
+        "target_industries": _format_export_list(organization["target_industries"]),
+        "description": organization["description"] or "",
+        "first_event_date": _format_export_date(organization["first_event_date"]),
+        "latest_event_date": _format_export_date(organization["latest_event_date"]),
+        "malicious_domain_count": int(organization["malicious_domain_count"] or 0),
+        "event_count": int(organization["event_count"] or 0),
+        "update_time": _format_export_date(organization["update_time"]),
+        "exported_at": f'="{exported_at}"',
+    }
+
+    columns = [
+        ("组织名称", "organization_name"),
+        ("别名", "aliases"),
+        ("来源国家/地区", "origin"),
+        ("所属区域", "region"),
+        ("目标国家", "target_countries"),
+        ("目标行业", "target_industries"),
+        ("组织描述", "description"),
+        ("最早事件时间", "first_event_date"),
+        ("最近事件时间", "latest_event_date"),
+        ("相关恶意域名总数", "malicious_domain_count"),
+        ("相关事件数", "event_count"),
+        ("更新时间", "update_time"),
+        ("导出时间", "exported_at"),
+    ]
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\r\n")
+    writer.writerow([label for label, _ in columns])
+    writer.writerow([basic_info[key] for _, key in columns])
+
+    filename = f"{organization['organization_name']}.csv"
+    encoded_filename = quote(filename, safe="")
+    return Response(
+        content=("\ufeff" + output.getvalue()).encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="organization.csv"; '
+                f"filename*=UTF-8''{encoded_filename}"
+            ),
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.get("/list")
@@ -49,18 +176,26 @@ def list_organizations(
             # 查询数据
             results = conn.execute(
                 text(f"""
-                          SELECT id, name, alias, description, ioc_count, event_count, 
-                              update_time,
+                          SELECT o.id, o.name, o.alias, o.description,
+                              COALESCE(md.malicious_domain_count, 0) AS malicious_domain_count,
+                              o.event_count, o.update_time,
                               (
                                SELECT MAX(event_date)
                                FROM apt_events e
-                               WHERE e.organization_id = apt_organizations.id
+                               WHERE e.organization_id = o.id
                               ) AS latest_event_date,
-                              region, origin, target_countries, 
-                              target_industries, previous_domains, vps_providers
-                    FROM apt_organizations
+                              o.region, o.origin, o.target_countries,
+                              o.target_industries, o.previous_domains, o.vps_providers
+                    FROM apt_organizations o
+                    LEFT JOIN (
+                        SELECT organization_id, COUNT(*) AS malicious_domain_count
+                        FROM domains
+                        WHERE is_malicious = 1
+                          AND organization_id IS NOT NULL
+                        GROUP BY organization_id
+                    ) md ON md.organization_id = o.id
                     WHERE {where_sql}
-                    ORDER BY COALESCE(update_time, '1970-01-01') DESC, id DESC
+                    ORDER BY COALESCE(o.update_time, '1970-01-01') DESC, o.id DESC
                     LIMIT :limit OFFSET :offset
                 """),
                 params
@@ -93,7 +228,8 @@ def list_organizations(
                     'name': org.get('name'),
                     'alias': parse_json_field(org.get('alias')),
                     'description': org.get('description'),
-                    'iocCount': org.get('ioc_count'),
+                    'maliciousDomainCount': org.get('malicious_domain_count'),
+                    'iocCount': org.get('malicious_domain_count'),
                     'eventCount': org.get('event_count'),
                     'updateTime': org['update_time'].strftime('%Y-%m-%d') if org.get('update_time') and hasattr(org['update_time'], 'strftime') else (str(org['update_time']) if org.get('update_time') else None),
                     'latestEventDate': org['latest_event_date'].strftime('%Y-%m-%d') if org.get('latest_event_date') and hasattr(org['latest_event_date'], 'strftime') else (str(org['latest_event_date']) if org.get('latest_event_date') else None),
@@ -134,12 +270,19 @@ def get_organization_detail(org_id: int):
         with engine.connect() as conn:
             result = conn.execute(
                 text("""
-                    SELECT id, name, alias, description, ioc_count, event_count, 
-                           update_time, region, origin, target_countries, 
-                           target_industries, previous_domains, vps_providers,
-                           created_at, updated_at
-                    FROM apt_organizations
-                    WHERE id = :org_id
+                    SELECT o.id, o.name, o.alias, o.description,
+                           (
+                               SELECT COUNT(*)
+                               FROM domains d
+                               WHERE d.organization_id = o.id
+                                 AND d.is_malicious = 1
+                           ) AS malicious_domain_count,
+                           o.event_count, o.update_time, o.region, o.origin,
+                           o.target_countries, o.target_industries,
+                           o.previous_domains, o.vps_providers,
+                           o.created_at, o.updated_at
+                    FROM apt_organizations o
+                    WHERE o.id = :org_id
                 """),
                 {"org_id": org_id}
             ).mappings().fetchone()
@@ -172,7 +315,8 @@ def get_organization_detail(org_id: int):
                 'name': org_data.get('name'),
                 'alias': parse_json_field(org_data.get('alias')),
                 'description': org_data.get('description'),
-                'iocCount': org_data.get('ioc_count'),
+                'maliciousDomainCount': org_data.get('malicious_domain_count'),
+                'iocCount': org_data.get('malicious_domain_count'),
                 'eventCount': org_data.get('event_count'),
                 'updateTime': org_data['update_time'].strftime('%Y-%m-%d') if org_data.get('update_time') and hasattr(org_data['update_time'], 'strftime') else (str(org_data['update_time']) if org_data.get('update_time') else None),
                 'region': org_data.get('region'),

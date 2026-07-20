@@ -1,4 +1,51 @@
-# 数据清理脚本
+# 后端脚本说明
+
+## 域名数据幂等导入
+
+`import_domains.py` 用于把 `backend/db/init/domains.csv` 导入已有的 `domains` 表，适合本机和虚拟机中已经存在 MySQL 数据卷的环境。
+
+### 导入规则
+
+- 以规范化后的 `domain_name` 作为唯一匹配条件，不使用 CSV 中的 `id`，避免与已有数据库主键冲突。
+- 同一个域名在 CSV 中重复出现时保留第一次出现的记录，与首次初始化 SQL 的处理方式一致。
+- 已存在的数据不会被降级为良性；默认仅在原组织为空时补充 `organization_id`。
+- 使用事务和批量写入，执行失败时会回滚；可重复执行，不会重复插入域名。
+- 域名导入不会自动查询或生成 WHOIS、DNS、SSL 证书信息。
+
+### 虚拟机 Docker Compose 导入
+
+先确保虚拟机使用的后端镜像包含最新的 `scripts/import_domains.py` 和 `db/init/domains.csv`。如果在虚拟机上从源码构建，可执行：
+
+```bash
+docker compose build backend mysql
+```
+
+先执行预检查，不写入数据库：
+
+```bash
+docker compose run --rm -T --no-deps backend \
+  python /app/scripts/import_domains.py \
+  --file /app/db/init/domains.csv \
+  --dry-run
+```
+
+确认预检查结果后正式导入：
+
+```bash
+docker compose run --rm -T --no-deps backend \
+  python /app/scripts/import_domains.py \
+  --file /app/db/init/domains.csv
+```
+
+脚本默认从容器的 `MYSQL_URL` 环境变量读取数据库连接。正式导入前不需要停止其他容器，也不要删除或重建 MySQL 数据卷。
+
+### 新部署与已有部署
+
+- 全新部署且使用空 MySQL 数据卷时，MySQL 初始化流程会自动读取更新后的 `backend/db/init/domains.csv`。
+- 已有部署的数据卷不会重新执行 `backend/db/init` 下的初始化 SQL，必须运行上述幂等导入脚本。
+- 如果需要强制让 CSV 中的组织归属覆盖数据库现有归属，可显式添加 `--sync-organization`；常规增量导入不建议使用。
+
+## 数据清理脚本
 
 ## 概述
 

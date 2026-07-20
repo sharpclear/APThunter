@@ -22,11 +22,11 @@ function convertNumber(number: number) {
   return number.toLocaleString()
 }
 
-function formatIocCount(count?: number | string | null) {
+function formatMaliciousDomainCount(count?: number | string | null) {
   const value = Number(count ?? 0)
   if (!Number.isFinite(value))
-    return 0
-  return value === 100 ? '100+' : value
+    return '0'
+  return Math.max(0, Math.trunc(value)).toLocaleString()
 }
 
 const router = useRouter()
@@ -53,8 +53,8 @@ const threatTypeData = ref<Array<{ type: string; value: number }>>([...DEFAULT_T
 // 攻击者地理位置TOP10
 const attackSourceTop10 = ref<Array<{ country: string; count: number }>>([])
 
-// 组织IOC排名TOP10
-const orgIocTop10 = ref<Array<{ organization: string; count: number }>>([])
+// 组织恶意域名排名TOP10
+const orgMaliciousDomainTop10 = ref<Array<{ organization: string; count: number }>>([])
 
 const pieContainer = ref()
 const columnContainer = ref()
@@ -153,20 +153,31 @@ const regionAnchors: Record<
     labelX: string
     labelY: string
     labelAlign?: 'left' | 'right' | 'center'
+    lineBendX?: string
+    lineBendY?: string
   }
 > = {
-  东亚: { label: '东亚', pinX: '86%', pinY: '45%', labelX: '95%', labelY: '45%', labelAlign: 'left' },
-  东南亚: { label: '东南亚', pinX: '78%', pinY: '62%', labelX: '95%', labelY: '62%', labelAlign: 'left' },
+  东亚: { label: '东亚', pinX: '78%', pinY: '45%', labelX: '98%', labelY: '45%', labelAlign: 'right' },
+  东南亚: {
+    label: '东南亚',
+    pinX: '78%',
+    pinY: '62%',
+    labelX: '98%',
+    labelY: '65%',
+    labelAlign: 'right',
+    lineBendX: '98%',
+    lineBendY: '62%',
+  },
   南亚: { label: '南亚', pinX: '70%', pinY: '58%', labelX: '70%', labelY: '75%', labelAlign: 'center' },
   中亚: { label: '中亚', pinX: '68%', pinY: '38%', labelX: '68%', labelY: '30%', labelAlign: 'center' },
   中东: { label: '中东', pinX: '62%', pinY: '54%', labelX: '62%', labelY: '87%', labelAlign: 'center' },
   欧洲: { label: '欧洲', pinX: '54%', pinY: '38%', labelX: '54%', labelY: '20%', labelAlign: 'center' },
   东欧: { label: '东欧', pinX: '70%', pinY: '35%', labelX: '70%', labelY: '18%', labelAlign: 'center' },
   非洲: { label: '非洲', pinX: '50%', pinY: '62%', labelX: '30%', labelY: '62%', labelAlign: 'left' },
-  北美: { label: '北美', pinX: '20%', pinY: '42%', labelX: '13%', labelY: '42%', labelAlign: 'right' },
-  北美洲: { label: '北美洲', pinX: '20%', pinY: '42%', labelX: '13%', labelY: '42%', labelAlign: 'right' },
-  南美洲: { label: '南美洲', pinX: '30%', pinY: '70%', labelX: '20%', labelY: '70%', labelAlign: 'right' },
-  大洋洲: { label: '大洋洲', pinX: '84%', pinY: '82%', labelX: '92%', labelY: '82%', labelAlign: 'left' },
+  北美: { label: '北美', pinX: '24%', pinY: '42%', labelX: '2%', labelY: '42%', labelAlign: 'left' },
+  北美洲: { label: '北美洲', pinX: '24%', pinY: '42%', labelX: '2%', labelY: '42%', labelAlign: 'left' },
+  南美洲: { label: '南美洲', pinX: '30%', pinY: '70%', labelX: '2%', labelY: '70%', labelAlign: 'left' },
+  大洋洲: { label: '大洋洲', pinX: '84%', pinY: '82%', labelX: '98%', labelY: '82%', labelAlign: 'right' },
   未知: { label: '未知区域', pinX: '6%', pinY: '12%', labelX: '16%', labelY: '12%', labelAlign: 'left' },
 }
 
@@ -299,16 +310,6 @@ const groupedByRegion = computed<Record<RegionKey, OrganizationProfile[]>>(() =>
 
   return groups
 })
-
-const maxOrganizationNameLength = computed(() => {
-  const maxLen = spatialOrganizations.value.reduce((max, org) => {
-    const len = (org.name || '').trim().length
-    return Math.max(max, len)
-  }, 0)
-  return Math.max(maxLen, 8)
-})
-
-const orgTagWidth = computed(() => `${maxOrganizationNameLength.value + 2}ch`)
 
 const regionPageSize = 3
 const regionPageIndex = ref<Record<string, number>>({})
@@ -543,14 +544,14 @@ async function loadRegionDistribution() {
   }
 }
 
-// 加载组织IOC排名Top10
-async function loadOrgIocTop10() {
+// 加载组织恶意域名排名Top10
+async function loadOrgMaliciousDomainTop10() {
   try {
-    const response = await fetch('/api/dashboard/data-display/top-organizations?limit=10&order_by=ioc_count')
+    const response = await fetch('/api/dashboard/data-display/top-organizations?limit=10&order_by=malicious_domain_count')
     if (response.ok) {
       const result = await response.json()
       if (result.code === 200 && result.data) {
-        orgIocTop10.value = result.data.map((item: any) => ({
+        orgMaliciousDomainTop10.value = result.data.map((item: any) => ({
           organization: item.name || '未知',
           count: item.count || 0
         }))
@@ -755,7 +756,7 @@ function renderDashboardCharts() {
     attackSourceChart.value.render()
 
     orgIocChart.value = new Column(orgIocColumnContainer.value, {
-      data: orgIocTop10.value,
+      data: orgMaliciousDomainTop10.value,
       xField: 'organization',
       yField: 'count',
       height: 280,
@@ -781,7 +782,7 @@ function renderDashboardCharts() {
           alias: '组织',
         },
         count: {
-          alias: 'IOC数量',
+          alias: '恶意域名数量',
         },
       },
     })
@@ -807,7 +808,7 @@ watch(
 )
 
 watch(
-  [threatTypeData, attackSourceTop10, orgIocTop10, isSpatialDetailView],
+  [threatTypeData, attackSourceTop10, orgMaliciousDomainTop10, isSpatialDetailView],
   async () => {
     if (!isSpatialDetailView.value) {
       await nextTick()
@@ -824,7 +825,7 @@ onMounted(async () => {
     loadActiveOrganizationsAfter2025(),
     loadAptEventCount(),
     loadRegionDistribution(),
-    loadOrgIocTop10(),
+    loadOrgMaliciousDomainTop10(),
     loadSpatialData(),
   ])
 
@@ -914,14 +915,32 @@ onMounted(async () => {
             <img :src="worldMapImage" alt="世界地图" class="map-image">
             <svg class="connection-lines" xmlns="http://www.w3.org/2000/svg">
               <template v-for="(anchor, key) in regionAnchors" :key="`line-${key}`">
-                <line
-                  v-if="getGroupByRegionKey(key as string).length > 0"
-                  :x1="(anchor as any).pinX"
-                  :y1="(anchor as any).pinY"
-                  :x2="(anchor as any).labelX"
-                  :y2="(anchor as any).labelY"
-                  class="anchor-line"
-                />
+                <template v-if="getGroupByRegionKey(key as string).length > 0">
+                  <template v-if="(anchor as any).lineBendX && (anchor as any).lineBendY">
+                    <line
+                      :x1="(anchor as any).pinX"
+                      :y1="(anchor as any).pinY"
+                      :x2="(anchor as any).lineBendX"
+                      :y2="(anchor as any).lineBendY"
+                      class="anchor-line"
+                    />
+                    <line
+                      :x1="(anchor as any).lineBendX"
+                      :y1="(anchor as any).lineBendY"
+                      :x2="(anchor as any).labelX"
+                      :y2="(anchor as any).labelY"
+                      class="anchor-line"
+                    />
+                  </template>
+                  <line
+                    v-else
+                    :x1="(anchor as any).pinX"
+                    :y1="(anchor as any).pinY"
+                    :x2="(anchor as any).labelX"
+                    :y2="(anchor as any).labelY"
+                    class="anchor-line"
+                  />
+                </template>
               </template>
             </svg>
 
@@ -951,7 +970,7 @@ onMounted(async () => {
                     :key="org.id"
                     color="cyan"
                     class="clickable org-tag"
-                    :style="{ width: orgTagWidth }"
+                    :title="org.name"
                     @click="handleOrganizationClick(org)"
                   >
                     {{ org.name }}
@@ -1126,10 +1145,10 @@ onMounted(async () => {
                   <a-space :size="24">
                     <span>
                       <a-typography-text type="secondary">
-                        关联IOC：
+                        关联恶意域名：
                       </a-typography-text>
                       <a-typography-text strong>
-                        {{ formatIocCount(org.iocCount) }} 个
+                        {{ formatMaliciousDomainCount(org.maliciousDomainCount ?? org.iocCount) }} 个
                       </a-typography-text>
                     </span>
                     <span>
@@ -1232,7 +1251,7 @@ onMounted(async () => {
         </a-card>
       </a-col>
       <a-col :xl="8" :lg="12" :md="12" :sm="24" :xs="24" :style="{ marginBottom: '24px' }">
-        <a-card title="组织 IOC 排名 TOP10" :bordered="false">
+        <a-card title="组织恶意域名排名 TOP10" :bordered="false">
           <div ref="orgIocColumnContainer" />
         </a-card>
       </a-col>
@@ -1311,6 +1330,7 @@ onMounted(async () => {
 .map-canvas {
   position: relative;
   width: 100%;
+  box-sizing: border-box;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -1323,6 +1343,7 @@ onMounted(async () => {
 .map-container {
   position: relative;
   width: 100%;
+  min-width: 0;
   max-width: 1400px;
   margin: 0 auto;
 }
@@ -1401,8 +1422,9 @@ onMounted(async () => {
   padding: 10px 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   width: fit-content;
-  min-width: auto;
-  max-width: none;
+  min-width: 0;
+  max-width: min(440px, calc(60% - 16px));
+  box-sizing: border-box;
 }
 
 .org-label-box.align-left {
@@ -1422,6 +1444,7 @@ onMounted(async () => {
   flex-wrap: nowrap;
   gap: 6px;
   align-items: center;
+  max-width: 100%;
 }
 
 .org-tag {
@@ -1429,12 +1452,14 @@ onMounted(async () => {
   font-size: 12px;
   padding: 4px 8px;
   border-radius: 4px;
+  min-width: 0;
+  max-width: 18ch;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   display: block;
   line-height: 1.4;
   text-align: center;
-  overflow: visible;
-  text-overflow: clip;
 }
 
 .label-pagination {

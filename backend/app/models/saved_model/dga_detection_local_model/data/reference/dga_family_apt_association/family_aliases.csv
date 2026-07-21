@@ -1,0 +1,40 @@
+alias,canonical_family,note
+gameover_p2p,gameover,variant grouped for family-level reporting
+murofetweekly,murofet,weekly variant grouped with murofet
+pushdotid,pushdo,variant grouped with pushdo
+pykspa2,pykspa,version variant grouped with pykspa
+pykspa2s,pykspa,version variant grouped with pykspa
+tempedrevetdd,tempedreve,variant grouped with tempedreve
+vidrotid,vidro,variant grouped with vidro
+ud2,ud,version variant grouped with ud
+ud3,ud,version variant grouped with ud
+ud4,ud,version variant grouped with ud
+ud5,ud,version variant grouped with ud
+ud6,ud,version variant grouped with ud
+ud7,ud,version variant grouped with ud
+ud8,ud,version variant grouped with ud
+nymaim2,nymaim,DGArchive version variant grouped with nymaim
+mydoomtid,mydoom,DGArchive TID variant grouped with mydoom
+m0yvtdd,m0yv,DGArchive TDD variant grouped with m0yv
+slotsoftrobottid,slotsoftrobot,DGArchive TID variant grouped with slotsoftrobot
+deception2,deception,DGArchive version variant grouped with deception
+extrahop_unknown,unknown_family,not a concrete family label
+fobber_v1,fobber,UMUDGA version variant grouped with fobber
+fobber_v2,fobber,UMUDGA version variant grouped with fobber
+gozi_gpl,gozi,UMUDGA gozi variant grouped with gozi
+gozi_luther,gozi,UMUDGA gozi variant grouped with gozi
+gozi_nasa,gozi,UMUDGA gozi variant grouped with gozi
+gozi_rfc4343,gozi,UMUDGA gozi variant grouped with gozi
+kraken_v1,kraken,UMUDGA version variant grouped with kraken
+kraken_v2,kraken,UMUDGA version variant grouped with kraken
+murofet_v1,murofet,UMUDGA version variant grouped with murofet
+murofet_v2,murofet,UMUDGA version variant grouped with murofet
+murofet_v3,murofet,UMUDGA version variant grouped with murofet
+pykspa_noise,pykspa,UMUDGA pykspa noise variant grouped with pykspa
+ranbyus_v1,ranbyus,UMUDGA version variant grouped with ranbyus
+ranbyus_v2,ranbyus,UMUDGA version variant grouped with ranbyus
+suppobox_1,suppobox,UMUDGA variant grouped with suppobox
+suppobox_2,suppobox,UMUDGA variant grouped with suppobox
+suppobox_3,suppobox,UMUDGA variant grouped with suppobox
+vawtrak_v1,vawtrak,UMUDGA version variant grouped with vawtrak
+vawtrak_v2,vawtrak,UMUDGA version variant grouped with vawtrak

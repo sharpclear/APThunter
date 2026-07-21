@@ -1,0 +1,37 @@
+{
+  "generated_at": "2026-07-09",
+  "scope": "offline DGA family to threat actor association library",
+  "current_model_family_count": 71,
+  "association_family_count": 35,
+  "current_model_families_with_association": 33,
+  "external_association_family_count": 2,
+  "current_model_families_with_named_actor": 33,
+  "current_model_families_with_actor_or_operator_lead": 33,
+  "current_model_families_without_actor_or_operator_lead": 38,
+  "association_row_count": 48,
+  "current_model_association_row_count": 46,
+  "strongest_attribution_status_counts": {
+    "confirmed_actor": 4,
+    "possible_actor": 17,
+    "reported_operator": 12,
+    "shared_tool": 2,
+    "unknown_actor": 36
+  },
+  "association_row_status_counts": {
+    "confirmed_actor": 4,
+    "possible_actor": 29,
+    "reported_operator": 12,
+    "shared_tool": 3
+  },
+  "current_model_association_row_status_counts": {
+    "confirmed_actor": 4,
+    "possible_actor": 28,
+    "reported_operator": 12,
+    "shared_tool": 2
+  },
+  "policy": {
+    "use_for": "offline enrichment after DGA family prediction and possible APT or actor association",
+    "do_not_use_for": "standalone attribution verdict or DGA detection",
+    "one_to_many": "multiple rows per dga_family are expected when several actors or distributors are reported"
+  }
+}

@@ -22,6 +22,11 @@ from dga_local_detector import (
     DEFAULT_MODEL,
     DgaDetector,
 )
+from dga_threat_actor_attribution import (
+    build_actor_attribution,
+    load_family_actor_associations,
+    parse_attribution_details,
+)
 
 
 CURRENT_DIR = Path(__file__).resolve().parent
@@ -31,6 +36,12 @@ DEFAULT_DIRECT_THRESHOLD = DEFAULT_DIRECT_HIGH_CONFIDENCE_THRESHOLD
 DEFAULT_FAMILY_THRESHOLD = DEFAULT_FAMILY_INPUT_THRESHOLD
 DEFAULT_FAMILY_CONFIDENCE = DEFAULT_FAMILY_CONFIDENCE_THRESHOLD
 DEFAULT_UNCERTAIN_THRESHOLD = 0.70
+DEFAULT_ACTOR_ASSOCIATIONS_RELATIVE_PATH = (
+    Path("data")
+    / "reference"
+    / "dga_family_apt_association"
+    / "dga_family_actor_associations.csv"
+)
 _DETECTOR_CACHE: dict[tuple[str, str, str, float, float, float, float], DgaDetector] = {}
 _DGA_RUNTIME_ENV = "DGA_RUNTIME_PYTHON"
 _DGA_SUBPROCESS_ENV = "DGA_DETECTION_SUBPROCESS"
@@ -212,23 +223,36 @@ def predict_from_domains(
         uncertain_threshold=DEFAULT_UNCERTAIN_THRESHOLD,
     )
     scored_rows = detector.predict(clean_domains, include_debug=True)
+    association_path = package_dir / DEFAULT_ACTOR_ASSOCIATIONS_RELATIVE_PATH
+    try:
+        actor_associations = load_family_actor_associations(association_path)
+        actor_association_available = True
+    except (OSError, ValueError):
+        actor_associations = {}
+        actor_association_available = False
 
     result_rows: list[dict[str, Any]] = []
     dga_rows: list[dict[str, Any]] = []
-    risk_records: list[dict[str, Any]] = []
     for result in scored_rows:
         row = _build_result_row(
             result,
             direct_threshold=direct_threshold,
             family_input_threshold=family_input_threshold,
         )
+        row.update(
+            build_actor_attribution(
+                row.get("DGA家族"),
+                row.get("家族归因状态"),
+                actor_associations,
+            )
+        )
         result_rows.append(row)
         if row["预测标签"] == 1:
             dga_rows.append(row)
-            risk_records.append(_build_risk_record(row))
 
     dga_rows = _sort_dga_rows(dga_rows)
     result_rows = _sort_result_rows(result_rows)
+    risk_records = [_build_risk_record(row) for row in dga_rows]
     excel_content, statistics = _build_excel(
         result_rows,
         dga_rows,
@@ -242,6 +266,8 @@ def predict_from_domains(
         "package_dir": _safe_relative_path(package_dir),
         "family_model_path": _safe_relative_path(family_model) if family_model else None,
         "family_audit_path": _safe_relative_path(family_audit) if family_audit else None,
+        "actor_association_path": _safe_relative_path(association_path),
+        "actor_association_available": actor_association_available,
         "direct_high_confidence_threshold": direct_threshold,
         "family_input_threshold": family_input_threshold,
         "family_confidence_threshold": family_confidence_threshold,
@@ -253,6 +279,7 @@ def predict_from_domains(
         "high_confidence_count": len(dga_rows),
         "candidate_count": sum(1 for row in result_rows if _safe_float(row.get("DGA_score")) >= family_input_threshold),
         "family_attributed_count": sum(1 for row in dga_rows if row.get("家族归因状态") == "usable"),
+        "actor_attributed_count": sum(1 for row in dga_rows if row.get("APT组织名")),
         "risk_records": risk_records,
     }
     return excel_content, statistics, meta
@@ -443,6 +470,9 @@ def _build_risk_record(row: dict[str, Any]) -> dict[str, Any]:
         "family": row.get("DGA家族"),
         "family_confidence": _safe_float(row.get("家族置信度")),
         "family_attribution_status": row.get("家族归因状态"),
+        "apt_organization_names": row.get("APT组织名"),
+        "apt_relationship_types_cn": row.get("关联方式"),
+        "apt_attribution_clues": parse_attribution_details(row.get("APT组织关联详情")),
         "reason": row.get("命中方式") or row.get("命中原因"),
     }
 
@@ -450,9 +480,13 @@ def _build_risk_record(row: dict[str, Any]) -> dict[str, Any]:
 def _dga_sort_key(row: dict[str, Any]) -> tuple[int, int, float, str]:
     family = str(row.get("DGA家族") or "")
     status = str(row.get("家族归因状态") or "")
-    if status == "usable" and family not in {"", "unknown_family", "possible_family"}:
+    has_concrete_family = (
+        status == "usable"
+        and family not in {"", "unknown_family", "possible_family"}
+    )
+    if has_concrete_family and row.get("APT组织名"):
         family_rank = 0
-    elif family == "possible_family" or status.startswith("caution_"):
+    elif has_concrete_family:
         family_rank = 1
     else:
         family_rank = 2
@@ -501,6 +535,15 @@ def _build_excel(
     direct_count = sum(1 for row in dga_rows if _safe_float(row.get("DGA_score")) >= direct_threshold)
     family_promoted_count = sum(1 for row in dga_rows if row.get("命中方式") == "家族确认提升")
     family_attributed_count = sum(1 for row in dga_rows if row.get("家族归因状态") == "usable")
+    actor_attributed_count = sum(1 for row in dga_rows if row.get("APT组织名"))
+    unique_actor_count = len(
+        {
+            actor.strip()
+            for row in dga_rows
+            for actor in str(row.get("APT组织名") or "").split("、")
+            if actor.strip()
+        }
+    )
     unique_family_count = len(
         {
             row.get("DGA家族")
@@ -519,6 +562,8 @@ def _build_excel(
         "家族确认提升数": family_promoted_count,
         "识别出DGA家族的域名数": family_attributed_count,
         "识别出的DGA家族种类数": unique_family_count,
+        "关联到APT组织线索的域名数": actor_attributed_count,
+        "关联到的APT组织数": unique_actor_count,
         "正常域名数": normal_count,
         "DGA域名占比": f"{dga_rate:.2f}%",
         "检测口径": _policy_text_cn(

@@ -26,7 +26,7 @@
 - 使用本地 DGA 主模型对域名进行序列特征评分，输出 DGA_score 和候选标签。
 - 对达到候选阈值的域名进入 DGA 家族识别流程，结合序列 GRU 家族模型和审计阈值判断家族归因是否可展示。
 - 按真实检测口径输出高置信DGA：主模型直接高置信，或 DGA_score 达到候选阈值且家族识别可展示。
-- 输出预测结果、命中方式、DGA家族、家族置信度、家族归因状态和命中原因，用于在线查看、预警和报告归档。
+- 输出预测结果、命中方式、DGA家族、家族置信度、组织关联线索和命中原因，用于在线查看、预警和报告归档。
 
 | 指标 | 数值 | 指标 | 数值 |
 | --- | --- | --- | --- |
@@ -44,10 +44,10 @@
 
 ## 五、高置信DGA域名清单
 
-| 域名 | DGA_score | 命中方式 | DGA家族 | 家族置信度 |
-| --- | --- | --- | --- | --- |
+| 域名 | DGA_score | 命中方式 | DGA家族 | 家族置信度 | APT组织名 | 关联方式 |
+| --- | --- | --- | --- | --- | --- | --- |
 {% for item in top_domains -%}
-| {{ item.domain | mdcell }} | {{ item.score }} | {{ item.hit_type | mdcell }} | {{ item.family | mdcell }} | {{ item.family_confidence }} |
+| {{ item.domain | mdcell }} | {{ item.score }} | {{ item.hit_type | mdcell }} | {{ item.family | mdcell }} | {{ item.family_confidence }} | {{ item.apt_organization_names | mdcell }} | {{ item.apt_relationship_types_cn | mdcell }} |
 {% endfor %}
 
 ## 六、DGA家族统计

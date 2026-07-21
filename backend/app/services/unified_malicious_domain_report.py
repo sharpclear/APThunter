@@ -201,6 +201,15 @@ def _hit_detail(module: str, row: dict[str, Any]) -> dict[str, Any]:
             "domain": _row_domain(row),
             "score": _score(row.get("DGA_score") or row.get("dga_score")),
             "family": _cell_text(row.get("DGA家族") or row.get("family")),
+            "family_attribution_status": _cell_text(
+                row.get("家族归因状态") or row.get("family_attribution_status")
+            ),
+            "apt_organization_names": _cell_text(
+                row.get("APT组织名") or row.get("apt_organization_names")
+            ),
+            "apt_relationship_types_cn": _cell_text(
+                row.get("关联方式") or row.get("apt_relationship_types_cn")
+            ),
             "hit_type": _cell_text(row.get("命中方式") or row.get("预测结果")),
             "reason": _cell_text(row.get("规则原因") or row.get("命中方式")),
         }
@@ -237,6 +246,13 @@ def _detail_text(module_hits: dict[str, dict[str, Any]]) -> str:
                 f"DGA分数={_format_score(detail.get('score'))}",
                 f"家族={detail.get('family') or '-'}",
             ]
+            if detail.get("apt_organization_names"):
+                fragments.extend(
+                    [
+                        f"APT组织={detail.get('apt_organization_names')}",
+                        f"关联方式={detail.get('apt_relationship_types_cn') or '-'}",
+                    ]
+                )
         elif module == "history_similarity":
             fragments = [
                 f"相似度={_format_score(detail.get('score'))}",
@@ -270,6 +286,31 @@ def _collect_hits(module: str, payload: dict[str, Any]) -> dict[str, dict[str, A
         if current is None or _score(detail.get("score")) > _score(current.get("score")):
             hits[domain] = detail
     return hits
+
+
+def _dga_display_priority(detail: dict[str, Any]) -> int:
+    family = _cell_text(detail.get("family"))
+    family_status = _cell_text(detail.get("family_attribution_status"))
+    has_concrete_family = (
+        family_status == "usable"
+        and family not in {"", "unknown_family", "possible_family"}
+    )
+    if has_concrete_family and _cell_text(detail.get("apt_organization_names")):
+        return 0
+    if has_concrete_family:
+        return 1
+    return 2
+
+
+def _unified_malicious_sort_key(row: dict[str, Any]) -> tuple[int, float, str]:
+    dga_detail = (row.get("module_hits") or {}).get("dga")
+    if isinstance(dga_detail, dict):
+        return (
+            _dga_display_priority(dga_detail),
+            -_score(dga_detail.get("score")),
+            _row_domain(row),
+        )
+    return (3, 0.0, _row_domain(row))
 
 
 def build_unified_malicious_domain_payload(
@@ -334,6 +375,7 @@ def build_unified_malicious_domain_payload(
             normal_domains.append(row)
 
     total = len(ordered_domains)
+    malicious_domains.sort(key=_unified_malicious_sort_key)
     malicious_count = len(malicious_domains)
     normal_count = len(normal_domains)
     statistics = {
@@ -377,6 +419,59 @@ def build_unified_malicious_domain_result_json(payload: dict[str, Any]) -> bytes
     return json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")
 
 
+def _dga_result_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    dga_payload = (payload.get("module_results") or {}).get("dga") or {}
+    rows: list[dict[str, Any]] = []
+    seen_domains: set[str] = set()
+    for row in dga_payload.get("dga_domains") or []:
+        if not isinstance(row, dict):
+            continue
+        domain = _row_domain(row)
+        actor_names = _cell_text(
+            row.get("APT组织名") or row.get("apt_organization_names")
+        )
+        if not domain or domain in seen_domains:
+            continue
+        seen_domains.add(domain)
+        family = _cell_text(row.get("DGA家族") or row.get("family"))
+        family_status = _cell_text(
+            row.get("家族归因状态") or row.get("family_attribution_status")
+        )
+        rows.append(
+            {
+                "domain": domain,
+                "_score_value": _score(row.get("DGA_score") or row.get("dga_score")),
+                "score": _format_score(row.get("DGA_score") or row.get("dga_score")),
+                "family": family or "unknown_family",
+                "family_attribution_status": family_status,
+                "apt_organization_names": actor_names or "-",
+                "apt_relationship_types_cn": _cell_text(
+                    row.get("关联方式") or row.get("apt_relationship_types_cn")
+                )
+                or "-",
+            }
+        )
+    sorted_rows = sorted(
+        rows,
+        key=lambda row: (
+            _dga_display_priority(
+                {
+                    "family": row["family"],
+                    "family_attribution_status": row["family_attribution_status"],
+                    "apt_organization_names": ""
+                    if row["apt_organization_names"] == "-"
+                    else row["apt_organization_names"],
+                }
+            ),
+            -row["_score_value"],
+            row["domain"],
+        ),
+    )
+    for row in sorted_rows:
+        row.pop("_score_value", None)
+    return sorted_rows
+
+
 def _build_report_context(payload: dict[str, Any]) -> dict[str, Any]:
     total = int(payload.get("total_count") or 0)
     malicious_count = int(payload.get("malicious_count") or 0)
@@ -402,13 +497,7 @@ def _build_report_context(payload: dict[str, Any]) -> dict[str, Any]:
     if not overlap_summaries:
         overlap_summaries = [{"labels": "未命中", "count": 0, "percent": "0.00%"}]
 
-    top_domains = sorted(
-        malicious_domains,
-        key=lambda row: (
-            -int(row.get("命中模块数") or 0),
-            str(row.get("域名") or ""),
-        ),
-    )[:50]
+    top_domains = list(malicious_domains)[:50]
     if not top_domains:
         top_domains = [
             {
@@ -418,6 +507,11 @@ def _build_report_context(payload: dict[str, Any]) -> dict[str, Any]:
                 "命中详情": "本次任务未发现被任一模块判定为恶意的域名",
             }
         ]
+
+    dga_result_rows = _dga_result_rows(payload)
+    dga_actor_attribution_count = sum(
+        row["apt_organization_names"] != "-" for row in dga_result_rows
+    )
 
     return {
         "task_id": payload.get("task_id"),
@@ -432,6 +526,9 @@ def _build_report_context(payload: dict[str, Any]) -> dict[str, Any]:
         "module_summaries": module_summaries,
         "overlap_summaries": overlap_summaries,
         "top_domains": top_domains,
+        "dga_result_count": len(dga_result_rows),
+        "dga_actor_attribution_count": dga_actor_attribution_count,
+        "dga_result_rows": dga_result_rows,
         "thresholds": payload.get("thresholds") or {},
     }
 

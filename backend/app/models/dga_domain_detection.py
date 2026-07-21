@@ -472,6 +472,7 @@ def _build_risk_record(row: dict[str, Any]) -> dict[str, Any]:
         "family_attribution_status": row.get("家族归因状态"),
         "apt_organization_names": row.get("APT组织名"),
         "apt_relationship_types_cn": row.get("关联方式"),
+        "apt_attribution_summary_cn": row.get("APT组织关联说明"),
         "apt_attribution_clues": parse_attribution_details(row.get("APT组织关联详情")),
         "reason": row.get("命中方式") or row.get("命中原因"),
     }

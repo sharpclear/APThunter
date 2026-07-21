@@ -730,6 +730,8 @@ def _column_widths(headers: list[str], column_count: int) -> list[float]:
     header_text = "|".join(headers)
     if column_count == 2:
         return [available_width * 0.68, available_width * 0.32]
+    if column_count == 3 and "关系说明" in header_text:
+        return [available_width * 0.16, available_width * 0.22, available_width * 0.62]
     if column_count == 3:
         return [available_width * 0.54, available_width * 0.22, available_width * 0.24]
     if column_count == 4 and "匹配历史APT域名" in header_text:

@@ -11,6 +11,9 @@ from typing import Any, Optional
 
 import pandas as pd
 
+from app.models.dga_threat_actor_attribution import (
+    build_attribution_relationship_overview,
+)
 from app.services.history_similarity_report import render_markdown_report_to_pdf
 
 
@@ -364,6 +367,7 @@ def _build_report_context(
         dga_rows=dga_rows,
         dga_count=dga_count,
     )
+    actor_relationship_overview = build_attribution_relationship_overview(dga_rows)
 
     hit_counter = Counter(_hit_type(row) for row in dga_rows)
     hit_type_overview = [
@@ -420,6 +424,7 @@ def _build_report_context(
         "detection_policy": detection_policy,
         "risk_levels": risk_levels,
         "top_domains": top_domains,
+        "actor_relationship_overview": actor_relationship_overview,
         "family_overview": family_overview,
         "hit_type_overview": hit_type_overview,
         "conclusion": conclusion,

@@ -11,7 +11,9 @@ MODELS_DIR = Path(__file__).resolve().parents[1] / "app" / "models"
 sys.path.insert(0, str(MODELS_DIR))
 
 from dga_threat_actor_attribution import (  # noqa: E402
+    RELATIONSHIP_EXPLANATION_TEMPLATES,
     RELATIONSHIP_TYPE_CN,
+    build_attribution_relationship_overview,
     build_actor_attribution,
     load_family_actor_associations,
     parse_attribution_details,
@@ -42,6 +44,12 @@ class DgaThreatActorAttributionTests(unittest.TestCase):
         details = parse_attribution_details(result["APT组织关联详情"])
         self.assertEqual(len(details), 3)
         self.assertTrue(all(detail["relationship_type_cn"] for detail in details))
+        self.assertIn(
+            "GOLD CABIN 的攻击活动曾使用 qakbot。",
+            result["APT组织关联说明"],
+        )
+        self.assertIn("TA577 曾参与分发 qakbot。", result["APT组织关联说明"])
+        self.assertNotIn("不代表", result["APT组织关联说明"])
 
     def test_non_usable_family_is_not_attributed(self) -> None:
         result = build_actor_attribution(
@@ -52,6 +60,7 @@ class DgaThreatActorAttributionTests(unittest.TestCase):
 
         self.assertEqual(result["APT组织名"], "")
         self.assertEqual(result["关联方式"], "")
+        self.assertEqual(result["APT组织关联说明"], "")
         self.assertEqual(result["APT组织线索数"], 0)
 
     def test_family_alias_resolves_to_canonical_associations(self) -> None:
@@ -59,6 +68,26 @@ class DgaThreatActorAttributionTests(unittest.TestCase):
 
         self.assertEqual(result["APT组织名"], "Neverquest operators")
         self.assertEqual(result["关联方式"], "犯罪服务运营者")
+        self.assertEqual(
+            result["APT组织关联说明"],
+            "Neverquest operators 被公开报道为 vawtrak 犯罪服务的运营者。",
+        )
+
+    def test_relationship_overview_deduplicates_repeated_domains(self) -> None:
+        attribution = build_actor_attribution("qadars", "usable", self.associations)
+        rows = [
+            {"DGA家族": "qadars", **attribution},
+            {"DGA家族": "qadars", **attribution},
+        ]
+
+        overview = build_attribution_relationship_overview(rows)
+
+        self.assertEqual(len(overview), 1)
+        self.assertEqual(overview[0]["apt_organization_name"], "FIN7")
+        self.assertEqual(
+            overview[0]["relationship_explanation_cn"],
+            "FIN7 的相关攻击活动曾使用或涉及 qadars 工具。",
+        )
 
     def test_current_relationship_types_have_chinese_labels(self) -> None:
         with ASSOCIATIONS_CSV.open(newline="", encoding="utf-8") as handle:
@@ -67,6 +96,10 @@ class DgaThreatActorAttributionTests(unittest.TestCase):
             }
 
         self.assertEqual(relationship_types.difference(RELATIONSHIP_TYPE_CN), set())
+        self.assertEqual(
+            set(RELATIONSHIP_TYPE_CN),
+            set(RELATIONSHIP_EXPLANATION_TEMPLATES),
+        )
 
     def test_association_summary_matches_shipped_data(self) -> None:
         data_dir = ASSOCIATIONS_CSV.parent

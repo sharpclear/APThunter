@@ -26,7 +26,7 @@
 - 使用本地 DGA 主模型对域名进行序列特征评分，输出 DGA_score 和候选标签。
 - 对达到候选阈值的域名进入 DGA 家族识别流程，结合序列 GRU 家族模型和审计阈值判断家族归因是否可展示。
 - 按真实检测口径输出高置信DGA：主模型直接高置信，或 DGA_score 达到候选阈值且家族识别可展示。
-- 输出预测结果、命中方式、DGA家族、家族置信度、家族归因状态和命中原因，用于在线查看、预警和报告归档。
+- 输出预测结果、命中方式、DGA家族、家族置信度、组织关联线索和命中原因，用于在线查看、预警和报告归档。
 
 | 指标 | 数值 | 指标 | 数值 |
 | --- | --- | --- | --- |
@@ -44,13 +44,25 @@
 
 ## 五、高置信DGA域名清单
 
-| 域名 | DGA_score | 命中方式 | DGA家族 | 家族置信度 |
-| --- | --- | --- | --- | --- |
+| 域名 | DGA_score | 命中方式 | DGA家族 | 家族置信度 | APT组织名 | 关联类型 |
+| --- | --- | --- | --- | --- | --- | --- |
 {% for item in top_domains -%}
-| {{ item.domain | mdcell }} | {{ item.score }} | {{ item.hit_type | mdcell }} | {{ item.family | mdcell }} | {{ item.family_confidence }} |
+| {{ item.domain | mdcell }} | {{ item.score }} | {{ item.hit_type | mdcell }} | {{ item.family | mdcell }} | {{ item.family_confidence }} | {{ item.apt_organization_names | mdcell }} | {{ item.apt_relationship_types_cn | mdcell }} |
 {% endfor %}
 
-## 六、DGA家族统计
+## 六、DGA家族与APT组织关系说明
+
+{% if actor_relationship_overview %}
+| DGA家族 | APT组织 | 关系说明 |
+| --- | --- | --- |
+{% for item in actor_relationship_overview -%}
+| {{ item.family | mdcell }} | {{ item.apt_organization_name | mdcell }} | {{ item.relationship_explanation_cn | mdcell }} |
+{% endfor %}
+{% else %}
+本次检测结果中暂无可展示的DGA家族与APT组织关系。
+{% endif %}
+
+## 七、DGA家族统计
 
 | DGA家族 | 高置信DGA数量 | 占比 |
 | --- | --- | --- |
@@ -58,7 +70,7 @@
 | {{ item.family | mdcell }} | {{ item.count }} | {{ item.percent }} |
 {% endfor %}
 
-## 七、命中方式统计
+## 八、命中方式统计
 
 | 命中方式 | 域名数量 | 占比 |
 | --- | --- | --- |
@@ -66,13 +78,13 @@
 | {{ item.hit_type | mdcell }} | {{ item.count }} | {{ item.percent }} |
 {% endfor %}
 
-## 八、处置建议
+## 九、处置建议
 
 - 优先复核高 DGA_score、家族识别状态为可展示、或由家族确认提升为高置信的域名。
 - 对确认异常的高置信DGA域名建议在 DNS、代理网关、防火墙或威胁情报平台中阻断，并回溯历史访问记录。
 - 对 DGA候选但未达到高置信口径的域名建议加入持续观察，重点关注解析、证书、注册商和访问行为变化。
 - 对识别出的高频家族建议结合外部情报、内部日志和关联基础设施进一步确认攻击活动背景。
 
-## 九、报告结论
+## 十、报告结论
 
 {{ final_conclusion }}

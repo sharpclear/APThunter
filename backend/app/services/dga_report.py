@@ -11,6 +11,9 @@ from typing import Any, Optional
 
 import pandas as pd
 
+from app.models.dga_threat_actor_attribution import (
+    build_attribution_relationship_overview,
+)
 from app.services.history_similarity_report import render_markdown_report_to_pdf
 
 
@@ -209,6 +212,28 @@ def _hit_type(row: dict[str, Any]) -> str:
     return _cell_text(row.get("命中方式") or row.get("hit_type") or row.get("reason")) or "高置信DGA"
 
 
+def _report_dga_sort_key(row: dict[str, Any]) -> tuple[int, float, str]:
+    family = row.get("DGA家族") or row.get("family")
+    status = _cell_text(
+        row.get("家族归因状态") or row.get("family_attribution_status")
+    )
+    has_concrete_family = status == "usable" and _family_is_concrete(family)
+    has_actor_clue = bool(
+        _cell_text(row.get("APT组织名") or row.get("apt_organization_names"))
+    )
+    if has_concrete_family and has_actor_clue:
+        priority = 0
+    elif has_concrete_family:
+        priority = 1
+    else:
+        priority = 2
+    return (
+        priority,
+        -_score(row.get("DGA_score") or row.get("dga_score")),
+        _row_domain(row),
+    )
+
+
 def _family_overview_from_payload(
     *,
     family_rows: list[dict[str, Any]],
@@ -307,7 +332,7 @@ def _build_report_context(
         },
     ]
 
-    top_rows = sorted(dga_rows, key=lambda row: _score(row.get("DGA_score") or row.get("dga_score")), reverse=True)[:30]
+    top_rows = sorted(dga_rows, key=_report_dga_sort_key)[:30]
     top_domains = [
         {
             "domain": _cell_text(row.get("域名") or row.get("domain")),
@@ -315,6 +340,12 @@ def _build_report_context(
             "hit_type": _hit_type(row),
             "family": _family_label(row.get("DGA家族") or row.get("family")),
             "family_confidence": _format_score(row.get("家族置信度") or row.get("family_confidence")),
+            "apt_organization_names": _cell_text(
+                row.get("APT组织名") or row.get("apt_organization_names")
+            ),
+            "apt_relationship_types_cn": _cell_text(
+                row.get("关联方式") or row.get("apt_relationship_types_cn")
+            ),
         }
         for row in top_rows
     ]
@@ -326,6 +357,8 @@ def _build_report_context(
                 "hit_type": "-",
                 "family": "-",
                 "family_confidence": "0.0000",
+                "apt_organization_names": "-",
+                "apt_relationship_types_cn": "-",
             }
         ]
 
@@ -334,6 +367,7 @@ def _build_report_context(
         dga_rows=dga_rows,
         dga_count=dga_count,
     )
+    actor_relationship_overview = build_attribution_relationship_overview(dga_rows)
 
     hit_counter = Counter(_hit_type(row) for row in dga_rows)
     hit_type_overview = [
@@ -390,6 +424,7 @@ def _build_report_context(
         "detection_policy": detection_policy,
         "risk_levels": risk_levels,
         "top_domains": top_domains,
+        "actor_relationship_overview": actor_relationship_overview,
         "family_overview": family_overview,
         "hit_type_overview": hit_type_overview,
         "conclusion": conclusion,

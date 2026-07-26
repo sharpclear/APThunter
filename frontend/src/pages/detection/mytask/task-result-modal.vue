@@ -93,6 +93,7 @@ interface DgaResultItem {
   家族归因状态?: string
   Top1家族?: string
   Top1家族置信度?: string | number
+  APT组织名?: string
 }
 
 interface HistorySimilarityResultItem {
@@ -858,6 +859,7 @@ function downloadButtonText() {
                       <span class="summary-item">DGA_score: {{ item.DGA_score }}</span>
                       <span v-if="item.DGA家族" class="summary-item">DGA家族: {{ item.DGA家族 }}</span>
                       <span v-if="item.家族置信度" class="summary-item">家族置信度: {{ item.家族置信度 }}</span>
+                      <span v-if="item.APT组织名" class="summary-item">APT组织名: {{ item.APT组织名 }}</span>
                       <div v-if="item.命中方式" style="margin-top: 4px; color: #667085;">
                         命中方式: {{ item.命中方式 }}
                       </div>

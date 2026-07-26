@@ -69,6 +69,7 @@ interface DgaResultItem {
   家族归因状态?: string
   Top1家族?: string
   Top1家族置信度?: string | number
+  APT组织名?: string
 }
 
 interface HistorySimilarityResultItem {
@@ -552,42 +553,49 @@ const resultColumns = computed(() => {
         title: '域名',
         dataIndex: '域名',
         key: 'domain',
-        width: '24%',
+        width: '20%',
         ellipsis: true,
       },
       {
         title: 'DGA_score',
         dataIndex: 'DGA_score',
         key: 'dga_score',
-        width: '12%',
+        width: '10%',
         align: 'center' as const,
       },
       {
         title: '预测结果',
         dataIndex: '预测结果',
         key: 'result',
-        width: '12%',
+        width: '10%',
         align: 'center' as const,
       },
       {
         title: 'DGA家族',
         dataIndex: 'DGA家族',
         key: 'dga_family',
-        width: '16%',
+        width: '14%',
+        ellipsis: true,
+      },
+      {
+        title: 'APT组织名',
+        dataIndex: 'APT组织名',
+        key: 'apt_organization_names',
+        width: '20%',
         ellipsis: true,
       },
       {
         title: '家族置信度',
         dataIndex: '家族置信度',
         key: 'family_confidence',
-        width: '12%',
+        width: '10%',
         align: 'center' as const,
       },
       {
         title: '命中方式',
         dataIndex: '命中方式',
         key: 'hit_type',
-        width: '24%',
+        width: '16%',
         ellipsis: true,
       },
     ]
@@ -972,6 +980,7 @@ onMounted(() => {
                       <span>DGA_score: {{ item.DGA_score }}</span>
                       <span v-if="item.DGA家族"> | DGA家族: {{ item.DGA家族 }}</span>
                       <span v-if="item.家族置信度"> | 家族置信度: {{ item.家族置信度 }}</span>
+                      <span v-if="item.APT组织名"> | APT组织名: {{ item.APT组织名 }}</span>
                       <div v-if="item.命中方式" style="margin-top: 4px; color: #667085;">
                         命中方式: {{ item.命中方式 }}
                       </div>

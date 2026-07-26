@@ -1394,11 +1394,11 @@ def execute_subscription(subscription_id: str):
                 bucket=RESULTS_BUCKET
             )
             if model.model_category == "impersonation" and word_report_content:
-                word_report_filename = f"prediction_report_{task_id}_{beijing_now().strftime('%Y%m%d_%H%M%S')}.docx"
+                word_report_filename = f"prediction_report_{task_id}_{beijing_now().strftime('%Y%m%d_%H%M%S')}.pdf"
                 word_report_key = upload_file_content_to_minio(
                     word_report_content,
                     word_report_filename,
-                    content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    content_type="application/pdf",
                     bucket=RESULTS_BUCKET,
                 )
         
@@ -1413,6 +1413,9 @@ def execute_subscription(subscription_id: str):
         }
         if word_report_key:
             result_extra.update({
+                "pdf_report_file_key": word_report_key,
+                "pdf_report_bucket": RESULTS_BUCKET,
+                "pdf_report_filename": word_report_filename,
                 "word_report_file_key": word_report_key,
                 "word_report_bucket": RESULTS_BUCKET,
                 "word_report_filename": word_report_filename,

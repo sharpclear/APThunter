@@ -170,23 +170,44 @@ def get_attack_sources(
 @router.get("/top-organizations")
 def get_top_organizations(
     limit: int = Query(10, ge=1, le=50, description="返回Top N"),
-    order_by: str = Query("event_count", description="排序字段: event_count/ioc_count")
+    order_by: str = Query(
+        "event_count",
+        description="排序字段: event_count/malicious_domain_count"
+    )
 ):
-    """获取Top组织（按事件数或IOC数）"""
+    """获取Top组织（按事件数或关联恶意域名数）"""
     try:
-        if order_by not in ["event_count", "ioc_count"]:
+        if order_by == "ioc_count":
+            order_by = "malicious_domain_count"
+        elif order_by not in ["event_count", "malicious_domain_count"]:
             order_by = "event_count"
         
         with engine.connect() as conn:
-            results = conn.execute(
-                text(f"""
-                    SELECT id, name, {order_by} AS count, region
-                    FROM apt_organizations
-                    ORDER BY {order_by} DESC
-                    LIMIT :limit
-                """),
-                {"limit": limit}
-            ).mappings().all()
+            if order_by == "malicious_domain_count":
+                results = conn.execute(
+                    text("""
+                        SELECT o.id, o.name, COUNT(d.id) AS count, o.region
+                        FROM apt_organizations o
+                        LEFT JOIN domains d
+                          ON d.organization_id = o.id
+                         AND d.is_malicious = 1
+                        GROUP BY o.id, o.name, o.region
+                        HAVING COUNT(d.id) > 0
+                        ORDER BY count DESC, o.id ASC
+                        LIMIT :limit
+                    """),
+                    {"limit": limit}
+                ).mappings().all()
+            else:
+                results = conn.execute(
+                    text("""
+                        SELECT id, name, event_count AS count, region
+                        FROM apt_organizations
+                        ORDER BY event_count DESC, id ASC
+                        LIMIT :limit
+                    """),
+                    {"limit": limit}
+                ).mappings().all()
             
             return JSONResponse(content={
                 "code": 200,

@@ -19,6 +19,7 @@ import json
 import os
 import socket
 import ssl
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from typing import Any
@@ -29,6 +30,13 @@ from sqlalchemy import create_engine, text
 
 MYSQL_URL = os.getenv("MYSQL_URL", "mysql+pymysql://apthunter:4CyUhr2zu6!@mysql:3306/apthunter_new")
 DNS_RECORD_TYPES = ("A", "AAAA", "MX", "NS", "TXT", "CNAME", "SOA")
+
+
+def format_duration(seconds: float) -> str:
+    total_seconds = max(0, int(seconds))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
 def safe_str(value: Any) -> str | None:
@@ -336,17 +344,40 @@ def main():
     parser.add_argument("--workers", type=int, default=int(os.getenv("DOMAIN_BOOTSTRAP_WORKERS", "8")))
     parser.add_argument("--timeout", type=float, default=float(os.getenv("DOMAIN_BOOTSTRAP_TIMEOUT", "6")))
     parser.add_argument("--limit", type=int, default=int(os.getenv("DOMAIN_BOOTSTRAP_LIMIT", "0")))
+    parser.add_argument("--min-domain-id", type=int, default=0, help="仅处理不小于该 ID 的域名")
+    parser.add_argument("--max-domain-id", type=int, default=0, help="仅处理不大于该 ID 的域名")
+    parser.add_argument("--malicious-only", action="store_true", help="仅处理 is_malicious=1 的域名")
     args = parser.parse_args()
 
+    started_at = datetime.now()
+    started_perf = time.perf_counter()
     engine = create_engine(MYSQL_URL, pool_pre_ping=True)
 
-    print("[domain-bootstrap] start")
-    print(f"[domain-bootstrap] workers={args.workers}, timeout={args.timeout}, limit={args.limit}")
+    print(f"[domain-bootstrap] start_at={started_at.isoformat(timespec='seconds')}", flush=True)
+    print(
+        "[domain-bootstrap] "
+        f"workers={args.workers}, timeout={args.timeout}, limit={args.limit}, "
+        f"min_domain_id={args.min_domain_id}, max_domain_id={args.max_domain_id}, "
+        f"malicious_only={args.malicious_only}",
+        flush=True,
+    )
+
+    where_clauses = []
+    query_params = {}
+    if args.min_domain_id > 0:
+        where_clauses.append("d.id >= :min_domain_id")
+        query_params["min_domain_id"] = args.min_domain_id
+    if args.max_domain_id > 0:
+        where_clauses.append("d.id <= :max_domain_id")
+        query_params["max_domain_id"] = args.max_domain_id
+    if args.malicious_only:
+        where_clauses.append("d.is_malicious = 1")
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
     with engine.connect() as conn:
         rows = conn.execute(
             text(
-                """
+                f"""
                 SELECT
                     d.id,
                     d.domain_name,
@@ -355,9 +386,11 @@ def main():
                     (SELECT COUNT(*) FROM ssl_certificates s WHERE s.domain_id = d.id) AS has_ssl,
                     (SELECT GROUP_CONCAT(DISTINCT r.record_type) FROM dns_records r WHERE r.domain_id = d.id) AS dns_types
                 FROM domains d
+                {where_sql}
                 ORDER BY d.id
                 """
-            )
+            ),
+            query_params,
         ).fetchall()
 
     targets = [
@@ -369,9 +402,10 @@ def main():
         targets = targets[: args.limit]
 
     total = len(targets)
-    print(f"[domain-bootstrap] pending domains={total}")
+    print(f"[domain-bootstrap] pending_domains={total}", flush=True)
     if total == 0:
-        print("[domain-bootstrap] nothing to do")
+        elapsed = time.perf_counter() - started_perf
+        print(f"[domain-bootstrap] nothing_to_do elapsed={format_duration(elapsed)}", flush=True)
         return
 
     done = 0
@@ -392,11 +426,28 @@ def main():
                 fail_cnt += 1
 
             if done % 20 == 0 or done == total:
+                elapsed = time.perf_counter() - started_perf
+                rate = done / elapsed if elapsed > 0 else 0
+                eta_seconds = (total - done) / rate if rate > 0 else 0
                 print(
-                    f"[domain-bootstrap] {done}/{total} | whois+={whois_cnt}, dns+={dns_cnt}, ssl+={ssl_cnt}, fail={fail_cnt}"
+                    f"[domain-bootstrap] {done}/{total} | "
+                    f"whois+={whois_cnt}, dns+={dns_cnt}, ssl+={ssl_cnt}, fail={fail_cnt} | "
+                    f"elapsed={format_duration(elapsed)}, rate={rate:.2f}/s, "
+                    f"eta={format_duration(eta_seconds)}",
+                    flush=True,
                 )
 
-    print("[domain-bootstrap] done")
+    finished_at = datetime.now()
+    elapsed = time.perf_counter() - started_perf
+    average_rate = done / elapsed if elapsed > 0 else 0
+    print(
+        "[domain-bootstrap] done "
+        f"finished_at={finished_at.isoformat(timespec='seconds')} "
+        f"elapsed={format_duration(elapsed)} elapsed_seconds={elapsed:.2f} "
+        f"average_rate={average_rate:.2f}/s "
+        f"whois_added={whois_cnt} dns_added={dns_cnt} ssl_added={ssl_cnt} failed={fail_cnt}",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":
@@ -404,4 +455,4 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         # 不阻断部署流程
-        print(f"[domain-bootstrap] fatal but ignored: {e}")
+        print(f"[domain-bootstrap] fatal but ignored: {e}", flush=True)

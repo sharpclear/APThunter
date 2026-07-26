@@ -22,8 +22,8 @@ from .predict import (
     extract_prediction_features,
     target_subtype_label,
     target_tier_label,
+    write_pdf_report_with_word_layout,
     write_prediction_report,
-    write_prediction_word_report,
     write_unique_candidate_output,
 )
 from .target_profile import build_target_profiles, load_positive_threshold, load_token_policy
@@ -213,7 +213,7 @@ def predict_from_domains_with_report(
         return_scored=True,
     )
     excel_content = _build_result_excel(result, statistics)
-    report_content = _build_word_report(scored_result, statistics)
+    report_content = _build_pdf_report(scored_result, statistics)
     return excel_content, statistics, report_content
 
 
@@ -375,13 +375,13 @@ def _build_result_dataframe(scored: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=RESULT_COLUMNS)
 
 
-def _build_word_report(scored: pd.DataFrame, statistics: dict[str, Any]) -> bytes:
+def _build_pdf_report(scored: pd.DataFrame, statistics: dict[str, Any]) -> bytes:
     with tempfile.TemporaryDirectory(prefix="impersonation_v1_report_") as temp_dir:
         report_dir = Path(temp_dir)
         full_output = report_dir / "suspicious_domains_result.csv"
         unique_output = report_dir / "suspicious_domains_result_unique_candidates.csv"
         markdown_output = report_dir / "prediction_report.md"
-        word_output = report_dir / "prediction_report.docx"
+        pdf_output = report_dir / "prediction_report.pdf"
         high_value_review_output = report_dir / "review_high_value_targets.csv"
 
         report_df = scored.copy() if scored is not None else _empty_scored_result()
@@ -416,12 +416,13 @@ def _build_word_report(scored: pd.DataFrame, statistics: dict[str, Any]) -> byte
             "output": str(full_output),
             "unique_output": str(unique_output),
             "report_output": str(markdown_output),
-            "word_report_output": str(word_output),
+            "pdf_report_output": str(pdf_output),
+            "word_report_output": "",
             "high_value_review_output": str(high_value_review_output),
         }
         write_prediction_report(summary, markdown_output)
-        write_prediction_word_report(summary, word_output)
-        return word_output.read_bytes()
+        write_pdf_report_with_word_layout(summary, pdf_output)
+        return pdf_output.read_bytes()
 
 
 def _build_statistics(

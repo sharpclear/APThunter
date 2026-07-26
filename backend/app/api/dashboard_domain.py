@@ -43,7 +43,7 @@ def get_domain_list(
             where_sql = f"WHERE {where_sql}" if where_sql else ""
 
             query = f"""
-                SELECT DISTINCT d.domain_name, d.created_at,
+                SELECT d.domain_name, d.created_at,
                        d.is_malicious,
                        d.organization_id,
                        o.name as organization_name,
@@ -53,7 +53,12 @@ def get_domain_list(
                 FROM domains d
                 LEFT JOIN apt_organizations o ON d.organization_id = o.id
                 {where_sql}
-                ORDER BY d.is_malicious DESC, d.created_at DESC
+                ORDER BY
+                    CASE WHEN d.organization_id IS NULL OR o.id IS NULL THEN 1 ELSE 0 END ASC,
+                    d.is_malicious DESC,
+                    d.organization_id ASC,
+                    d.created_at DESC,
+                    d.domain_name ASC
             """
 
             results = conn.execute(text(query), params).fetchall()

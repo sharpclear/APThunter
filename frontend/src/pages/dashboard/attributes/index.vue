@@ -51,13 +51,29 @@ function extractErrorPayload(error: any) {
 
 const sortedDomainList = computed<DomainListItem[]>(() => {
   return [...domainList.value].sort((a, b) => {
+    const aHasOrganization = a.organizationId != null && Boolean(a.organizationName)
+    const bHasOrganization = b.organizationId != null && Boolean(b.organizationName)
+    const organizationPresenceDiff = Number(bHasOrganization) - Number(aHasOrganization)
+    if (organizationPresenceDiff !== 0)
+      return organizationPresenceDiff
+
     const maliciousDiff = Number(Boolean(b.isMalicious)) - Number(Boolean(a.isMalicious))
     if (maliciousDiff !== 0)
       return maliciousDiff
 
+    if (aHasOrganization && bHasOrganization) {
+      const organizationIdDiff = Number(a.organizationId) - Number(b.organizationId)
+      if (organizationIdDiff !== 0)
+        return organizationIdDiff
+    }
+
     const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0
     const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0
-    return timeB - timeA
+    const timeDiff = timeB - timeA
+    if (timeDiff !== 0)
+      return timeDiff
+
+    return a.domain.localeCompare(b.domain)
   })
 })
 

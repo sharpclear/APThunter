@@ -75,6 +75,73 @@ def _env_bool(name: str, default: bool) -> bool:
     return v.strip().lower() in ("1", "true", "yes", "on")
 
 
+# ---------- 基于历史图谱的域名 APT 归因 ----------
+# 图谱目录必须包含 graph_nodes.csv 和 graph_edges.csv。候选域名只做只读匹配，
+# 历史图谱的替换/更新由管理员在该目录中人工完成。
+APT_ATTRIBUTION_GRAPH_DIR = os.path.abspath(
+    os.path.expanduser(
+        os.getenv(
+            "APT_ATTRIBUTION_GRAPH_DIR",
+            os.path.join(
+                os.path.dirname(__file__),
+                "..",
+                "data",
+                "apt_attribution",
+                "historical_graph",
+            ),
+        )
+    )
+)
+APT_ATTRIBUTION_REALTIME_ALLOWED = _env_bool(
+    "APT_ATTRIBUTION_REALTIME_ALLOWED",
+    True,
+)
+APT_ATTRIBUTION_DNS_ENABLED = _env_bool("APT_ATTRIBUTION_DNS_ENABLED", True)
+APT_ATTRIBUTION_DNS_RECORDS_ENABLED = _env_bool(
+    "APT_ATTRIBUTION_DNS_RECORDS_ENABLED",
+    True,
+)
+APT_ATTRIBUTION_RDAP_ENABLED = _env_bool("APT_ATTRIBUTION_RDAP_ENABLED", True)
+APT_ATTRIBUTION_TLS_ENABLED = _env_bool("APT_ATTRIBUTION_TLS_ENABLED", True)
+APT_ATTRIBUTION_CT_ENABLED = _env_bool("APT_ATTRIBUTION_CT_ENABLED", True)
+APT_ATTRIBUTION_IPINTEL_ENABLED = _env_bool(
+    "APT_ATTRIBUTION_IPINTEL_ENABLED",
+    True,
+)
+APT_ATTRIBUTION_WEB_ENABLED = _env_bool("APT_ATTRIBUTION_WEB_ENABLED", True)
+APT_ATTRIBUTION_REQUEST_TIMEOUT_SEC = float(
+    os.getenv("APT_ATTRIBUTION_REQUEST_TIMEOUT_SEC", "12")
+)
+APT_ATTRIBUTION_REQUEST_RETRIES = int(
+    os.getenv("APT_ATTRIBUTION_REQUEST_RETRIES", "1")
+)
+APT_ATTRIBUTION_MAX_WORKERS = int(os.getenv("APT_ATTRIBUTION_MAX_WORKERS", "4"))
+APT_ATTRIBUTION_API_MAX_DOMAINS = int(
+    os.getenv("APT_ATTRIBUTION_API_MAX_DOMAINS", "100")
+)
+APT_ATTRIBUTION_CERTIFICATE_LIMIT = int(
+    os.getenv("APT_ATTRIBUTION_CERTIFICATE_LIMIT", "10")
+)
+APT_ATTRIBUTION_DNS_TRANSPORT = (
+    os.getenv("APT_ATTRIBUTION_DNS_TRANSPORT", "auto").strip().lower()
+)
+APT_ATTRIBUTION_DOH_ENDPOINT = (
+    os.getenv(
+        "APT_ATTRIBUTION_DOH_ENDPOINT",
+        "https://cloudflare-dns.com/dns-query",
+    ).strip()
+)
+APT_ATTRIBUTION_CT_RATE_LIMIT_SEC = float(
+    os.getenv("APT_ATTRIBUTION_CT_RATE_LIMIT_SEC", "0.5")
+)
+APT_ATTRIBUTION_HISTORICAL_MAX_HOPS = int(
+    os.getenv("APT_ATTRIBUTION_HISTORICAL_MAX_HOPS", "4")
+)
+APT_ATTRIBUTION_HISTORICAL_MAX_PATHS = int(
+    os.getenv("APT_ATTRIBUTION_HISTORICAL_MAX_PATHS", "20")
+)
+
+
 ALERT_EMAIL_ENABLED = _env_bool("ALERT_EMAIL_ENABLED", True)
 
 # 飞书自定义机器人：https://open.feishu.cn/document/client-docs/bot-v3/add-custom-bot

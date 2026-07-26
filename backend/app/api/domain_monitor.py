@@ -3,14 +3,17 @@ import os
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Optional
+from urllib.parse import quote
 
 import jwt
 from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi.responses import Response
 from sqlalchemy import or_
 
 from app.db.session import SessionLocal
 from app.entities import DomainMonitorSnapshot, DomainMonitorSource, DomainMonitorTarget
 from app.services.domain_monitor import DOMAIN_MONITOR_LEASE_MINUTES, dispatch_due_monitor_targets, mark_target_due_now
+from app.services.domain_monitor_export import build_domain_monitor_export
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -146,6 +149,51 @@ async def list_monitor_targets(
         db.close()
 
 
+@router.get("/export")
+async def export_monitor_targets(
+    request: Request,
+    activeOnly: bool = Query(False),
+    domain: Optional[str] = Query(None),
+):
+    user_id = _require_user_id(request)
+    db = SessionLocal()
+    try:
+        content, row_count = build_domain_monitor_export(
+            db,
+            user_id=user_id,
+            active_only=activeOnly,
+            domain=domain,
+        )
+        filename = f"域名追踪_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        logger.info(
+            "导出域名追踪CSV user_id=%s row_count=%s active_only=%s domain=%s",
+            user_id,
+            row_count,
+            activeOnly,
+            domain or "",
+        )
+        return Response(
+            content=content,
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="domain-monitor.csv"; '
+                    f"filename*=UTF-8''{quote(filename, safe='')}"
+                ),
+                "X-Content-Type-Options": "nosniff",
+                "X-Export-Row-Count": str(row_count),
+            },
+        )
+    except Exception as exc:
+        logger.exception("导出域名追踪CSV失败 user_id=%s", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="导出域名追踪CSV失败",
+        ) from exc
+    finally:
+        db.close()
+
+
 @router.get("/targets/{target_id}/snapshots")
 async def list_monitor_snapshots(
     target_id: int,
@@ -187,6 +235,7 @@ async def list_monitor_snapshots(
                         "dns": item.dns_snapshot,
                         "certificate": item.certificate_snapshot,
                         "web": item.web_snapshot,
+                        "fingerprint": item.fingerprint_snapshot,
                         "changedFields": item.changed_fields,
                         "rawLookupErrors": item.raw_lookup_errors,
                         "errorMessage": item.error_message,

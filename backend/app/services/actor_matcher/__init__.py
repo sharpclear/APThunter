@@ -1,3 +1,9 @@
+"""旧组织归因兼容模块。
+
+产品侧已标记为未在使用、待整体替换。现有导出仅用于保持历史检测和预警流程
+兼容；新功能不得继续依赖或扩展该实现。
+"""
+
 from app.services.actor_matcher.domain_features import (
     LOGIN_WORDS,
     SECURITY_WORDS,

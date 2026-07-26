@@ -5,7 +5,16 @@ import { useUserId } from '~/composables/user-id'
 import { useAuthorization } from '~/composables/authorization'
 import { getApiBase } from '~/utils/api-public'
 
-interface MaliciousResultItem {
+interface AptAttributionFields {
+  归因组织?: string
+  归因级别?: string
+  APT置信度?: number
+  强证据数?: number
+  归因说明?: string
+  APT归因详情?: Record<string, any>
+}
+
+interface MaliciousResultItem extends AptAttributionFields {
   域名: string
   预测标签?: number
   预测结果?: string
@@ -47,7 +56,7 @@ interface AttributionDetail {
   evidence_json?: AttributionEvidence[]
 }
 
-interface PhishingResultItem {
+interface PhishingResultItem extends AptAttributionFields {
   仿冒域名?: string
   钓鱼域名?: string
   官方域名?: string
@@ -163,7 +172,13 @@ interface AptTemplateNrdStatistics {
   预警阈值?: string | number
 }
 
-type ResultItem = MaliciousResultItem | PhishingResultItem | DgaResultItem | HistorySimilarityResultItem | AptTemplateNrdResultItem
+type ResultItem = (
+  MaliciousResultItem
+  | PhishingResultItem
+  | DgaResultItem
+  | HistorySimilarityResultItem
+  | AptTemplateNrdResultItem
+) & AptAttributionFields
 type Statistics = MaliciousStatistics | PhishingStatistics | DgaStatistics | HistorySimilarityStatistics | AptTemplateNrdStatistics
 
 interface ResultData {
@@ -314,6 +329,24 @@ const confidenceDescriptions = [
     label: '无/未关联',
     color: 'default',
     description: '当前未检索到足够证据指向具体组织，或关联算法未给出有效候选。',
+  },
+]
+
+const aptAttributionDescriptions = [
+  {
+    label: '历史IOC直接归因',
+    color: 'green',
+    description: '待归因域名本身已能沿历史图谱中的IOC证据路径关联到APT组织。',
+  },
+  {
+    label: '基础设施复用归因',
+    color: 'blue',
+    description: '实时补全的DNS、证书、RDAP、IP情报或Web指纹与历史图谱基础设施发生复用。',
+  },
+  {
+    label: '未归因',
+    color: 'default',
+    description: '当前历史图谱中没有达到阈值的组织证据路径，需结合更多情报人工研判。',
   },
 ]
 
@@ -478,6 +511,30 @@ function displayAptScore(item: Partial<AptTemplateNrdResultItem>) {
 
 function isUnifiedMalicious(data?: ResultData | null) {
   return !!data?.unified_detection || data?.task_type === 'malicious' && Array.isArray(data.unified_malicious_domains)
+}
+
+function hasAptAttribution(item: ResultItem) {
+  return !!item.APT归因详情 || item.归因组织 !== undefined
+}
+
+function usesAptAttribution(data?: ResultData | null) {
+  return !!data && (
+    (data.attribution_results || []).some(item => item?.attribution_level !== undefined)
+    || (data.results || []).some(item => hasAptAttribution(item))
+  )
+}
+
+function aptAttributionColor(level?: string) {
+  if (level === '历史IOC直接归因')
+    return 'green'
+  if (level === '基础设施复用归因')
+    return 'blue'
+  return 'default'
+}
+
+function displayAptConfidence(value?: number) {
+  const score = Number(value)
+  return Number.isFinite(score) ? score.toFixed(4) : '0.0000'
 }
 
 const evidenceStrengthMeta: Record<string, { label: string, color: string, weight: number }> = {
@@ -684,8 +741,15 @@ function downloadButtonText() {
           </a-col>
         </a-row>
 
-        <a-card v-if="resultData.task_type === 'malicious' && resultData.attribution_enabled" title="组织关联置信度说明" style="margin-bottom: 16px;">
-          <a-list :data-source="confidenceDescriptions" size="small">
+        <a-card
+          v-if="['malicious', 'impersonation'].includes(resultData.task_type) && resultData.attribution_enabled"
+          :title="usesAptAttribution(resultData) ? 'APT归因说明' : '组织关联置信度说明'"
+          style="margin-bottom: 16px;"
+        >
+          <a-list
+            :data-source="usesAptAttribution(resultData) ? aptAttributionDescriptions : confidenceDescriptions"
+            size="small"
+          >
             <template #renderItem="{ item }">
               <a-list-item>
                 <a-list-item-meta>
@@ -777,6 +841,15 @@ function downloadButtonText() {
                       <span class="summary-item">单位类型: {{ getUnitType(item) }}</span>
                       <span class="summary-item">匹配类型: {{ item.匹配类型 || '未知' }}</span>
                       <a-tag :color="riskLevelColor(getRiskLevel(item))">风险等级: {{ getRiskLevel(item) }}</a-tag>
+                      <div v-if="resultData.attribution_enabled" style="margin-top: 6px;">
+                        <template v-if="hasAptAttribution(item) && item.归因组织 !== 'unknown'">
+                          <a-tag color="blue">归因组织: {{ item.归因组织 }}</a-tag>
+                          <a-tag :color="aptAttributionColor(item.归因级别)">{{ item.归因级别 }}</a-tag>
+                          <span class="summary-item">APT置信度: {{ displayAptConfidence(item.APT置信度) }}</span>
+                          <span class="summary-item">强证据数: {{ item.强证据数 || 0 }}</span>
+                        </template>
+                        <a-tag v-else>未归因到组织</a-tag>
+                      </div>
                     </div>
                   </template>
                   <template v-else-if="resultData.task_type === 'dga'" #description>
@@ -826,18 +899,33 @@ function downloadButtonText() {
                       <div v-if="item.命中详情" style="margin-top: 4px; color: #667085;">
                         {{ item.命中详情 }}
                       </div>
+                      <div v-if="resultData.attribution_enabled" style="margin-top: 6px;">
+                        <template v-if="hasAptAttribution(item) && item.归因组织 !== 'unknown'">
+                          <a-tag color="blue">归因组织: {{ item.归因组织 }}</a-tag>
+                          <a-tag :color="aptAttributionColor(item.归因级别)">{{ item.归因级别 }}</a-tag>
+                          <span class="summary-item">APT置信度: {{ displayAptConfidence(item.APT置信度) }}</span>
+                          <span class="summary-item">强证据数: {{ item.强证据数 || 0 }}</span>
+                        </template>
+                        <a-tag v-else>未归因到组织</a-tag>
+                      </div>
                     </template>
                     <template v-else>
                       <div class="malicious-summary">
                         <a-tag color="red">恶意域名</a-tag>
-                        <template v-if="item.关联组织">
+                        <template v-if="hasAptAttribution(item) && item.归因组织 !== 'unknown'">
+                          <a-tag color="blue">{{ item.归因组织 }}</a-tag>
+                          <a-tag :color="aptAttributionColor(item.归因级别)">{{ item.归因级别 }}</a-tag>
+                          <span class="summary-item">APT置信度: {{ displayAptConfidence(item.APT置信度) }}</span>
+                          <span class="summary-item">强证据数: {{ item.强证据数 || 0 }}</span>
+                        </template>
+                        <template v-else-if="item.关联组织">
                           <a-tag color="blue">{{ item.关联组织 }}</a-tag>
                           <a-tag v-if="item.关联状态" :color="associationStatusColor(item.关联状态)">
                             {{ item.关联状态 }}
                           </a-tag>
                         </template>
                         <template v-else-if="resultData.attribution_enabled">
-                          <a-tag>未关联到组织</a-tag>
+                          <a-tag>未归因到组织</a-tag>
                         </template>
                         <span class="summary-item">恶意性置信度: {{ displayBinaryConfidence(item.二分类置信度) }}</span>
                         <template v-if="item.关联组织">
@@ -845,7 +933,12 @@ function downloadButtonText() {
                           <span v-if="item.组织评分 !== undefined" class="summary-item">组织评分: {{ item.组织评分 }}</span>
                         </template>
                       </div>
-                      <template v-if="item.关联组织">
+                      <template v-if="hasAptAttribution(item)">
+                        <div v-if="item.归因说明" style="margin-top: 4px; color: #667085;">
+                          {{ item.归因说明 }}
+                        </div>
+                      </template>
+                      <template v-else-if="item.关联组织">
                         <div v-if="item.关联说明" style="margin-top: 4px; color: #667085;">
                           {{ item.关联说明 }}
                         </div>

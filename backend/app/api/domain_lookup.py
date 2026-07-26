@@ -14,8 +14,9 @@ import socket
 import json
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timezone
 from app.db.session import engine
 
 router = APIRouter(prefix="/api/domain", tags=["domain-lookup"])
@@ -60,6 +61,19 @@ def safe_list(value) -> List[str]:
     if isinstance(value, (list, tuple)):
         return [str(v) for v in value]
     return [str(value)]
+
+
+def x509_name_dict(name: x509.Name) -> Dict[str, Any]:
+    result: Dict[str, Any] = {}
+    for attribute in name:
+        key = attribute.oid._name or attribute.oid.dotted_string
+        if key not in result:
+            result[key] = attribute.value
+        elif isinstance(result[key], list):
+            result[key].append(attribute.value)
+        else:
+            result[key] = [result[key], attribute.value]
+    return result
 
 
 @router.post("/lookup/whois")
@@ -195,26 +209,13 @@ def lookup_ssl(request: DomainLookupRequest = Body(...)):
         
         with socket.create_connection((domain, 443), timeout=10) as sock:
             with context.wrap_socket(sock, server_hostname=domain) as ssock:
-                cert = ssock.getpeercert()
                 cert_bytes = ssock.getpeercert(binary_form=True)
                 parsed_cert = x509.load_der_x509_certificate(cert_bytes)
                 
-                # 解析 issuer 和 subject
-                issuer = {}
-                for item in cert.get('issuer', []):
-                    for key, value in item:
-                        issuer[key] = value
+                issuer = x509_name_dict(parsed_cert.issuer)
+                subject = x509_name_dict(parsed_cert.subject)
                 
-                subject = {}
-                for item in cert.get('subject', []):
-                    for key, value in item:
-                        subject[key] = value
-                
-                # 提取 SAN 名称
                 san_names = []
-                for item in cert.get('subjectAltName', []):
-                    if item[0] == 'DNS':
-                        san_names.append(item[1])
 
                 algorithm = None
                 try:
@@ -235,23 +236,62 @@ def lookup_ssl(request: DomainLookupRequest = Body(...)):
                     fingerprint = parsed_cert.fingerprint(hashes.SHA256()).hex()
                 except Exception:
                     fingerprint = None
+
+                spki_fingerprint = None
+                public_key_type = None
+                try:
+                    public_key = parsed_cert.public_key()
+                    public_key_type = type(public_key).__name__.lstrip("_")
+                    spki_bytes = public_key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+                    digest = hashes.Hash(hashes.SHA256())
+                    digest.update(spki_bytes)
+                    spki_fingerprint = digest.finalize().hex()
+                except Exception:
+                    spki_fingerprint = None
+
+                try:
+                    san_extension = parsed_cert.extensions.get_extension_for_class(
+                        x509.SubjectAlternativeName
+                    )
+                    san_names = san_extension.value.get_values_for_type(x509.DNSName)
+                except x509.ExtensionNotFound:
+                    pass
+
+                cipher = ssock.cipher()
+                peer_address = ssock.getpeername()
+                not_before = getattr(parsed_cert, "not_valid_before_utc", None)
+                not_after = getattr(parsed_cert, "not_valid_after_utc", None)
+                if not_before is None:
+                    not_before = parsed_cert.not_valid_before.replace(tzinfo=timezone.utc)
+                if not_after is None:
+                    not_after = parsed_cert.not_valid_after.replace(tzinfo=timezone.utc)
                 
                 data = {
                     "domain": domain,
                     "issuer": issuer,
                     "subject": subject,
                     "validity": {
-                        "notBefore": parsed_cert.not_valid_before.isoformat() if parsed_cert.not_valid_before else None,
-                        "notAfter": parsed_cert.not_valid_after.isoformat() if parsed_cert.not_valid_after else None
+                        "notBefore": not_before.isoformat(),
+                        "notAfter": not_after.isoformat()
                     },
-                    "version": cert.get('version'),
-                    "serialNumber": cert.get('serialNumber'),
+                    "version": parsed_cert.version.name,
+                    "serialNumber": format(parsed_cert.serial_number, "x"),
                     "sanNames": san_names if san_names else None,
                     "algorithm": algorithm,
                     "keySize": key_size,
                     "fingerprint": fingerprint,
-                    "isExpired": False,  # 可以根据日期判断
-                    "isSelfSigned": issuer == subject
+                    "spkiFingerprint": spki_fingerprint,
+                    "publicKeyType": public_key_type,
+                    "tlsVersion": ssock.version(),
+                    "cipher": {
+                        "name": cipher[0],
+                        "protocol": cipher[1],
+                        "bits": cipher[2],
+                    } if cipher else None,
+                    "alpnProtocol": ssock.selected_alpn_protocol(),
+                    "connectedIp": peer_address[0] if peer_address else None,
+                    "isExpired": not_after < datetime.now(timezone.utc),
+                    "isSelfSigned": parsed_cert.issuer == parsed_cert.subject
                 }
                 
                 return JSONResponse(content={

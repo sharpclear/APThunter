@@ -1,0 +1,9 @@
+source_zip,source_file,original_domain,normalized_domain,model_input_text,malicious_score,predicted_label,expected_apt
+historical_ioc_graph,ACTINIUM,celticso.ru,celticso.ru,celticso.ru,1,1,ACTINIUM
+historical_ioc_graph,ACTINIUM,kuckuduk.ru,kuckuduk.ru,kuckuduk.ru,1,1,ACTINIUM
+historical_ioc_graph,ACTINIUM,pasamart.ru,pasamart.ru,pasamart.ru,1,1,ACTINIUM
+historical_ioc_graph,Lazarus Group,3dkit.org,3dkit.org,3dkit.org,1,1,Lazarus Group
+historical_ioc_graph,Lazarus Group,dersmarketim.com,dersmarketim.com,dersmarketim.com,1,1,Lazarus Group
+historical_ioc_graph,Lazarus Group,galerielamy.com,galerielamy.com,galerielamy.com,1,1,Lazarus Group
+historical_ioc_graph,Lazarus Group,olidhealth.com,olidhealth.com,olidhealth.com,1,1,Lazarus Group
+historical_ioc_graph,Medusa,medusaxko7jxtrojdkxo66j7ck4q5tgktf7uqsqyfry4ebnxlcbkccyd.onion,medusaxko7jxtrojdkxo66j7ck4q5tgktf7uqsqyfry4ebnxlcbkccyd.onion,medusaxko7jxtrojdkxo66j7ck4q5tgktf7uqsqyfry4ebnxlcbkccyd.onion,1,1,Medusa

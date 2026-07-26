@@ -42,9 +42,28 @@ export interface DomainMonitorSnapshot {
   dns?: {
     domain?: string
     records?: DomainMonitorDnsRecord[]
+    record_counts?: Record<string, number>
+    ipv4_addresses?: string[]
+    ipv6_addresses?: string[]
+    resolved_ips?: string[]
+    network_prefixes?: string[]
+    cnames?: string[]
+    name_servers?: string[]
+    mail_servers?: Array<{ host?: string, priority?: number }>
+    ttl_profile?: Record<string, any>
+    record_set_sha256?: string
+    resolved_ip_set_sha256?: string
   } | null
   certificate?: Record<string, any> | null
   web?: Record<string, any> | null
+  fingerprint?: {
+    schema_version?: string
+    registration?: Record<string, any>
+    network?: Record<string, any>
+    tls?: Record<string, any>
+    application?: Record<string, any>
+    temporal?: Record<string, any>
+  } | null
   changedFields?: {
     is_first_snapshot?: boolean
     sections?: string[]
@@ -83,6 +102,12 @@ export function getDomainMonitorTargetsApi(params: DomainMonitorTargetListParams
 
 export function getDomainMonitorSnapshotsApi(targetId: number, params: DomainMonitorSnapshotListParams) {
   return useGet<DomainMonitorSnapshotListResult>(`/domain-monitor/targets/${targetId}/snapshots`, params)
+}
+
+export function exportDomainMonitorCsvApi(params: Pick<DomainMonitorTargetListParams, 'activeOnly' | 'domain'>): Promise<Blob> {
+  return useGet<Blob>('/domain-monitor/export', params, {
+    responseType: 'blob',
+  }) as unknown as Promise<Blob>
 }
 
 export function triggerDomainMonitorTargetApi(targetId: number) {

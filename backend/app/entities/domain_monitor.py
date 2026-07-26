@@ -76,6 +76,7 @@ class DomainMonitorSnapshot(Base):
     dns_snapshot = Column(JSON, nullable=True)
     certificate_snapshot = Column(JSON, nullable=True)
     web_snapshot = Column(JSON, nullable=True)
+    fingerprint_snapshot = Column(JSON, nullable=True)
     changed_fields = Column(JSON, nullable=True)
     raw_lookup_errors = Column(JSON, nullable=True)
     error_message = Column(Text, nullable=True)

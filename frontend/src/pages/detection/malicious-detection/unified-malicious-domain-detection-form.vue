@@ -20,6 +20,11 @@ interface UnifiedResultItem {
   恶意类别标签?: string[]
   命中模块数?: number
   命中详情?: string
+  归因组织?: string
+  归因级别?: string
+  APT置信度?: number
+  强证据数?: number
+  归因说明?: string
 }
 
 interface UnifiedPreviewResult {
@@ -41,6 +46,8 @@ interface UnifiedPreviewResult {
   normal_domains?: UnifiedResultItem[]
   label_counts?: Record<string, number>
   model_names?: Record<string, string>
+  attribution_enabled?: boolean
+  attribution_results?: Array<Record<string, any>>
   manual_domain_stats?: {
     valid_count?: number
     invalid_count?: number
@@ -51,6 +58,7 @@ interface UnifiedPreviewResult {
 interface PersistedDirectTask {
   taskId: string
   manualDomains: string
+  withAttribution?: boolean
 }
 
 const API_BASE = getApiBase()
@@ -61,6 +69,7 @@ const DIRECT_TASK_STORAGE_PREFIX = 'apthunter:unified-malicious-direct-task'
 const dataSource = ref<DataSource>('manualInput')
 const submitLoading = ref(false)
 const manualDomains = ref('')
+const withAttribution = ref(false)
 const uploadFile = ref<File | null>(null)
 const previewResult = ref<UnifiedPreviewResult | null>(null)
 const directTaskId = ref('')
@@ -136,6 +145,7 @@ function persistDirectTask(taskId: string, domains: string) {
     const state: PersistedDirectTask = {
       taskId,
       manualDomains: domains,
+      withAttribution: withAttribution.value,
     }
     localStorage.setItem(directTaskStorageKey.value, JSON.stringify(state))
   }
@@ -230,6 +240,7 @@ function restoreDirectTask() {
       return
     directTaskId.value = state.taskId
     manualDomains.value = state.manualDomains || ''
+    withAttribution.value = !!state.withAttribution
     dataSource.value = 'manualInput'
     directTaskStatus.value = 'pending'
     directTaskStage.value = '正在恢复检测进度'
@@ -354,6 +365,7 @@ async function handleManualPreview() {
     const fd = new FormData()
     fd.append('dataSource', 'manualInput')
     fd.append('manualDomains', manualDomains.value)
+    fd.append('withAttribution', String(withAttribution.value))
     const resp = await fetch(`${API_BASE}/unified-malicious-domain-tasks`, {
       method: 'POST',
       body: fd,
@@ -412,6 +424,7 @@ async function handleAsyncSubmit() {
       fd.append('dateRange', JSON.stringify(dateRange.value))
     if (dataSource.value === 'manualInput')
       fd.append('manualDomains', manualDomains.value)
+    fd.append('withAttribution', String(withAttribution.value))
 
     const resp = await fetch(`${API_BASE}/unified-malicious-domain-tasks`, {
       method: 'POST',
@@ -444,6 +457,7 @@ function resetForm() {
   uploadFile.value = null
   dateRange.value = null
   manualDomains.value = ''
+  withAttribution.value = false
 }
 
 onMounted(() => {
@@ -537,6 +551,16 @@ onBeforeUnmount(() => {
               </a-form-item>
             </div>
 
+            <div class="form-section">
+              <div class="section-title">步骤 3：可选APT归因</div>
+              <a-checkbox v-model:checked="withAttribution">
+                归因到组织
+              </a-checkbox>
+              <div class="manual-input-meta">
+                勾选后，对检测结果中标记为恶意的域名实时补全 DNS、RDAP、TLS、IP/ASN 和 Web 应用指纹，并基于历史图谱归因。
+              </div>
+            </div>
+
             <div class="action-footer">
               <a-button
                 type="primary"
@@ -624,6 +648,11 @@ onBeforeUnmount(() => {
                   </a-tag>
                 </div>
                 <div class="detail-line">{{ item.命中详情 || '命中详情待查看完整报告' }}</div>
+                <div v-if="previewResult.attribution_enabled" class="detail-line">
+                  归因组织：{{ item.归因组织 || 'unknown' }}；
+                  归因级别：{{ item.归因级别 || '未归因' }}；
+                  APT置信度：{{ item.APT置信度 ?? 0 }}
+                </div>
               </div>
             </template>
             <a-empty v-else-if="previewResult" description="未发现被四个模块判定为恶意的域名" />

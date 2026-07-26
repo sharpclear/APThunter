@@ -1,4 +1,5 @@
 import io
+import json
 import logging
 import os
 import sys
@@ -14,7 +15,6 @@ from app.infra.minio_client import minio_client
 from app.db.session import SessionLocal
 from app.core.config import MINIO_BUCKET
 from app.core.config import IMPERSONATION_FULL_WHITELIST_PATH
-from app.services.actor_matcher import match_domain_to_actors_v2_infra
 from app.services.apt_template_nrd_report import (
     build_apt_template_nrd_result_json,
     build_apt_template_nrd_result_payload,
@@ -25,7 +25,7 @@ from app.services.dga_report import (
     build_dga_result_payload,
     generate_dga_pdf_report,
 )
-from app.services.domain_infra_collector import collect_missing_domain_infra
+from app.services.domain_apt_attribution import attribute_domains as attribute_apt_domains
 from app.services.domain_monitor import normalize_domain, register_monitor_targets
 from app.services.focus_impersonation_report import (
     build_focus_impersonation_report_payload,
@@ -82,20 +82,11 @@ DAILY_DATA_DIR = os.path.abspath(
 )
 _MIN_START_DATE = datetime(2024, 9, 1).date()
 
-_ACTOR_CONFIDENCE_LABELS = {
-    "high": "高",
-    "medium": "中",
-    "low": "低",
-    "candidate": "候选",
-    "none": "无",
-}
-
-_MATCH_STATUS_LABELS = {
-    "suspected_match": "疑似关联",
-    "candidate_only": "候选关联",
-    "ambiguous": "多候选不确定",
-    "no_match": "未关联",
-    "match_failed": "关联失败",
+_ATTRIBUTION_LEVEL_LABELS = {
+    "known_apt": "历史IOC直接归因",
+    "infrastructure_supported": "基础设施复用归因",
+    "unknown": "未归因",
+    "not_attributed": "未归因",
 }
 
 
@@ -235,36 +226,18 @@ def _extract_malicious_domains_from_excel(excel_content: bytes) -> List[str]:
     return domains
 
 
-def _run_domain_attribution(db, domains: List[str]) -> List[Dict[str, Any]]:
-    attribution_results = []
-    for domain in domains:
-        try:
-            match_result = match_domain_to_actors_v2_infra(domain, [], db=db)
-        except Exception:
-            logger.exception("恶意域名组织关联失败，已按空匹配继续 domain=%s", domain)
-            match_result = {"domain_name": domain, "match_status": "match_failed"}
-
-        attribution_results.append({
-            "domain": domain,
-            "match_status": match_result.get("match_status"),
-            "match_status_label": _MATCH_STATUS_LABELS.get(
-                str(match_result.get("match_status") or ""),
-                match_result.get("match_status"),
-            ),
-            "matched_organization_id": match_result.get("matched_organization_id"),
-            "matched_organization_name": match_result.get("matched_organization_name"),
-            "actor_score": match_result.get("actor_score"),
-            "actor_confidence": match_result.get("actor_confidence"),
-            "actor_confidence_label": _ACTOR_CONFIDENCE_LABELS.get(
-                str(match_result.get("actor_confidence") or ""),
-                match_result.get("actor_confidence"),
-            ),
-            "scores": match_result.get("scores") or {},
-            "reason_summary": match_result.get("reason_summary"),
-            "evidence_json": match_result.get("evidence_json"),
-            "top_candidates_json": match_result.get("top_candidates_json"),
-        })
-    return attribution_results
+def _run_domain_attribution(
+    domains: List[str],
+    *,
+    include_infrastructure: bool,
+) -> List[Dict[str, Any]]:
+    if not domains:
+        return []
+    return attribute_apt_domains(
+        domains,
+        realtime_enrichment=True,
+        include_infrastructure=include_infrastructure,
+    )
 
 
 def _append_attribution_sheet(excel_content: bytes, attribution_results: List[Dict[str, Any]]) -> bytes:
@@ -277,36 +250,58 @@ def _append_attribution_sheet(excel_content: bytes, attribution_results: List[Di
     for item in attribution_results:
         rows.append({
             "域名": item.get("domain"),
-            "匹配状态": item.get("match_status_label") or item.get("match_status"),
-            "关联组织": item.get("matched_organization_name") or "",
-            "组织ID": item.get("matched_organization_id") or "",
-            "组织评分": item.get("actor_score") if item.get("actor_score") is not None else "",
-            "组织置信度": item.get("actor_confidence_label") or item.get("actor_confidence") or "",
-            "关联说明": item.get("reason_summary") or "",
+            "归因组织": item.get("attribution") or "unknown",
+            "归因级别": _ATTRIBUTION_LEVEL_LABELS.get(
+                str(item.get("attribution_level") or ""),
+                item.get("attribution_level") or "",
+            ),
+            "APT置信度": item.get("apt_confidence"),
+            "强证据数": item.get("strong_evidence_count"),
+            "归因说明": item.get("reason") or "",
+            "证据路径JSON": json.dumps(item.get("path") or [], ensure_ascii=False),
+            "证据JSON": json.dumps(item.get("evidence") or [], ensure_ascii=False),
         })
 
     def enrich_result_sheet(df: pd.DataFrame) -> pd.DataFrame:
-        if "预测标签" in df.columns:
-            df = df.drop(columns=["预测标签"])
-        for column in ["关联组织", "组织置信度", "组织评分"]:
+        for column in ["归因组织", "归因级别", "APT置信度", "强证据数", "归因说明"]:
             if column not in df.columns:
                 df[column] = ""
 
-        if "域名" not in df.columns:
+        domain_column = next(
+            (
+                column
+                for column in ("域名", "仿冒域名", "钓鱼域名", "candidate_domain")
+                if column in df.columns
+            ),
+            None,
+        )
+        if not domain_column:
             return df
 
         for index, row in df.iterrows():
-            match = attribution_index.get(str(row.get("域名") or "").strip().lower())
+            match = attribution_index.get(
+                str(row.get(domain_column) or "").strip().lower()
+            )
             if not match:
                 continue
-            df.at[index, "关联组织"] = match.get("matched_organization_name") or ""
-            df.at[index, "组织置信度"] = match.get("actor_confidence_label") or match.get("actor_confidence") or ""
-            df.at[index, "组织评分"] = match.get("actor_score") if match.get("actor_score") is not None else ""
+            df.at[index, "归因组织"] = match.get("attribution") or "unknown"
+            df.at[index, "归因级别"] = _ATTRIBUTION_LEVEL_LABELS.get(
+                str(match.get("attribution_level") or ""),
+                match.get("attribution_level") or "",
+            )
+            df.at[index, "APT置信度"] = match.get("apt_confidence")
+            df.at[index, "强证据数"] = match.get("strong_evidence_count")
+            df.at[index, "归因说明"] = match.get("reason") or ""
 
-        preferred_columns = ["域名", "预测结果"]
-        if "二分类置信度" in df.columns:
-            preferred_columns.append("二分类置信度")
-        preferred_columns.extend(["关联组织", "组织置信度", "组织评分"])
+        preferred_columns = [domain_column]
+        preferred_columns.extend(
+            column
+            for column in ("预测结果", "判定结果", "二分类置信度")
+            if column in df.columns
+        )
+        preferred_columns.extend(
+            ["归因组织", "归因级别", "APT置信度", "强证据数", "归因说明"]
+        )
         remaining_columns = [column for column in df.columns if column not in preferred_columns]
         return df[preferred_columns + remaining_columns]
 
@@ -316,11 +311,45 @@ def _append_attribution_sheet(excel_content: bytes, attribution_results: List[Di
         for sheet_name in pd.ExcelFile(source).sheet_names:
             source.seek(0)
             sheet_df = pd.read_excel(source, sheet_name=sheet_name)
-            if sheet_name in {"预测结果", "恶意域名列表"}:
+            if sheet_name in {
+                "预测结果",
+                "恶意域名列表",
+                "检测结果",
+                "仿冒域名列表",
+                "钓鱼域名列表",
+            }:
                 sheet_df = enrich_result_sheet(sheet_df)
             sheet_df.to_excel(writer, sheet_name=sheet_name, index=False)
-        pd.DataFrame(rows).to_excel(writer, sheet_name="组织关联结果", index=False)
+        pd.DataFrame(rows).to_excel(writer, sheet_name="APT归因结果", index=False)
     return output.getvalue()
+
+
+def _attach_attribution_to_rows(
+    rows: Sequence[Mapping[str, Any]],
+    attribution_results: Sequence[Mapping[str, Any]],
+) -> List[Dict[str, Any]]:
+    indexed = {
+        str(item.get("domain") or "").strip().lower(): item
+        for item in attribution_results
+        if item.get("domain")
+    }
+    enriched: List[Dict[str, Any]] = []
+    for row in rows or []:
+        item = dict(row)
+        domain = _domain_from_monitor_record(item)
+        match = indexed.get(str(domain or "").lower())
+        if match:
+            item["归因组织"] = match.get("attribution") or "unknown"
+            item["归因级别"] = _ATTRIBUTION_LEVEL_LABELS.get(
+                str(match.get("attribution_level") or ""),
+                match.get("attribution_level") or "",
+            )
+            item["APT置信度"] = match.get("apt_confidence")
+            item["强证据数"] = match.get("strong_evidence_count")
+            item["归因说明"] = match.get("reason") or ""
+            item["APT归因详情"] = dict(match)
+        enriched.append(item)
+    return enriched
 
 
 def _parse_date_string(date_str: str) -> datetime.date:
@@ -576,6 +605,37 @@ def execute_malicious_task(task_id: str):
             "history_similarity": history_statistics,
             "apt_template_nrd": apt_statistics,
         }
+        if extra_data.get("attribution_enabled"):
+            _set_task_progress(db, task, extra_data, 80, "实时补全基础设施并执行APT归因")
+            malicious_rows = (
+                result_payload.get("unified_malicious_domains")
+                or result_payload.get("malicious_domains")
+                or []
+            )
+            malicious_domains = _domains_from_monitor_records(malicious_rows)
+            attribution_results = _run_domain_attribution(
+                malicious_domains,
+                include_infrastructure=True,
+            )
+            result_payload["attribution_enabled"] = True
+            result_payload["attribution_results"] = attribution_results
+            result_payload["results"] = _attach_attribution_to_rows(
+                result_payload.get("results") or [],
+                attribution_results,
+            )
+            result_payload["malicious_domains"] = _attach_attribution_to_rows(
+                result_payload.get("malicious_domains") or [],
+                attribution_results,
+            )
+            result_payload["unified_malicious_domains"] = _attach_attribution_to_rows(
+                result_payload.get("unified_malicious_domains") or [],
+                attribution_results,
+            )
+            extra_data["attribution_result_count"] = len(attribution_results)
+            extra_data["attribution_completed_at"] = datetime.utcnow().isoformat()
+        else:
+            result_payload["attribution_enabled"] = False
+            result_payload["attribution_results"] = []
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         result_filename = f"malicious_domain_detection_report_{task_id}_{timestamp}.pdf"
@@ -1349,6 +1409,45 @@ def execute_impersonation_task(task_id: str, *, mark_failed_on_error: bool = Tru
         else:
             raise ValueError(f"未知 detectionSource: {detection_source}")
 
+        impersonation_monitor_payload = build_impersonation_result_payload(
+            excel_content,
+            task_id=task_id,
+            statistics=statistics,
+            official_domain_count=len(official_domains),
+        )
+        if extra_data.get("attribution_enabled"):
+            _set_task_progress(db, task, extra_data, 72, "实时补全基础设施并执行APT归因")
+            phishing_domains = _domains_from_monitor_records(
+                impersonation_monitor_payload.get("phishing_domains") or []
+            )
+            attribution_results = _run_domain_attribution(
+                phishing_domains,
+                include_infrastructure=False,
+            )
+            excel_content = _append_attribution_sheet(
+                excel_content,
+                attribution_results,
+            )
+            impersonation_monitor_payload = build_impersonation_result_payload(
+                excel_content,
+                task_id=task_id,
+                statistics=statistics,
+                official_domain_count=len(official_domains),
+            )
+            impersonation_monitor_payload["attribution_enabled"] = True
+            impersonation_monitor_payload["attribution_results"] = attribution_results
+            impersonation_monitor_payload["results"] = _attach_attribution_to_rows(
+                impersonation_monitor_payload.get("results") or [],
+                attribution_results,
+            )
+            impersonation_monitor_payload["phishing_domains"] = _attach_attribution_to_rows(
+                impersonation_monitor_payload.get("phishing_domains") or [],
+                attribution_results,
+            )
+            extra_data["attribution_results"] = attribution_results
+            extra_data["attribution_result_count"] = len(attribution_results)
+            extra_data["attribution_completed_at"] = datetime.utcnow().isoformat()
+
         _set_task_progress(db, task, extra_data, 85, "上传结果文件")
         result_filename = f"result_{task_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         result_key = _upload_file_content_to_minio(
@@ -1385,13 +1484,6 @@ def execute_impersonation_task(task_id: str, *, mark_failed_on_error: bool = Tru
         else:
             focus_report_key = None
             focus_report_filename = None
-
-        impersonation_monitor_payload = build_impersonation_result_payload(
-            excel_content,
-            task_id=task_id,
-            statistics=statistics,
-            official_domain_count=len(official_domains),
-        )
 
         task.status = "completed"
         extra_data["result_file_key"] = result_key

@@ -260,6 +260,13 @@ def _build_attribution_index(extra_data: dict) -> dict:
     return indexed
 
 
+_ATTRIBUTION_LEVEL_LABELS = {
+    "known_apt": "历史IOC直接归因",
+    "infrastructure_supported": "基础设施复用归因",
+    "unknown": "未归因",
+    "not_attributed": "未归因",
+}
+
 _ACTOR_CONFIDENCE_LABELS = {
     "high": "高",
     "medium": "中",
@@ -312,15 +319,42 @@ def _attach_attribution_fields(rows: list, attribution_index: dict) -> list:
     enriched_rows = []
     for row in rows:
         item = dict(row)
-        domain = str(item.get("域名") or item.get("domain") or "").strip().lower()
+        domain = str(
+            item.get("域名")
+            or item.get("仿冒域名")
+            or item.get("钓鱼域名")
+            or item.get("candidate_domain")
+            or item.get("domain")
+            or ""
+        ).strip().lower()
         match = attribution_index.get(domain)
         if match:
-            item["关联组织"] = match.get("matched_organization_name") or ""
-            item["组织置信度"] = match.get("actor_confidence_label") or _actor_confidence_label(match.get("actor_confidence")) or ""
-            item["组织评分"] = match.get("actor_score")
-            item["关联状态"] = match.get("match_status_label") or _match_status_label(match.get("match_status")) or ""
-            item["关联说明"] = match.get("reason_summary") or ""
-            item["组织关联详情"] = match
+            if "attribution" in match or "apt_confidence" in match:
+                item["归因组织"] = match.get("attribution") or "unknown"
+                item["归因级别"] = _ATTRIBUTION_LEVEL_LABELS.get(
+                    str(match.get("attribution_level") or ""),
+                    match.get("attribution_level") or "",
+                )
+                item["APT置信度"] = match.get("apt_confidence")
+                item["强证据数"] = match.get("strong_evidence_count")
+                item["归因说明"] = match.get("reason") or ""
+                item["APT归因详情"] = match
+            else:
+                # 兼容已落库的旧组织关联任务结果，新归因流程不再生成这些字段。
+                item["关联组织"] = match.get("matched_organization_name") or ""
+                item["组织置信度"] = (
+                    match.get("actor_confidence_label")
+                    or _actor_confidence_label(match.get("actor_confidence"))
+                    or ""
+                )
+                item["组织评分"] = match.get("actor_score")
+                item["关联状态"] = (
+                    match.get("match_status_label")
+                    or _match_status_label(match.get("match_status"))
+                    or ""
+                )
+                item["关联说明"] = match.get("reason_summary") or ""
+                item["组织关联详情"] = match
         enriched_rows.append(item)
     return enriched_rows
 
@@ -1586,6 +1620,7 @@ async def _create_unified_malicious_domain_task(
     file: Optional[UploadFile] = None,
     dateRange: Optional[str] = None,
     manualDomains: Optional[str] = None,
+    withAttribution: str = "false",
 ):
     created_by_user_id: Optional[int] = _extract_user_id(request)
     uploaded_by_header = request.headers.get("X-User-Name") or request.headers.get("X-User")
@@ -1685,6 +1720,8 @@ async def _create_unified_malicious_domain_task(
         thresholds = _unified_domain_thresholds()
         extra_data = {
             "unified_detection": True,
+            "attribution_enabled": str(withAttribution or "false").strip().lower()
+            == "true",
             "dataSource": dataSource,
             "dateRange": date_range_parsed,
             "module_model_ids": model_ids,
@@ -1765,6 +1802,7 @@ async def create_unified_malicious_domain_task(
     file: Optional[UploadFile] = File(None),
     dateRange: Optional[str] = Form(None),
     manualDomains: Optional[str] = Form(None),
+    withAttribution: str = Form("false"),
 ):
     return await _create_unified_malicious_domain_task(
         request=request,
@@ -1772,6 +1810,7 @@ async def create_unified_malicious_domain_task(
         file=file,
         dateRange=dateRange,
         manualDomains=manualDomains,
+        withAttribution=withAttribution,
     )
 
 
@@ -1791,7 +1830,7 @@ async def create_detection_task(
     参数:
     - model: 兼容旧前端保留，统一检测会自动使用四个模块的当前可用模型
     - dataSource: 数据来源 ('upload'、'newDomain' 或 'manualInput')
-    - withAttribution: 兼容旧前端保留，统一检测不再执行旧二分类归因流程
+    - withAttribution: 是否对恶意检测结果实时补全基础设施并执行历史图谱APT归因
     - file: 上传的文件（当 dataSource 为 'upload' 时必填）
     - dateRange: 日期范围JSON字符串（当 dataSource 为 'newDomain' 时必填）
     - manualDomains: 用户手动输入的域名或 URL（当 dataSource 为 'manualInput' 时必填）
@@ -1802,6 +1841,7 @@ async def create_detection_task(
         file=file,
         dateRange=dateRange,
         manualDomains=manualDomains,
+        withAttribution=withAttribution,
     )
 
 
@@ -2876,6 +2916,16 @@ async def get_task_result_json(task_id: str, request: Request):
                 else:
                     phishing_list = _normalize_impersonation_result_rows(phishing_list)
 
+                attribution_index = _build_attribution_index(extra_data)
+                results_list = _attach_attribution_fields(
+                    results_list,
+                    attribution_index,
+                )
+                phishing_list = _attach_attribution_fields(
+                    phishing_list,
+                    attribution_index,
+                )
+
                 return JSONResponse(
                     status_code=status.HTTP_200_OK,
                     content=_json_safe_value({
@@ -2899,6 +2949,8 @@ async def get_task_result_json(task_id: str, request: Request):
                         "total_count": len(results_list),
                         "phishing_count": len(phishing_list),
                         "official_domain_count": len(official_domain_rows),
+                        "attribution_enabled": bool(extra_data.get("attribution_enabled")),
+                        "attribution_results": extra_data.get("attribution_results") or [],
                     })
                 )
             else:
@@ -3106,6 +3158,7 @@ async def create_focus_impersonation_task(
     detectionDateRange: str = Form(...),
     useCustomThreshold: str = Form("false"),
     threshold: Optional[str] = Form(None),
+    withAttribution: str = Form("false"),
 ):
     """创建重点单位仿冒检测任务：检索官方域名后执行仿冒检测。"""
     created_by_user_id: Optional[int] = _extract_user_id(request)
@@ -3152,6 +3205,8 @@ async def create_focus_impersonation_task(
         task_id = f"FIMP{int(datetime.utcnow().timestamp())}{uuid.uuid4().hex[:6]}"
         extra_data = {
             "focus_impersonation_detection": True,
+            "attribution_enabled": str(withAttribution or "false").strip().lower()
+            == "true",
             "focus_query_name": query_name,
             "detectionSource": "newDomain",
             "queryName": query_name,

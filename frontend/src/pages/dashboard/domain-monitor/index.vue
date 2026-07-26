@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import { message } from 'ant-design-vue'
-import { ReloadOutlined, SearchOutlined, ThunderboltOutlined } from '@ant-design/icons-vue'
 import type { DomainMonitorSnapshot, DomainMonitorTarget } from '~/api/domain-monitor'
+import { DownloadOutlined, ReloadOutlined, SearchOutlined, ThunderboltOutlined } from '@ant-design/icons-vue'
+import { message } from 'ant-design-vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import {
+  exportDomainMonitorCsvApi,
   getDomainMonitorSnapshotsApi,
   getDomainMonitorTargetsApi,
   triggerDomainMonitorTargetApi,
@@ -15,6 +16,7 @@ defineOptions({ name: 'DashboardDomainMonitor' })
 const loading = ref(false)
 const snapshotLoading = ref(false)
 const triggerLoading = ref(false)
+const exportLoading = ref(false)
 const targets = ref<DomainMonitorTarget[]>([])
 const total = ref(0)
 const currentPage = ref(1)
@@ -43,6 +45,7 @@ const sectionLabels: Record<string, string> = {
   dns: 'DNS',
   certificate: '证书',
   web: '网页',
+  fingerprint: '指纹',
 }
 
 const statusColors: Record<string, string> = {
@@ -108,15 +111,30 @@ function objectSummary(value: any) {
     return '-'
   if (typeof value === 'string')
     return value
-  if (Array.isArray(value))
-    return value.join('、') || '-'
+  if (Array.isArray(value)) {
+    return value
+      .map(item => typeof item === 'object' && item !== null ? JSON.stringify(item) : String(item))
+      .join('、') || '-'
+  }
   if (typeof value === 'object') {
     return Object.entries(value)
       .filter(([, item]) => item !== undefined && item !== null && item !== '')
-      .map(([key, item]) => `${key}: ${item}`)
+      .map(([key, item]) => `${key}: ${typeof item === 'object' ? JSON.stringify(item) : item}`)
       .join('；') || '-'
   }
   return String(value)
+}
+
+function booleanText(value: any) {
+  if (value === true)
+    return '是'
+  if (value === false)
+    return '否'
+  return '-'
+}
+
+function dayText(value: any) {
+  return value === undefined || value === null ? '-' : `${value} 天`
 }
 
 async function loadTargets(page = currentPage.value) {
@@ -202,6 +220,44 @@ async function triggerDueTargets() {
   }
 }
 
+function exportFilename() {
+  const now = new Date()
+  const parts = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+    String(now.getHours()).padStart(2, '0'),
+    String(now.getMinutes()).padStart(2, '0'),
+    String(now.getSeconds()).padStart(2, '0'),
+  ]
+  return `域名追踪_${parts.join('')}.csv`
+}
+
+async function exportCsv() {
+  exportLoading.value = true
+  try {
+    const blob = await exportDomainMonitorCsvApi({
+      activeOnly: filters.activeOnly,
+      domain: filters.domain.trim() || undefined,
+    })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = exportFilename()
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    message.success('域名追踪数据已开始下载')
+  }
+  catch (error: any) {
+    message.error(error?.response?.data?.detail || error?.message || '导出域名追踪数据失败')
+  }
+  finally {
+    exportLoading.value = false
+  }
+}
+
 function handleSearch() {
   loadTargets(1)
 }
@@ -214,7 +270,7 @@ onMounted(() => loadTargets())
     <div class="toolbar">
       <div>
         <div class="page-title">域名追踪</div>
-        <div class="page-subtitle">持续追踪系统检测命中的恶意域名，定期采集 DNS、WHOIS、证书和网页变化。</div>
+        <div class="page-subtitle">持续追踪系统检测命中的恶意域名，定期采集 DNS、WHOIS、证书、TLS 和网页应用指纹变化。</div>
       </div>
       <a-space wrap>
         <a-input
@@ -230,6 +286,10 @@ onMounted(() => loadTargets())
         <a-button :loading="loading" @click="loadTargets()">
           <template #icon><ReloadOutlined /></template>
           刷新
+        </a-button>
+        <a-button :loading="exportLoading" :disabled="total === 0" @click="exportCsv">
+          <template #icon><DownloadOutlined /></template>
+          导出 CSV
         </a-button>
         <a-button type="primary" :loading="triggerLoading" @click="triggerDueTargets">
           <template #icon><ThunderboltOutlined /></template>
@@ -359,11 +419,26 @@ onMounted(() => loadTargets())
                 <a-descriptions-item label="NameServer">{{ objectSummary(currentSnapshot.whois?.name_servers) }}</a-descriptions-item>
                 <a-descriptions-item label="状态">{{ objectSummary(currentSnapshot.whois?.status) }}</a-descriptions-item>
                 <a-descriptions-item label="注册人">{{ objectSummary(currentSnapshot.whois?.registrant) }}</a-descriptions-item>
+                <a-descriptions-item label="联系邮箱域">{{ objectSummary(currentSnapshot.whois?.email_domains) }}</a-descriptions-item>
+                <a-descriptions-item label="隐私代理">{{ booleanText(currentSnapshot.whois?.privacy_proxy_detected) }}</a-descriptions-item>
+                <a-descriptions-item label="NameServer 集合指纹">{{ currentSnapshot.whois?.name_server_set_sha256 || '-' }}</a-descriptions-item>
+                <a-descriptions-item label="注册身份指纹">{{ currentSnapshot.whois?.registrant_identity_sha256 || '-' }}</a-descriptions-item>
               </a-descriptions>
             </div>
 
             <div class="detail-section">
-              <div class="section-title">DNS 记录</div>
+              <div class="section-title">DNS 与网络指纹</div>
+              <a-descriptions bordered size="small" :column="1" class="fingerprint-summary">
+                <a-descriptions-item label="解析 IP">{{ objectSummary(currentSnapshot.dns?.resolved_ips) }}</a-descriptions-item>
+                <a-descriptions-item label="网络前缀">{{ objectSummary(currentSnapshot.dns?.network_prefixes) }}</a-descriptions-item>
+                <a-descriptions-item label="CNAME">{{ objectSummary(currentSnapshot.dns?.cnames) }}</a-descriptions-item>
+                <a-descriptions-item label="NameServer">{{ objectSummary(currentSnapshot.dns?.name_servers) }}</a-descriptions-item>
+                <a-descriptions-item label="邮件服务器">{{ objectSummary(currentSnapshot.dns?.mail_servers) }}</a-descriptions-item>
+                <a-descriptions-item label="记录类型统计">{{ objectSummary(currentSnapshot.dns?.record_counts) }}</a-descriptions-item>
+                <a-descriptions-item label="TTL 分布">{{ objectSummary(currentSnapshot.dns?.ttl_profile) }}</a-descriptions-item>
+                <a-descriptions-item label="DNS 记录集合指纹">{{ currentSnapshot.dns?.record_set_sha256 || '-' }}</a-descriptions-item>
+                <a-descriptions-item label="解析 IP 集合指纹">{{ currentSnapshot.dns?.resolved_ip_set_sha256 || '-' }}</a-descriptions-item>
+              </a-descriptions>
               <a-table
                 :columns="dnsColumns"
                 :data-source="currentSnapshot.dns?.records || []"
@@ -382,10 +457,48 @@ onMounted(() => loadTargets())
                 <a-descriptions-item label="生效时间">{{ currentSnapshot.certificate?.not_before || '-' }}</a-descriptions-item>
                 <a-descriptions-item label="过期时间">{{ currentSnapshot.certificate?.not_after || '-' }}</a-descriptions-item>
                 <a-descriptions-item label="算法">{{ currentSnapshot.certificate?.algorithm || '-' }}</a-descriptions-item>
+                <a-descriptions-item label="公钥类型">{{ currentSnapshot.certificate?.public_key_type || '-' }}</a-descriptions-item>
                 <a-descriptions-item label="密钥长度">{{ currentSnapshot.certificate?.key_size || '-' }}</a-descriptions-item>
                 <a-descriptions-item label="序列号">{{ currentSnapshot.certificate?.serial_number || '-' }}</a-descriptions-item>
                 <a-descriptions-item label="SAN">{{ objectSummary(currentSnapshot.certificate?.san_names) }}</a-descriptions-item>
-                <a-descriptions-item label="指纹">{{ currentSnapshot.certificate?.fingerprint || '-' }}</a-descriptions-item>
+                <a-descriptions-item label="证书 SHA-256">{{ currentSnapshot.certificate?.fingerprint || '-' }}</a-descriptions-item>
+                <a-descriptions-item label="SPKI SHA-256">{{ currentSnapshot.certificate?.spki_fingerprint || '-' }}</a-descriptions-item>
+                <a-descriptions-item label="连接 IP">{{ currentSnapshot.certificate?.connected_ip || '-' }}</a-descriptions-item>
+                <a-descriptions-item label="TLS 版本">{{ currentSnapshot.certificate?.tls_version || '-' }}</a-descriptions-item>
+                <a-descriptions-item label="密码套件">{{ objectSummary(currentSnapshot.certificate?.cipher) }}</a-descriptions-item>
+                <a-descriptions-item label="ALPN">{{ currentSnapshot.certificate?.alpn_protocol || '-' }}</a-descriptions-item>
+              </a-descriptions>
+            </div>
+
+            <div class="detail-section">
+              <div class="section-title">网页与应用指纹</div>
+              <a-descriptions bordered size="small" :column="1">
+                <a-descriptions-item label="采集状态">{{ currentSnapshot.web?.status || '-' }}</a-descriptions-item>
+                <a-descriptions-item label="最终地址">{{ currentSnapshot.web?.final_url || '-' }}</a-descriptions-item>
+                <a-descriptions-item label="页面标题">{{ currentSnapshot.web?.title || '-' }}</a-descriptions-item>
+                <a-descriptions-item label="生成器">{{ currentSnapshot.web?.generator || '-' }}</a-descriptions-item>
+                <a-descriptions-item label="响应头">{{ objectSummary(currentSnapshot.web?.response_headers) }}</a-descriptions-item>
+                <a-descriptions-item label="Cookie 名称与属性">{{ objectSummary(currentSnapshot.web?.cookies) }}</a-descriptions-item>
+                <a-descriptions-item label="重定向链">{{ objectSummary(currentSnapshot.web?.redirect_chain) }}</a-descriptions-item>
+                <a-descriptions-item label="外部资源主机">{{ objectSummary(currentSnapshot.web?.external_resource_hosts) }}</a-descriptions-item>
+                <a-descriptions-item label="统计标识">{{ objectSummary(currentSnapshot.web?.analytics_identifiers) }}</a-descriptions-item>
+                <a-descriptions-item label="表单目标">{{ objectSummary(currentSnapshot.web?.form_targets) }}</a-descriptions-item>
+                <a-descriptions-item label="HTML SHA-256">{{ currentSnapshot.web?.html_hash || '-' }}</a-descriptions-item>
+                <a-descriptions-item label="正文 SHA-256">{{ currentSnapshot.web?.text_hash || '-' }}</a-descriptions-item>
+                <a-descriptions-item label="DOM 结构 SHA-256">{{ currentSnapshot.web?.dom_structure_sha256 || '-' }}</a-descriptions-item>
+                <a-descriptions-item label="响应头 SHA-256">{{ currentSnapshot.web?.response_header_sha256 || '-' }}</a-descriptions-item>
+                <a-descriptions-item label="资源 URL 集合 SHA-256">{{ currentSnapshot.web?.resource_url_set_sha256 || '-' }}</a-descriptions-item>
+                <a-descriptions-item label="站点图标 SHA-256">{{ objectSummary(currentSnapshot.fingerprint?.application?.favicon_sha256) }}</a-descriptions-item>
+              </a-descriptions>
+            </div>
+
+            <div class="detail-section">
+              <div class="section-title">时间关系指纹</div>
+              <a-descriptions bordered size="small" :column="1">
+                <a-descriptions-item label="注册至更新间隔">{{ dayText(currentSnapshot.fingerprint?.temporal?.registration_to_update_days) }}</a-descriptions-item>
+                <a-descriptions-item label="注册至证书签发间隔">{{ dayText(currentSnapshot.fingerprint?.temporal?.registration_to_certificate_days) }}</a-descriptions-item>
+                <a-descriptions-item label="域名注册周期">{{ dayText(currentSnapshot.fingerprint?.temporal?.domain_registration_period_days) }}</a-descriptions-item>
+                <a-descriptions-item label="证书有效周期">{{ dayText(currentSnapshot.fingerprint?.temporal?.certificate_validity_days) }}</a-descriptions-item>
               </a-descriptions>
             </div>
           </template>
@@ -514,6 +627,14 @@ onMounted(() => loadTargets())
   margin-bottom: 10px;
   color: #1f2937;
   font-weight: 700;
+}
+
+.fingerprint-summary {
+  margin-bottom: 12px;
+}
+
+:deep(.ant-descriptions-item-content) {
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 768px) {

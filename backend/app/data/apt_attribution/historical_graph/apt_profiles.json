@@ -1,0 +1,6999 @@
+{
+  "8220 Gang": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "bashgo.pw"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1110"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "ACTINIUM": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [
+      "celticso.ru",
+      "kuckuduk.ru",
+      "pasamart.ru"
+    ],
+    "urls": [
+      "http://155.138.252.221/get.php",
+      "http://45.77.237.252/get.php",
+      "http://a0698649.xsph.ru/barley/barley.xml",
+      "http://a0700343.xsph.ru/new/preach.xml",
+      "http://a0700462.xsph.ru/grow/guests.xml",
+      "http://a0700462.xsph.ru/seek/lost.xml",
+      "http://a0701919.xsph.ru/head/selling.xml",
+      "http://a0701919.xsph.ru/predator/decimal.xml",
+      "http://a0701919.xsph.ru/registry/prediction.xml",
+      "http://a0704093.xsph.ru/basement/insufficient.xml",
+      "http://a0704093.xsph.ru/bass/grudge.xml",
+      "http://a0705076.xsph.ru/ramzeses1.html",
+      "http://a0705076.xsph.ru/regiment.txt",
+      "http://a0705269.xsph.ru/bars/dearest.txt",
+      "http://a0705269.xsph.ru/instruct/deaf.txt",
+      "http://a0705269.xsph.ru/prok/gur.html",
+      "http://a0705581.xsph.ru/guinea/preservation.txt",
+      "http://a0705880.xsph.ru/band/sentiment.txt",
+      "http://a0705880.xsph.ru/based/pre.txt",
+      "http://a0705880.xsph.ru/selection/seedling.txt",
+      "http://a0706248.xsph.ru/reject/headlong.txt",
+      "http://a0707763.xsph.ru/decipher/prayer.txt",
+      "http://heato.ru/index.php",
+      "http://motoristo.ru/get.php"
+    ],
+    "ips": [
+      "162.33.178.129"
+    ],
+    "indicators": [
+      "3d419e4489aebbb89d18a26d0bc9f5a3a48aa6b7bc8c3cb7a1f4d0d37d434734",
+      "40aca5a152a13213a876f7628c466cd600db12fb858cdddccc3f1cc387eb7dad",
+      "60b5933f5045f846c42eeae5ed529bfca8069059",
+      "a0705269.xsph.ru",
+      "amdzhado.ru",
+      "archlinuxo.ru",
+      "axehar.ru",
+      "bd69f5416985bb64b9a58e31d8751656aa694584f4eca5e2d0c5ce724c6b8408",
+      "desopt.ru",
+      "donera.ru",
+      "fast-mail.site"
+    ],
+    "reports": [
+      "Gamaredon APT targets Ukrainian government agencies in new campaign"
+    ],
+    "campaigns": [],
+    "malware": [
+      "Win32/Pterodo"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1059",
+      "T1059.001",
+      "T1566",
+      "T1566.001"
+    ],
+    "evidence_paths": [
+      [
+        "domain:84911a440e991bf5f8ab",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "domain:8b0d1833b04817369569",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "domain:a1ffcdc4b3a21f45727a",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "ip:a8c9363a3000b9e2ce98",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:0bcd8061b353d12eec0e",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:141eb51abc60d3728736",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:2cd6512b8ac8f425d401",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:2e55b5696718a0656c49",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:3aaf3911285efb818a36",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:40fe67e5229c0a821ae4",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:48b56b41cd82096d113f",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:491c700373b387ea660b",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:4f8b54b46e880fa838df",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:5c36a5e91a19097065c9",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:64c7d54a8b751b5f1f36",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:66fbc329df104bb74bde",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:6fde782b057fc2a64749",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:775f9e64b8b4e17aa213",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:7ebb6fa98af44e1f364d",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:bc899e4cef0c0e138782",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:be1923f2a8dca8375b0d",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:c4af7a794d229cb3bbf5",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:cd5c2567258c0e93298a",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:d07255268927d7b0b47a",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:d3fb1d8634eb942341c2",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:def6cf2643276deeacf1",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:eb51a8cf6f1a65cad532",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ],
+      [
+        "url:ec1ff86e62ac0a39c2a0",
+        "report:873991bb2edc52df9851",
+        "intrusionset:af75ff8ac27cbb7e3fe3"
+      ]
+    ],
+    "source_counts": {
+      "opencti_historical": 45
+    }
+  },
+  "APT 27": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1055.001"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "APT 42": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1059",
+      "T1059.001",
+      "T1134"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "APT Group Chimera": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1021",
+      "T1114"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "APT-27": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "61.160.223.114"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "APT-36": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "kavach-app.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "APT-C-23": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Desert Scorpion"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1218.005"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "APT-C-36": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "87effdf835590f85db589768b14adae2f76b59b2f33fae0300aef50575e6340d"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "njRAT - S0385"
+    ],
+    "tools": [
+      "DCRAT"
+    ],
+    "attack_patterns": [
+      "T1095",
+      "T1534"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 5
+    }
+  },
+  "APT-C-59": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1566"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "APT-Q-29": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1018"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "APT-Q-36": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1053"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "APT18": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "hcdLoader"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "APT19": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "http://www.microsoft-cache.com:443/world/video/shrien-dewani-arrives-uk-murder-trial-collapses-video?0023528461146965&data="
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [
+      "Empire"
+    ],
+    "attack_patterns": [
+      "T1189"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "APT28": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "112.213.126.77",
+      "91.239.15.223",
+      "calendar-ua.firstcloudit.com",
+      "http://194.126.178.8/webdav/231130N581.pdf",
+      "ifcdsc.org",
+      "us-westmail-undeliversystem.com"
+    ],
+    "reports": [],
+    "campaigns": [
+      "APT28 Nearest Neighbor Campaign"
+    ],
+    "malware": [
+      "ADVSTORESHELL",
+      "Komplex - S0162",
+      "TA422"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1027.002",
+      "T1190",
+      "T1497.001"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 13
+    }
+  },
+  "APT29": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "da72f270c60e07101368dfa087ad675ccaf0d5f167cc5cb50629a3ffa4e5399b",
+      "e017bfc36e387e8c3e7a338782805dde",
+      "https://waterforvoiceless.org/invite.php",
+      "reyweb.com"
+    ],
+    "reports": [
+      "Infrastructure Patterns Lead to More Than 30 Active APT29 C2 Servers"
+    ],
+    "campaigns": [
+      "Operation Ghost",
+      "SolarWinds Compromise"
+    ],
+    "malware": [
+      "Tomiris",
+      "WellMail - S0515",
+      "WellMess - S0514"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "Local Accounts",
+      "T1055.001",
+      "T1071",
+      "T1489",
+      "T1573",
+      "T1592"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 16
+    }
+  },
+  "APT32": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "Exfiltration Over Unencrypted Non-C2 Protocol",
+      "T1070"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "APT33": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "ba9d76cca6b5c7308961cfe3739dc1328f3dad9a824417fad73b842b043daa1a",
+      "jobs@samref.ga"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [
+      "PowerSploit"
+    ],
+    "attack_patterns": [
+      "Group Policy Preferences",
+      "T1573.001"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 5
+    }
+  },
+  "APT37": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [
+      "http://doseoul.com/bbs/data/hnc/update.php",
+      "http://haeundaejugong.com/data/jugong/do.php",
+      "http://haeundaejugong.com/editor/chinotto/do.php",
+      "http://hz11.cn/jquery-ui-1.10.4/tests/unit/widget/doc/pu.php",
+      "http://kjdnc.gp114.net/data/log/do.php",
+      "http://kumdo.org/admin/cont/do.php",
+      "http://luminix.kr/bbs/data/proc/proc.php",
+      "http://luminix.openhaja.com/bbs/data/proc1/proc.php"
+    ],
+    "ips": [],
+    "indicators": [
+      "edb87c2cabcc402173fa0153f4e8ae26"
+    ],
+    "reports": [
+      "ScarCruft surveilling North Korean defectors and human rights activists"
+    ],
+    "campaigns": [],
+    "malware": [
+      "Chinotto",
+      "POORWEB",
+      "ScarCruft"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1033",
+      "T1036.005",
+      "T1041",
+      "T1059.001",
+      "T1059.005",
+      "T1071.001",
+      "T1082",
+      "T1113",
+      "T1140",
+      "T1547.001",
+      "T1560.002",
+      "T1566.001",
+      "T1573.001",
+      "Web Services"
+    ],
+    "evidence_paths": [
+      [
+        "url:29c3e93cd66d72d92547",
+        "report:b912895f0d99cbb098c3",
+        "intrusionset:248b7bf86153875c98a7"
+      ],
+      [
+        "url:500a648968698c9c4dd3",
+        "report:b912895f0d99cbb098c3",
+        "intrusionset:248b7bf86153875c98a7"
+      ],
+      [
+        "url:5e060bfc50a50d884257",
+        "report:b912895f0d99cbb098c3",
+        "intrusionset:248b7bf86153875c98a7"
+      ],
+      [
+        "url:9eba50c79f35e6a07be5",
+        "report:b912895f0d99cbb098c3",
+        "intrusionset:248b7bf86153875c98a7"
+      ],
+      [
+        "url:a3bd4906e7776dc1161d",
+        "report:b912895f0d99cbb098c3",
+        "intrusionset:248b7bf86153875c98a7"
+      ],
+      [
+        "url:a772a7b45cc3a98e0565",
+        "report:b912895f0d99cbb098c3",
+        "intrusionset:248b7bf86153875c98a7"
+      ],
+      [
+        "url:b432a16ecee1b8ac96f0",
+        "report:b912895f0d99cbb098c3",
+        "intrusionset:248b7bf86153875c98a7"
+      ],
+      [
+        "url:eb20d4e0404d875ae48d",
+        "report:b912895f0d99cbb098c3",
+        "intrusionset:248b7bf86153875c98a7"
+      ]
+    ],
+    "source_counts": {
+      "opencti_historical": 28
+    }
+  },
+  "APT38": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "b448381f244dc0072abd4f52e01ca93efaebb2c0a8ea8901c4725ecb1b2b0656"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "APT41": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "ad.lflink.com"
+    ],
+    "reports": [],
+    "campaigns": [
+      "APT41 DUST",
+      "C0017"
+    ],
+    "malware": [
+      "Known Threat",
+      "SideWalk"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "InstallUtil",
+      "T1098"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 7
+    }
+  },
+  "APT42": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1102"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "APT5": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [
+      "SPACEHOP Activity"
+    ],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Aggah": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Agent Tesla - S0331"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Agrius": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "impacket"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1187",
+      "T1560"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "Anatsa": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1412",
+      "T1516"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Andariel": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "4da0ac4c3f47f69c992abb5d6e9803348bf9f3c6028a7214dcabec9a2e729b99",
+      "f6ab4e92dadd831dbc02a3cc27d2f6aee4f39e1743485638c8aa2c09341eda49"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Moudoor"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1113"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 4
+    }
+  },
+  "Aoqin Dragon": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "00280dbca465454f52778f032f45ba171588864c20e0f8dcac74bacc370e32c2",
+      "ds.vdcvn.com",
+      "phcl.neverdropd.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "Appin": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "f00dlover.info"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "AppleJeus": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [
+      "3CX Supply Chain Attack"
+    ],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Ares": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1547"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Astaroth": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1140"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Astro Locker Team": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "2c44444d207a78da7477ae1af195d4265134e895bebb476f7b2c003f1467a033",
+      "albanallahacrab.club"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "AsyncRAT": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1574.002"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Axiom": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "rule win_x86_backdoor_plug_x_core {\r\nmeta:\r\nauthor = \"Felipe Duarte, Security Joes\"\r\ndescription = \"Detects the PlugX Core DLL for 32 bits systems\"\r\nsha256_reference = \"fde1a930c6b12d7b00b6e95d52ce1b6536646a903713b1d3d37dc1936da2df88\"\r\nstrings:\r\n// Decryption routine\r\n$opcode1 = { 8b ?? ?? 8b ?? c1 e? 03 8d ?? ?? ?? ?? ?? ?? 8b ?? c1 e? 05 8d ?? ?? ?? ?? ?? ?? 8b ?? c1 e? 07 b? 33 33 33 33 2b ?? 8b ?? ?? 03 ?? c1 e? 09 b? 44 44 44 44 2b ?? 01 ?? ?? 8d ?? ?? 02 ?? 02 ?? ?? 89 ?? ?? 8b 5? ?? 32 ?? 32 4? ff 4? ?? 88 ?? ?? 75 ?? 5? }\r\n$str1 = \"Mozilla/4.0 (compatible; MSIE \" wide ascii\r\n$str2 = \"X-Session\" ascii\r\n$str3 = \"Software\\\\CLASSES\\\\FAST\" wide ascii\r\n$str4 = \"KLProc\"\r\n$str5 = \"OlProcManager\"\r\n$str6 = \"JoProcBroadcastRecv\"\r\ncondition:\r\nall of them\r\n}"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "PoisonIvy"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "BITTER": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "22dd82c94cadf5cf31b3e9519e8149d4a68fe13bac13eaef91bf283a4beb8101",
+      "w32timeslicesvc.net"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1140"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "BITTER APT": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "HEUR:Exploit.Win32.Generic"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "BRONZE BUTLER": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [
+      "Net"
+    ],
+    "attack_patterns": [
+      "Disable or Modify Tools",
+      "T1132.001"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "BackdoorDiplomacy": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "news.alberto2011.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "BellTroX": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "loginservicebasic.com",
+      "netsecureserver399.com",
+      "serverfornetworks.com",
+      "webserver39.com",
+      "zsrvrer.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 5
+    }
+  },
+  "BianLian": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "7f91e10c39e0a77c83af3ef48061cbb73194c793f9c3c8bc7fa1aa0fc75eb385",
+      "eaf5e26c5e73f3db82cd07ea45e4d244ccb3ec3397ab5263a1a74add7bbcb6e2"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1587"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "Bifrost": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "jRAT - S0283"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1083"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Bigpanzi": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "wwrc9.ngoox.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1059"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "BlackBasta": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1140"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "BlackByte": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "Internal Defacement",
+      "T1087.002"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "BlackCat": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "2cefe6071edf7f1924e8bbdda54c555d09e2f758213f9fdeb9ff0291ab165171"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Rclone"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "BlackTech": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1046"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Blackwood": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1106",
+      "T1560"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Blue Mockingbird": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1082"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "CL0P": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Cobalt Strike"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1068",
+      "T1190"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "CURIUM": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1071"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Candiru": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1055"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Chimera": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "Password Policy Discovery",
+      "T1574.001"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "China APT Group": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "GoldenSpy"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1036",
+      "T1170"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "Chinese APT": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "China Chopper - S0020"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Chinese Speaking": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "abfa83cf54db8fa548942acd845b4f34acc94c46d4e1fb5ce7e97cc0c6596676",
+      "afcc2efb164ed48d42cbfc5b53824c905b69f32f",
+      "c62dbc526c0c699138520f9ddfce8fa96810b0a3fbde17695f7592545da5cdea",
+      "d3013a96eaee1fc5c32ac11f4e8577227c88343374d391f6c7cfbe5ee66025fb",
+      "doublesuite.name",
+      "rpcbind.target",
+      "settings.win"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 7
+    }
+  },
+  "Chinese, or Korean speaking": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "01a50d9a2cd0983e057abea737bba2050fa77ed1172f241564990610a805c04f",
+      "0c7de95bab1953dc472fd42435a2e573006d1bfc074213db22569e1c82755701",
+      "br-latin1-abnt2.map"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "Cleaver": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Net Crawler"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Cobalt Group": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Trojan:Win64/Trickbot"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "Dynamic Data Exchange",
+      "T1204.001"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "Conti": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "1ce8a939b3e7d84c59c12dc9e1091532f4336dac533847b6533b01d9dcf494e9",
+      "cajeti.com",
+      "dirupun.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "Coper": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "https://185.122.204.122/MDViMDU3NDYwMTBm/"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "CoralRaider": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "7905bd9bb4d277a81935a22f975a0030faa9e5c9dbb9f6152c2f56ba1cd0cdea"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Corlys": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "Clear Command History"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "CyberAv3ngers": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [
+      "Unitronics Defacement Campaign"
+    ],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "DPRK": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "TA0007"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Daixin": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "Data Encrypted for Impact",
+      "T1098",
+      "T1136"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "DanaBot": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1002"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "DangerousSavanna": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "7a4927e1a2aad1bc8ccef956130df0c0"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Dark Caracal": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "olex.live"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1083",
+      "T1566"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "Dark Herring": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "0b8dbaebdafe1bf9493d4344c2321894d859720c3c49605e62c9f5449986bdd7",
+      "58154bcd283bf1b94f358713870307d854a41dd20b068613b08b0f8f01761e31",
+      "9ac42a93cb654862178cb59df16ebb1e12782f1238ab452ebbc9df6a785ce268",
+      "b420007a055a15287f9793b3e82a8b94e35e9b3eaa4c9339247fcd8f8f70d929",
+      "d1fprh7wmf9k6t.cloudfront.net",
+      "d3klvftxq5zlmn.cloudfront.net",
+      "de1c68f9d182903dba992f7002b484263908ee4b77bd31b332c7bfac6ab86095",
+      "f8b835acb6df11d0a3daf8d3289dab460624f24e3d58cf2c8c315d4a16788702"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 8
+    }
+  },
+  "Dark Pink": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1555"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "DarkGate": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "96ca146b6bb95de35f61289c2725f979a2957ce54761aff5f37726a85f2f9e77"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1083",
+      "T1105",
+      "T1555"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 4
+    }
+  },
+  "DarkPeony": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1071.001"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Darkhotel": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1107",
+      "T1210"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Darkside": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "c93e6237abf041bc2530ccb510dd016ef1cc6847d43bf023351dce2a96fdc33b"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "DeadRinger": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1002",
+      "T1190"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Deathstalker": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "getappcloud.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Deep Panda": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1569.002"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "DeepStreamer": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "hypercdn3.ml"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "DiceyF": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1176"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Domain": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1047"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Donot Team": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "3d3f61d5406149fd8f2c018fbc842ccef2f645fc22f4e5702368131c1bd4e560"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1053.005"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Doppelgänger": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "miastagebuch.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Earth Bogle": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "c03299acd37ab7c15f0d949d15f38cceacbfa817106382616e6d4064a2315942"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Earth Estries": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1036.004",
+      "T1574.002"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Earth Kapre": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "https://preslive.cn.alphastoned.pro/ms/curl.tmp"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Earth Krahang": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "f4ea99dc41cb7922d01955eef9303ec3a24b88c3318138855346de1e830ed09e"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Earth Longzhi": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "630bb985d2df8e539e35f2da696096e431b3274428f80bb6601bbf4b1d45f71e"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Earth Lusca": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "123.57.218.176",
+      "3dcad2fdebd68390ea4a80398593cfc3360ef51291b853cb3e9a607915ec74cb",
+      "47.94.223.124:9999",
+      "47.96.106.167:443"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 4
+    }
+  },
+  "Ebury": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "d99a13872fd36e9f9712bc10e583836db3649198d25f71097bd5e0c96c786fef"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "El Machete, Lyceum, SideWinder": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "bebfa50ee48f0b77669ea57dee695d2f6a8b9956649c6bb94e350c92670a5a95"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "El Machete, SideWinder, Lyceum": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "96b33df5720901b4f2fc6fb810b6eca994fb8b2ff0edc0aa456195a7c9115615"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Emotet": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "5319ee3372c439fb9d85a8174eea814a6c581d81a4af0fe7a9f686d403753c4d",
+      "9788c1614110fa6e1ab957e4563331a8f8bddd926a0c3f8c7b891afa2203cf68"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Eternity": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1018",
+      "T1027"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Evil Eye": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "System Network Connections Discovery"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Evilnum": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "veritechx.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Evilnum Group": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1060"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "FIN11": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "river-store.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "FIN13": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1136.001",
+      "T1190"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "FIN6": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1573"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "FIN7": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "8f55483eeaf397df04fbca11f84c1e6b0f9248c62d78f072d25bb37501651510",
+      "d44c4247b7516b030f5c3b5c6f18246933700447a6462531d31b06c4f0ab9112"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "BOOSTWRITE",
+      "RDFSNIFFER",
+      "SystemBC"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1588"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 6
+    }
+  },
+  "FIN8": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1059.003",
+      "T1573",
+      "Token Impersonation/Theft"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "FROZEN#SHADOW": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "SSLoad"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "FinFisher": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "c05ab958706636c26c3f9910caeeca9de6334c6f"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "GALLIUM": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "China Chopper"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "GOLD SOUTHFIELD": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1195.002"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Gallmaker": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1204.002"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Gamaredon": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "0nxfri.moolin.ru",
+      "arabianos.ru",
+      "bits-mars.info",
+      "coprtyuqw.hopto.org",
+      "document-out.hopto.org",
+      "fusari.ru",
+      "gramine.ru",
+      "http://proserpinus.online/nevertheless/LwRoTct.dot",
+      "malofid.freedynamicdns.org",
+      "mokushi.space",
+      "molortasa.ru",
+      "morella.website",
+      "oyamawo.ru",
+      "parthenium.space",
+      "saijar.gotdns.ch",
+      "takak.ru",
+      "tomond.ru"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 17
+    }
+  },
+  "Ghostwriter Influence": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1218"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Goblin Panda": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "login.vietnamfar.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "GoldenJackal": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "filetosend-upload.net"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1496"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "GootLoader": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1055"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Gorgon Group": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1112",
+      "T1547.009"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Grandoreiro": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1568"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Green Stone": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "f00252ab17546cd922b9bda75942bebfed4f6cda4ae3e02dc390b40599ce1740"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "HAFNIUM": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "Password Spraying"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "HEXANE": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "digitalmarketingnews.net"
+    ],
+    "reports": [],
+    "campaigns": [
+      "HomeLand Justice"
+    ],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1053.005"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "Hadoken Security Group": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1566"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Hagga": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "workflowstatus.live"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Haskers Gang": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "ab227c978e826caf982d1c48b62c671e28e624cc6e6ae6cd84c17fd9f5729a3e"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Hiatus": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "hiatus"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1102"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Hummer": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Third Eye Remote Control"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "IcedID": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "d053f5c5e6fa4dd00d1e2dcb1e43b21e64ce99e6606c248f6fffd44cf8328c0e"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Inception": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "a34d585f66fc4582ed709298d00339a9",
+      "https://network-list.com/?php-wp-content/plugins/contact-form-7/includes/css/styles.css/undesirous"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1057"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "Indrik Spider": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "6515a4b8f5447a644dd7c741ab062ac59b1b34bd1064435e0f43d282bd70e4d4",
+      "veisllc.xyz"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1027",
+      "T1070",
+      "T1214",
+      "T1218",
+      "T1553"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 7
+    }
+  },
+  "Informational": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "anidoz.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "InvisiMole Group": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "InvisiMole - S0260"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1025"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Iron Tiger APT": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "e74056a729e004031b78007708bb98d759ff94b46866898c5a05d87013cd643c"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Itroublve": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "29f87235ff6dfcf9aad799b57e7dbb87464a6887be1c1965a00ab456b4d5fcb2",
+      "9b12a90b52d228714aace13ed60949944ffde30da42d2a390b0e18dc2ca4fc87"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "KNOTWEED": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Subzero"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1059",
+      "T1550"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "Karakurt": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "bc1qqp73up3xff6jz267n7vm22kd4p952y0mhcd9c8"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1190"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Ke3Chang Group": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1112"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Ke3chang": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [
+      "SPACEHOP Activity"
+    ],
+    "malware": [
+      "Neoichor"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1021.002",
+      "T1036.005",
+      "T1040",
+      "T1041",
+      "T1064"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 7
+    }
+  },
+  "Keksec": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "8f23d3c7f4654d4bd514d69948b034823b0cce142d3d8afad5d87546c753ffde",
+      "95effaff6034b4bc679eff306b1d6783c89b17f8e05caa159f8b509b5d8faddf",
+      "db66d68a637e0db3cd2ac1687fff0d8d959cb57d29a245455a94b6b32591983e"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "Kimsuky": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "39bd6b689b02d6dee329131a51aa09301889faf5698eeac0d02aef0ba47cf024",
+      "934731692b12fd182acbc698dd3f8ef59984aa4e7ef56e124f9851852878817e",
+      "alps.travelmountain.ml",
+      "b75816a259098d39e5b666a867edf708",
+      "sslserver.work",
+      "uo.zosua.or.kr"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "FastSpy"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "LNK Icon Smuggling",
+      "T1021.001",
+      "T1035",
+      "T1115",
+      "T1543",
+      "T1550",
+      "T1566",
+      "T1574.002",
+      "T1583.006",
+      "T1588.003"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 17
+    }
+  },
+  "Konni": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1574"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "LAPSUS$": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "Password Managers",
+      "T1068"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Lazarus": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "a24d66f4356de33ba9227d4e496cc975995f1bd72d72e47f74f07648c45c5308",
+      "f3fb14108761109c050b16d103ab4de21f702a8e48e63d8f80cb1251c549fc5d",
+      "http://ictm.or.kr/UPLOAD_file/board/free/edit/index.php",
+      "https://www.tronslog.com/public/appstore.php"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Bookcode"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1012",
+      "T1204"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 7
+    }
+  },
+  "Lazarus Group": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [
+      "3dkit.org",
+      "dersmarketim.com",
+      "galerielamy.com",
+      "olidhealth.com"
+    ],
+    "urls": [
+      "http://147.78.149.201:9090/imgr.ico",
+      "http://162.19.71.175:7443/bottom.gif",
+      "http://www.aeon-petro.com/wcms/plugins/addition_contents/cfg.png",
+      "http://www.aeon-petro.com/wcms/plugins/addition_contents/user64.png",
+      "http://www.bandarpowder.com/public/assets/img/cfg.png",
+      "http://www.bandarpowder.com/public/assets/img/user64.png",
+      "http://www.mge.sn/themes/classic/modules/ps_rssfeed/feed.zip",
+      "http://www.mge.sn/themes/classic/modules/ps_rssfeed/feedmd.zip",
+      "https://commune-fraita.ma/wp-content/plugins/wp-contact/contact.php",
+      "https://vadtalmandir.org/admin/ckeditor/plugins/icontact/about.php",
+      "https://www.bandarpowder.com/public/assets/img/cfg.png",
+      "https://www.bandarpowder.com/public/assets/img/user64.png"
+    ],
+    "ips": [],
+    "indicators": [
+      "5e54bccbd4d93447e79cda0558b0b308a186c2be571c739e5460a3cb6ef665c0",
+      "735b7e9dfa7af03b751075fd6d3de45fbf0330a2",
+      "96721e13bae587c75618566111675dec2d61f9f5d16e173e69bb42ad7cb2dd8a",
+      "a07c8f17c18c6789a3e757aec183aea6",
+      "c83bcaab05056d5b84fc609f41eed210",
+      "download.gdriveupload.site",
+      "mail.gmaildrive.site"
+    ],
+    "reports": [
+      "Multiple North Korean threat actors exploiting the TeamCity CVE-2023-42793 vulnerability"
+    ],
+    "campaigns": [
+      "Operation Dream Job"
+    ],
+    "malware": [
+      "FeedLoad",
+      "ForestTiger",
+      "HazyLoad",
+      "Lazarus (Windows)",
+      "RollSling"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "Password Spraying",
+      "T1007",
+      "T1020",
+      "T1021.004",
+      "T1027",
+      "T1059.003",
+      "T1068",
+      "T1070",
+      "T1071",
+      "T1090",
+      "T1119",
+      "T1595.002"
+    ],
+    "evidence_paths": [
+      [
+        "domain:70cf54a1317831be5ed7",
+        "report:fad2ff17eea0fe1f652c",
+        "intrusionset:a20fe1d3cf08791ab1c3"
+      ],
+      [
+        "domain:c15be20930b7b5c9de44",
+        "report:fad2ff17eea0fe1f652c",
+        "intrusionset:a20fe1d3cf08791ab1c3"
+      ],
+      [
+        "domain:e3c21a6d21e50e08d208",
+        "report:fad2ff17eea0fe1f652c",
+        "intrusionset:a20fe1d3cf08791ab1c3"
+      ],
+      [
+        "domain:ec23db9ba92db2bc24c8",
+        "report:fad2ff17eea0fe1f652c",
+        "intrusionset:a20fe1d3cf08791ab1c3"
+      ],
+      [
+        "url:27b80dd95caf8688fa7e",
+        "report:fad2ff17eea0fe1f652c",
+        "intrusionset:a20fe1d3cf08791ab1c3"
+      ],
+      [
+        "url:3e2ca0d3385f7b077d1e",
+        "report:fad2ff17eea0fe1f652c",
+        "intrusionset:a20fe1d3cf08791ab1c3"
+      ],
+      [
+        "url:43a74b976c549198fc1a",
+        "report:fad2ff17eea0fe1f652c",
+        "intrusionset:a20fe1d3cf08791ab1c3"
+      ],
+      [
+        "url:58a5d0825076fb1a5a96",
+        "report:fad2ff17eea0fe1f652c",
+        "intrusionset:a20fe1d3cf08791ab1c3"
+      ],
+      [
+        "url:7ddb65c2a12a336be0d0",
+        "report:fad2ff17eea0fe1f652c",
+        "intrusionset:a20fe1d3cf08791ab1c3"
+      ],
+      [
+        "url:8818f7beacaaa48d3de2",
+        "report:fad2ff17eea0fe1f652c",
+        "intrusionset:a20fe1d3cf08791ab1c3"
+      ],
+      [
+        "url:b09ef38a38ddd5eb71f3",
+        "report:fad2ff17eea0fe1f652c",
+        "intrusionset:a20fe1d3cf08791ab1c3"
+      ],
+      [
+        "url:c0bf7d20e3b4d6eb8f91",
+        "report:fad2ff17eea0fe1f652c",
+        "intrusionset:a20fe1d3cf08791ab1c3"
+      ],
+      [
+        "url:c7732c273d82c3de44b2",
+        "report:fad2ff17eea0fe1f652c",
+        "intrusionset:a20fe1d3cf08791ab1c3"
+      ],
+      [
+        "url:d8ecef2972ed868da1ef",
+        "report:fad2ff17eea0fe1f652c",
+        "intrusionset:a20fe1d3cf08791ab1c3"
+      ],
+      [
+        "url:dd7f96b92ee13d6e95c6",
+        "report:fad2ff17eea0fe1f652c",
+        "intrusionset:a20fe1d3cf08791ab1c3"
+      ],
+      [
+        "url:eef76d49950c8528bdd6",
+        "report:fad2ff17eea0fe1f652c",
+        "intrusionset:a20fe1d3cf08791ab1c3"
+      ]
+    ],
+    "source_counts": {
+      "opencti_historical": 43
+    }
+  },
+  "LazyScripter": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [
+      "QuasarRAT"
+    ],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Leviathan": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "indiadigest.in"
+    ],
+    "reports": [],
+    "campaigns": [
+      "Leviathan Australian Intrusions"
+    ],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "Steganography"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "LightSpy Group": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "http://103.27.109.217:52202/963852741/mac/plugins/0c377d6b6b074d16",
+      "http://103.27.109.217:52202/963852741/mac/plugins/2e351c7b4de4d3b1"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Lorenz": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1505"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "LuminousMoth": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "7daydai1y.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "LuoYu": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1547"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "MageCart Group 12": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "magecart"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Magecart": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "ql202412.pw"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "magecart"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Magic Hound": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "977f0053690684eb509da27d5eec2a560311c084a4a133191ef387e110e8b85f"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Empire - S0363"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1204.002"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "Magniber": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1073"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Mallox": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1090"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Maze Team": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "311baa4d4229a8d6802d82a8d9935592bf9a7b6aaf0949f0fa0b094592f5e8a7"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Mealybug": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1204"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Medusa": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [
+      "medusaxko7jxtrojdkxo66j7ck4q5tgktf7uqsqyfry4ebnxlcbkccyd.onion"
+    ],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "cc896cb8dafdeb318cd52f315f3de5bab0bafaf998522251d8e751bae54e513a"
+    ],
+    "reports": [
+      "Medusa Ransomware Turning Your Files into Stone"
+    ],
+    "campaigns": [],
+    "malware": [
+      "ALF:Ransom:Win64/MedusaLocker"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "Data Encrypted for Impact",
+      "T1007",
+      "T1011",
+      "T1021.001",
+      "T1027",
+      "T1059.001",
+      "T1106",
+      "TA0037"
+    ],
+    "evidence_paths": [
+      [
+        "domain:e0a164d6466c1bb73d51",
+        "report:d246e1c09e67621e1c32",
+        "intrusionset:2ad8d41d4c4dd5114acc"
+      ]
+    ],
+    "source_counts": {
+      "opencti_historical": 12
+    }
+  },
+  "Medusa Group": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "NTDS"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Metador": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1105"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Mimo": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1190"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "MirrorFace": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "233029813051d20b61d057ec4a56337e9bec40d2"
+    ],
+    "reports": [],
+    "campaigns": [
+      "Operation AkaiRyū"
+    ],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "System Language Discovery"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "Mispadu": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "contdskl.bounceme.net"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1083"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Molerats": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "5b186548de81bc1d1ce92c042a6c488a647d80e570dd58c8d3f34910c12aba87",
+      "69af17199ede144d1c743146d4a7b7709b765e57375d4a4200ea742dabef75ef",
+      "artlifelondon.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1059.007"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 4
+    }
+  },
+  "Moonstone Sleet": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1583.003"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Muddled Libra": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1102"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "MuddyWater": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "1a870fa886d593f0dd1c9ce8816c3a63",
+      "1f0b9aed4b2c8d958a9b396852a62c9d",
+      "6c084c8f5a61c6bec5eb5573a2d51ffb",
+      "Domain Name: SERVDISCOUNT-CUSTOMER.COM\n   Registry Domain ID: 1882350046_DOMAIN_COM-VRSN\n   Registrar WHOIS Server: whois.psi-usa.info\n   Registrar URL: http://www.psi-usa.info\n   Updated Date: 2021-10-28T07:05:37Z\n   Creation Date: 2014-10-27T07:58:37Z\n   Registry Expiry Date: 2022-10-27T07:58:37Z\n   Registrar: PSI-USA, Inc. dba Domain Robot\n   Registrar IANA ID: 151\n   Registrar Abuse Contact Email: domain-abuse@psi-usa.info\n   Registrar Abuse Contact Phone: +49.94159559482\n   Domain Status: clientTransferProhibited https://icann.org/epp#clientTransferProhibited\n   Name Server: NS1.NTDNS.DE\n   Name Server: NS2.NTDNS.DE\n   Name Server: NS3.NTDNS.DE\n   DNSSEC: unsigned\n   URL of the ICANN Whois Inaccuracy Complaint Form: https://www.icann.org/wicf/\n>>> Last update of whois database: 2022-01-31T07:23:45Z <<<",
+      "b9e6fc51fa3940fb632a68907b8513634d76e5a0"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "LaZagne - S0349"
+    ],
+    "tools": [
+      "LaZagne"
+    ],
+    "attack_patterns": [
+      "T1134",
+      "T1518"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 9
+    }
+  },
+  "Mustang Panda": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "0df7e56610adad2ed5adfdfab07faedc08a61d9f944a5448aa62e071cffc28c4",
+      "9f1d1a94026c54396a4c0b6327d317836dc9dc67178810428302efcbf5225a42",
+      "a325bbd32985c1b586486df7d92521224b8b155d464c88d11b1d0068399100c2",
+      "b7a38292131c131d75413133f101114a1b72bd02e27cc6aea7a836ff964f961f",
+      "beb44eadd141b7ae46e40e1bf888c302cb7096826e772f0b20ce6f213c69058d",
+      "e3e3c28f7a96906e6c30f56e8e6b013e42b5113967d6fb054c32885501dfd1b7",
+      "f8275f6f78618cb1de4fc4d0d288c5aa2967de74375cc82aa98d0392c71d537a",
+      "f8c1a4c3060bc139d8ac9ad88d2632d40a96a87d58aba7862f35a396a18f42e5",
+      "http://155.94.200.206/images/branding/newtap.css"
+    ],
+    "reports": [
+      "Chinese APT RedDelta spotted with potentially updated/new version of PlugX RAT"
+    ],
+    "campaigns": [
+      "RedDelta Modified PlugX Infection Chain Operations"
+    ],
+    "malware": [
+      "CrimsonIAS",
+      "PlugX - S0013",
+      "Thoper"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "MSBuild",
+      "T1012",
+      "T1036.004",
+      "T1049",
+      "T1056.001",
+      "T1057",
+      "T1059.003",
+      "T1071.001",
+      "T1071.004",
+      "T1083",
+      "T1095",
+      "T1102.001",
+      "T1105",
+      "T1106",
+      "T1112",
+      "T1113",
+      "T1135",
+      "T1140",
+      "T1497.001",
+      "T1543.003",
+      "T1547.001",
+      "T1557",
+      "T1574.002"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 38
+    }
+  },
+  "N/A": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "3f43bc4ab505c5fc1c5a60326f32cf204c6bb3662f8f104ecb07cd40559b984f",
+      "advertisement.com",
+      "aggregateknowledge.com",
+      "allertmnemonkik.com",
+      "amazon.comswitchads.com",
+      "cdb4ee2aea69cc6a83331bbe96dc2caa9a299d21329efb0336fc02a82e1839a8",
+      "cmail26.com",
+      "cyberkov.com",
+      "ebaycampaigner.com",
+      "foenglera.com",
+      "formalyzer.com",
+      "gogog.com",
+      "http://anonymous-proxy-servers.net/wiki/index.php/JonDo_sources/de",
+      "http://bannertgt.com/",
+      "http://cyberkov.com/hunting-libyan-scorpions",
+      "http://emediate.com/",
+      "http://inflectionpointmedia.com/",
+      "http://nuffnang.com/",
+      "http://searchforce.com/",
+      "http://xaded.com/",
+      "index.cc",
+      "keybusinessconnection.com",
+      "kiddshealth.org",
+      "mspbackups.com",
+      "n5.lsasss.com",
+      "open.mkt6793.com",
+      "preview-domain.com",
+      "pstcmedia.com",
+      "rimrun.com",
+      "rovion.com",
+      "svn-dns.ahnlabinc.com",
+      "tridayacipta.com",
+      "twiitter.com.mx",
+      "twitck.com",
+      "vserv.com",
+      "webmetro.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 36
+    }
+  },
+  "NET_PA1N Reborn": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1140",
+      "T1218"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "NoName057(16)": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1016"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "OilAlpha": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "bobm1jgjahsg81.ddns.net",
+      "fb6b8cdca2b35c5c0174e1e44b562f73194d9e0e79181fe4e312503b2ce801ec"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "OilRig": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "f4639c63fb01875946a4272c3515f005d558823311d0ee4c34896c2b66122596",
+      "jinkangpu.co"
+    ],
+    "reports": [],
+    "campaigns": [
+      "Juicy Mix",
+      "Outer Space"
+    ],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1005",
+      "T1106",
+      "T1583",
+      "T1588.003"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 8
+    }
+  },
+  "Operation C-Major": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "08b8ab37fd019b2c9d33d278eeaa16e9c50ed4c7c66ef7202eb0537ec9465a07",
+      "1c2b18560f086f01541e5f2616c9faf6df4a47b878fcc2ac72ec41a7f6f30915",
+      "9e305566f7d342adc8eaf30471aa3eb95c049acffc742ae23a5830a44f96e51d",
+      "c20cb6983369182c93d5877a8839d58fc91d054888286daa2d4e3d8539308f4f",
+      "ff4c5f6a1a5b68b956970751d56ee7905ec48ad39cc05416ee8ee958ecd0c40e",
+      "http://144.91.65.100/classics/updetion.php",
+      "http://social.medialinks.cc/files/scan0001.rar"
+    ],
+    "reports": [],
+    "campaigns": [
+      "C0011"
+    ],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1127",
+      "T1564"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 10
+    }
+  },
+  "OperationHangover": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "http://nsaimmigration.com/userfiles/image/"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1158"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "PROMETHIUM": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [
+      "C0033"
+    ],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Parrot TDS": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "codigodebarra.co"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Pensive Ursa": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1113"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "PhantomBlu": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1221"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Phobos": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1082",
+      "T1598"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "PikaBot": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1086",
+      "T1574"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Play": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "Command Obfuscation",
+      "T1484"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Poseidon Group": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1057"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Praying Mantis": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1104"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Predator": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "fast-notify.com",
+      "ongsworld.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "RansomHouse": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1190"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "RansomHub": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Knight"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "RedCurl": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1046"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Rhysida": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1219"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "RobinHood": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Kuiper"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Rocke": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1027.002",
+      "T1036.005",
+      "T1105",
+      "T1571"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 4
+    }
+  },
+  "RomCom": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1059",
+      "T1078"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "SAMBA SPIDER": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Salve"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "SOLAR SPIDER": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1122"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Saint Bear": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "5fc108db5114be4174cb9365f86a17e25164a05cc1e90ef9ee29ab30abed3a13",
+      "8003659902.space",
+      "noch.website"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1070.004",
+      "T1112",
+      "T1204.002",
+      "T1210"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 7
+    }
+  },
+  "Sandworm": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "f3280e61f7c810457b8c6741aa57bdceb1dd918d18f16d314761a49788665877"
+    ],
+    "reports": [],
+    "campaigns": [
+      "2015 Ukraine Electric Power Attack",
+      "2016 Ukraine Electric Power Attack",
+      "2022 Ukraine Electric Power Attack"
+    ],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1543.003"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 5
+    }
+  },
+  "ScamClub": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1497"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Scarab": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "eb65169318c2aba272fb45b6d81e598adebb4d6af1d9dfd7e463d408bfa6e303"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "HeaderTip",
+      "Scarab",
+      "Scieron"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 4
+    }
+  },
+  "Scattered Spider": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [
+      "C0027"
+    ],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "Multi-Factor Authentication"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Sea Turtle": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1588.001"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "September": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1059"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "ShadowPad": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "5d971ed3947597fbb7e51d806647b37d64d9fe915b35c7c9eaf79a37b82dab90"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Sharkbot": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "ff54fff11c2279ca103dcfeb536b95b6ebf22129197525d55c5feff0b326c999"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Sharp Project": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1005"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "SharpPanda": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "0c346972a2ccebb2642ced34213f43595896da233f06f6251967517ae342908f"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Shenzhen Haimaiyunxiang Media Co., Ltd.": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "veneziapost.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "SideCopy": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "https://futureuniform.ca/mail.gov.in/briefcase/draft_letter_nov_2023.docx"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1113",
+      "T1204",
+      "T1583"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 4
+    }
+  },
+  "Sidewinder": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "198.252.108.33",
+      "6193a395f8d0702efdc1ee1541bb4e29ef5063bb769f093ab75e4d8cd5dd7804",
+      "7151c15e9f2d897da2393081477e9cadafb28298c20a70c12c2fd5c0be8f9ab5",
+      "cd09bf437f46210521ad5c21891414f236e29aa6869906820c7c9dc2b565d8be",
+      "e1ix.mov",
+      "https://dawn.pakgov.org/news-946de614",
+      "kernet.info"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1057"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 8
+    }
+  },
+  "Silence": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1021.001",
+      "T1036.005"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Silent Librarian": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "library.adelaide.crev.me"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Silver Fox": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "75f9256201b12fb9d83a2d64c50a61166d50de98f9cda9e8e82f448f732a7fd8"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "SilverFish": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1202"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "SilverTerrier": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "us-military-service.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "SloppyLemming": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "browser.apl-org.online"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "SneakyChef": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "0b6dcf9ba14096c631bd9a3f90180c5f6ad9177a8283724146425b2f08b53e02"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Star Blizzard": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1539"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Stealth Falcon": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "Windows Credential Manager"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Sticky Werewolf": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1414"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Storm-1811": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1059.001",
+      "T1204.002"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Surtr": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1053"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "TA2541": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1047",
+      "T1588.002"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "TA410": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "http://ffca.caibi379.com/rwjh/qtinfo.txt"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "TA428": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "%ALLUSERSPROFILE%\\Microsoft\\AppV\\hkcmd.exe",
+      "6dfc3bdd2b70670bf29506e5828f627e",
+      "866d05e27becb5135658d995fe73f6b6af72e7ceb5b229e91986b508aaafe02f"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1140"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 4
+    }
+  },
+  "TA505": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "drive.google-eu-cdn.com",
+      "dropbox-cdns.com",
+      "dropboxwcdn.com",
+      "sdgububue3.xyz"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "MineBridge RAT"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "Encrypted/Encoded File",
+      "T1105"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 7
+    }
+  },
+  "TA511": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "e40c45ef8bdd567976c4cf326690964e63bfffdc0d26f3550a3a9348538c910b",
+      "ec1fda96044f67abf36e7d3ddbf9fdb06b9fba9c7d29761487221568746dd05b"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "TA544": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "TA0005"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "TA551": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "072b3460ec049cbf0b635d4b765c1b2ec3946470e3da7f2a9fce10744609723d",
+      "37323d2a90d42db92abc91b83d2ed32b4e42c772cc3c0fbe1dbfe439c28ee32a",
+      "8aaa1357b36df3de71d0f6f85fcb769e1e82443e20932a4ceb077fee4dcfd777",
+      "edeb7349a682a92c44a561df5eaa650924010252c6e0766a467dcb41004c52a9",
+      "https://isc.sans.edu/forums/diary/TA551+Shathak+continues+pushing+BazarLoader+infections+lead+to+Cobalt+Strike/27738/",
+      "xk625lf.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Backdoor:Win32/Qbot"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 7
+    }
+  },
+  "TA571": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1547"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "TA576": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1547",
+      "T1566"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "TA578": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "https://mastralakkot.live/live/"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1059.007"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "TBD": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "2590cf1d97ea6c1fd7a6a8d4ec4f8b64db26359abc3249a72e9cd7e41e1eb363",
+      "2ndroundequestrian.com",
+      "305cfef7674524f85a212caa0406706eea1129e27845574acad27c6d41380310",
+      "5dac8767cc89776637ba4888bd39b57044f6c12d35ed8ed8ecf717e3d1b39d66",
+      "652ffec08ea72db47c5b27861032a626b61cc020053a22e081de23e32da187d6",
+      "9defc5629ee8ae560d9357dfeb4daeeb8ce607d5c4aa1f3dc6d74816ff57ff28",
+      "a02bc5d0e793718d957a66bb3a4ae7641e7ec18499560708e67889fbe75e62bb",
+      "ac1bc427ea4102577e73e86af662b595ef358674fb2c1487ab31cb9badcac621",
+      "ad2159507b6ce1789b1ce05521bdc4bd9fda128c1f3074394c62e3dfd0f8c432",
+      "addlvr.com",
+      "adiquity.com",
+      "autocasion.com",
+      "connectif.cloud",
+      "createsend11.com",
+      "dinorslick.icu",
+      "e527bdc2ef72d79ded7fffbc97dd62694216fb25f31140f3c577fe79a76d1848",
+      "guoshipartners.com",
+      "http://deltaprojects.se/",
+      "http://up-value.de/",
+      "metadata.cc",
+      "microsoftedgeinsiders.com",
+      "mmapiws.com",
+      "nairalandd.com",
+      "nortton.com",
+      "pawnation.com",
+      "ring.do",
+      "scupio.com",
+      "storygize.com",
+      "successfultogether.co.uk"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 29
+    }
+  },
+  "TBD | Russian, probably": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1010",
+      "T1070",
+      "T1569"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "TEMP.Hermit": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1133"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "TEMP.Veles": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [
+      "C0032",
+      "Triton Safety Instrumented System Attack"
+    ],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "TargetCompany": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1567"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Team TNT": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "sayhi.bplace.net"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "TeamTNT": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "c0ab7d1caabdd090b2399cd1193d2cc2334218d3f3f0d3164b61b6014fd308e9",
+      "d2fff992e40ce18ff81b9a92fa1cb93a56fb5a82c1cc428204552d8dfa1bc04f"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1071.001",
+      "T1485",
+      "T1587.001",
+      "T1595.002"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 6
+    }
+  },
+  "Threat Group-3390": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1056",
+      "T1106",
+      "T1564"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "Thrip": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Elise"
+    ],
+    "tools": [
+      "Ping"
+    ],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "TiltedTemple": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1055"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "ToddyCat": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Ninja"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Trickbot": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "a0d0cfa8bf0bc5b8f769d8b64eab22d308b108dd8a4d59872946d69c3f8c58a5"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1053.005"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Tropic Trooper": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "BKDR_SVCSHELL"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1082",
+      "T1573.002"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "Turkey Dog": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "epandemidestekyardimuygulamasi.com",
+      "epandemindestekuygulamasi0101.com",
+      "https://hergun-gundem.net/edestek.apk",
+      "https://ka-m-u-yayin-sosyal.com/eDestek.apk",
+      "pan-dstek-ssyal-dste.com",
+      "pandemi-sos-yal-des-tek.com",
+      "saglik-paketi.site",
+      "tcbmtruygulama6.com",
+      "xn--trendyolmillaevdekalylbakampanyas-t6edj50o.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 9
+    }
+  },
+  "Turla": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "9b97e740b65bc609210f095cd9407c990a9f71f580f001ea07300228c5256d62"
+    ],
+    "reports": [
+      "Sunburst backdoor – code overlaps with Kazuar"
+    ],
+    "campaigns": [],
+    "malware": [
+      "Kazuar",
+      "QUIETCANARY",
+      "SUNBURST"
+    ],
+    "tools": [
+      "Reg",
+      "certutil"
+    ],
+    "attack_patterns": [
+      "Archive via Utility"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 8
+    }
+  },
+  "Twisted Panda": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "SPINNER"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Tycoon Group": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "25rw2.canweal.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1598.002"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "UAC-0050": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "a18876e286ea71d6d0098f6daa61a456fe1a2c176ab025668bbe5d64feafb829"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "UAC-0099": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1176"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "UAC-0165": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "9060ca8e829fc136d1ecd95a5204abb48f3ce5b7339619c5668c7e176dcbb235",
+      "eb01925836eed1dbd85a8ab9aa05c5c45dc051abaae9e67db3a53489d776b6c2"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "UNC1151": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "webmail.login-verify.online"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1105",
+      "T1218.005"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "UNC215": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "Dynamic Data Exchange",
+      "T1489",
+      "T1583.003",
+      "T1588.003"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 4
+    }
+  },
+  "UNC2198": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Egregor"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "UNC2447": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1486"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "UNC2565": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1027"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "UNC2891": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1021.004"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "UNC3313": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1573"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "UNC3886": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [
+      "RedPenguin"
+    ],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1040"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "UNC4191": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1136"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "UNC4466": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1095",
+      "T1213"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "UNC4841": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "CASTLETAP"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "UNC4990": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "72f1ba6309c98cd52ffc99dd15c45698dfca2d6ce1ef0bf262433b5dfff084be"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "UNC961": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1003",
+      "T1070",
+      "T1071",
+      "T1105"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 4
+    }
+  },
+  "UNK_SweetSpecter": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1564.003"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "UTA0218": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1012",
+      "T1083"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "UltraRank": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1036"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Unfading Sea Haze": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1137"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Unknown - Chinese Speaking": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "0f6a625675a8120213ad01974bce1e10ce1d80bcfd4d44d8a7986a141a10f8b5",
+      "27528ca6fbbb933b264889976dff0a5742e1679fb517064095e7e5f88e946bf5",
+      "39a3735dc2963d815b2491668996de77f0d1b8813112bc61bb2f64bab6194659",
+      "3e50df89448e1fe71748610d69f499e42242e61601382b1692ea0f8e6225c83d",
+      "620fc06ab974c1a06471e985545d482b5289df300a85eadf7c9c0f3cbf29b94d",
+      "9330d214487ab854c5c48b406a1ddd1b9d692d5f7999f55522e454d656bb5982",
+      "9d096ca5252ed4d6d3bd6310b43d5f27dfecb7e1d12e91c6139c54e18ad0440e",
+      "fff7e4d41c66335023bff8a3fc82b28cd76aa7cff61ac7383559f702e90adc15",
+      "https://198.144.159.105",
+      "vigrxvigrx.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1106"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 11
+    }
+  },
+  "Unknown - Most likely multiple spanning Cyrillic and Chinese in terms of artifacts": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "0c6fb929fe03d8336c6afe4b11c09bbbe99d8eae4fee159180c079804cbd340a",
+      "15a7c8a71c0e0dab810408afc56576ebb284ace93c4a391cd78318cff56b1d36",
+      "2822e1e276dca1aa777ae97685b10283e25996ad2b3b3bebf5a03906feef5dd5",
+      "2a62e4090bf714a4df1ca4af31c38d306d3e4a28eb905f892595b0a51235e1b7",
+      "2be45ee139a6af3682083f375dfbdbfbc7533428b6ece99eeb4df3a600b67fa0",
+      "2f8b6cc3d23e4913bdb77eafd0418d572ec2f7c3e35c7e80a5b2c0478171c233",
+      "3477268bcfdbf9d7b28c237ace2c5d111487a42e2e383f54cb362892f5ac556a",
+      "3ad6df7f1ff46915ad7577002fc165d5d7fba209e627c1e6bfb8f97cffc0f054",
+      "4684280b7588a384e7df332bea0926ab9e016709701be36e90798d970196da44",
+      "523a1a831100e12c66e9edc7871c31e7c5f084fc94d25338d223b6d14ba4d7e0",
+      "70c52929840baa6ed0393e5c561e949013d4534004eed08a97e7b6ae28c41b78",
+      "7882fd10ef7b0b7def6248e1d7ef1f3992e448bac379d56995d57eb3436ce9c2",
+      "790976793b553e3cf2188de74901b9308d488c7d0afbe7d9797ee73c8b29b559",
+      "86d128bf29ad56a86686e7524ee414006834bb4a056bf13a9780caba96c51189",
+      "8a5f36d9cfb4bc19c273b06a910906cd4bfd47da4e3daa7e50972e23ba239c6b",
+      "90286ba2e3f39de049f846e744f91e5370c0eba7fc0a146be0f4224e2f0a837c",
+      "9adcc4b24669fc13caabc80dc60cb03b671eda80de04300186556eba42fbfe7a",
+      "ae3f57972735817df1a253e5e31358628a28decdbbf7546421b953292e170360",
+      "af74272d49e76c6bf53e7d60f21361604db708568705f49398251766e20de938",
+      "b163b1ade8e8981bf3a0a2210e29b472ccc65767a9e5e11eb4666af3a6697b63",
+      "bb4212ce60c1f9a713dd9cc2d62fc960462603729357196c817c07a4eef425cf",
+      "c86e8df4c4c6d2fdee6994bde81cee0c248a33ede2da2193cc32447c1e226302",
+      "d2f0167d6aa209f96faee4880f47dfa3a2185906e8bd90c97a47c598cfe351ba",
+      "e3490fd387d12ea668f3a8020db331d770be204fdd852a6c568974018fa64912",
+      "ecb7c491a3f1efbae82afcedc1962b3fbe7986b256062e6ed83e087519801bcd",
+      "fa3cd82f80cda61b3ec35f814af6dce606b926416051c1d6ac7f26a4f50b4c2f",
+      "http://adaptivecards.io/schemas/adaptive-card.json",
+      "http://com.android.chrome/app_chrome/.com.google.Chrome.WEq92L",
+      "this.audio",
+      "this.data.sr",
+      "this.map"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 31
+    }
+  },
+  "Unknown organized advanced threat": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "9c70f766d3b84fc2bb298efa37cc9191f28bec336329cc11468cfadbc3b137f4",
+      "a9cfffdd215f57f870d7fe7d4fd1d0af4f661e91723c43e2988673967b99f9a2"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Velvet Ant": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1211"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Vendetta": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "bef1b0625c0b5147b02c748eda94e9fc86a837c6fd34d3eea6112975edcda83e"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "VexTrio": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "tiktok.supersbows.us"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1036"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Vice Society": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "r1.57thandnormal.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Vietnamese group": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.7,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [
+      "Python Info-stealer Distributed by Malicious Excel Document"
+    ],
+    "campaigns": [],
+    "malware": [
+      "Redline",
+      "VenomRAT",
+      "Xworm",
+      "script.py"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1003",
+      "T1027",
+      "T1036",
+      "T1056",
+      "T1064",
+      "T1071",
+      "T1081",
+      "T1083",
+      "T1087",
+      "T1090",
+      "T1112",
+      "T1113",
+      "T1132",
+      "T1133",
+      "T1140",
+      "T1497",
+      "T1518",
+      "T1566"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 23
+    }
+  },
+  "ViperSoftX": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1082",
+      "T1203",
+      "T1204",
+      "T1569"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 4
+    }
+  },
+  "Void Balaur": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "community-safety-permission.ru",
+      "experience-my-source.ru",
+      "myaccount-oauths.ru",
+      "place-online-manager.ru"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 4
+    }
+  },
+  "Void Blizzard": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "2606:4700:3030::ac43:c77c",
+      "https://www.circl.lu/pdns/"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Void Manticore": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "charlesslewis1987@onionmail.org"
+    ],
+    "reports": [],
+    "campaigns": [
+      "HomeLand Justice"
+    ],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1588.001"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "Volcano Demon": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1083"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Volt Typhoon": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [
+      "KV Botnet Activity",
+      "Versa Director Zero Day Exploitation"
+    ],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1010",
+      "T1087.002",
+      "T1589"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 5
+    }
+  },
+  "Vultur": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1115"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "WIP19": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "ScreenCap"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "WIRTE": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [
+      "Rclone"
+    ],
+    "attack_patterns": [
+      "Command Obfuscation"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 2
+    }
+  },
+  "Water Hydra": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1071.001"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Water Minyades": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "24xpixeladvertising.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Wazawaka": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1591"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Windshift": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "83caade5a1d0004d64e874aae9955725f43062896f64f51b29f559c3992828bc",
+      "shiaar-e-islam.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Via Phishing"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1420"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 4
+    }
+  },
+  "Winter Vivern": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "https://ocs-romastassec.com/redirect/?id=[target"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Prev IceFire"
+    ],
+    "tools": [],
+    "attack_patterns": [
+      "T1119",
+      "T1189"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 4
+    }
+  },
+  "Wizard Spider": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "81d1e936a8f817e01344049ce63b41e968fec7b265c9d2ab6678412904f15178"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [
+      "Net"
+    ],
+    "attack_patterns": [
+      "Data Encrypted for Impact",
+      "T1078"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 4
+    }
+  },
+  "Worok": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "central.suhypercloud.org"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "XDSpy Group": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "daftsync.com",
+      "jerseygameengine.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "XDUpload"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 3
+    }
+  },
+  "XingLocker": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "BlackMatter"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "Ykg, Noxty, Outlier, Ness": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "nikkistealer.shop"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "YoroTrooper": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "fd7fe71185a70f281545a815fce9837453450bb29031954dd2301fe4da99250d",
+      "sts.mfa.gov.tr.mypolicy.top"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [
+      "T1176",
+      "T1505"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 4
+    }
+  },
+  "YunHe Wang": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "freevpncuba.com"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "[Unnamed group]": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "#Lowfi:AGGR:HTML/Phish"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "[Unnamed group] UFONET": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [],
+    "reports": [],
+    "campaigns": [],
+    "malware": [
+      "Backdoor:Win32/Darkddoser"
+    ],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "bluebottle": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "0612ef9d2239edeab05f421e3188e2cfcadacbaeafbc9b8e35e778f7234aaa3b"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  },
+  "menuPass": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "bip.podkowalesna.pl",
+      "f5744d72c6919f994ff452b0e758ffee"
+    ],
+    "reports": [
+      "Japan-Linked Organizations Targeted in Long-Running APT10 Campaign"
+    ],
+    "campaigns": [],
+    "malware": [],
+    "tools": [
+      "esentutl"
+    ],
+    "attack_patterns": [
+      "T1027",
+      "T1087",
+      "T1104",
+      "T1140",
+      "T1566",
+      "T1574"
+    ],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 10
+    }
+  },
+  "unknown, Chinese speaking": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "0b7eb880a79496ecf293ecb13f93fd0edf07cc10e36478274bc9de64fdaca98d",
+      "25bbab5530dec23958456fadc56868fbcbd337bd4f213afc982d6a823d7be2fe",
+      "2b01c124230240b35471e6f84074f0adc5499b31d3705760bb5ee9756b8e4097",
+      "2bbfdb74ecbe764ae1a28f6e186fb618833e01b92490c65f8b5c20ed81eec9db",
+      "3776facfff863e59190cc714fea5b60901f0cc0b89d8deb76c6ccb168d1c4a81",
+      "3b30191b253a704619244bd774c9da82c5f5054154881a0ab3f6d7c7169d9a66",
+      "aaf1deb7dc1966b7becc2b4fece8d1bdfb54e8f09574b29bfea03b24619be71c",
+      "gsandersonrtcasey.com",
+      "http://72.52.87.31:10443",
+      "http://www.kadet.ru/index.php?page=otclick",
+      "http://www.redline.ru/index.php?id=ysqzmsvcmmkspaewk&scn=1050&inf=0&ver=19&cnt=USA"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 11
+    }
+  },
+  "zEus": {
+    "entity_type": "IntrusionSet",
+    "aliases": [],
+    "confidence": 0.8,
+    "domains": [],
+    "urls": [],
+    "ips": [],
+    "indicators": [
+      "d9d394cc2a743c0147f7c536cbb11d6ea070f2618a12e7cc0b15816307808b8a"
+    ],
+    "reports": [],
+    "campaigns": [],
+    "malware": [],
+    "tools": [],
+    "attack_patterns": [],
+    "evidence_paths": [],
+    "source_counts": {
+      "opencti_historical": 1
+    }
+  }
+}

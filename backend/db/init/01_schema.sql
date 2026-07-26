@@ -255,6 +255,7 @@ CREATE TABLE IF NOT EXISTS domain_monitor_snapshots (
     dns_snapshot JSON NULL COMMENT 'DNS快照',
     certificate_snapshot JSON NULL COMMENT '证书快照',
     web_snapshot JSON NULL COMMENT '网页快照',
+    fingerprint_snapshot JSON NULL COMMENT '用于后续归因的版本化指纹快照',
     changed_fields JSON NULL COMMENT '与上次快照相比的变化字段',
     raw_lookup_errors JSON NULL COMMENT '原始查询错误',
     error_message TEXT NULL COMMENT '错误信息',

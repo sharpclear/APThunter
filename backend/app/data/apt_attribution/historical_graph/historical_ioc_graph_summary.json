@@ -1,0 +1,26 @@
+{
+  "output_dir": "D:\\codething\\pyproject\\APT2\\models\\attribution\\dataset\\historical_graph",
+  "node_count": 9773,
+  "edge_count": 9081,
+  "apt_profile_count": 297,
+  "known_apt_test_candidates": 8,
+  "counters": {
+    "relationship_edges": {
+      "indicator_based_on_ioc": 400,
+      "indicator_indicates_apt": 400,
+      "campaign_attributed_to_apt": 28,
+      "apt_uses_behavior": 400
+    },
+    "report_edges": {
+      "reports": 400,
+      "report_contains_edges": 7985
+    }
+  },
+  "opencti_query_successes": 10453,
+  "opencti_query_failures": 0,
+  "settings": {
+    "page_size": 200,
+    "limit_pages": 2,
+    "skip_reports": false
+  }
+}

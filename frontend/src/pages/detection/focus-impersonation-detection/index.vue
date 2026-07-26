@@ -30,6 +30,11 @@ interface PhishingResultItem {
   风险等级?: string
   研判原因?: string
   关键特征?: string
+  归因组织?: string
+  归因级别?: string
+  APT置信度?: number
+  强证据数?: number
+  归因说明?: string
 }
 
 interface FocusResultData {
@@ -50,12 +55,15 @@ interface FocusResultData {
   total_count?: number
   phishing_count?: number
   focus_report_filename?: string
+  attribution_enabled?: boolean
+  attribution_results?: Array<Record<string, any>>
 }
 
 interface PersistedFocusTask {
   taskId: string
   queryName: string
   dateRange: [string, string] | null
+  withAttribution?: boolean
 }
 
 const API_BASE = getApiBase()
@@ -65,6 +73,7 @@ const FOCUS_TASK_STORAGE_PREFIX = 'apthunter:focus-impersonation-task'
 
 const queryName = ref('')
 const dateRange = ref<[string, string] | null>(null)
+const withAttribution = ref(false)
 const submitLoading = ref(false)
 const resultLoading = ref(false)
 const currentTaskId = ref('')
@@ -133,6 +142,7 @@ function persistFocusTask(taskId: string, query: string, range: [string, string]
       taskId,
       queryName: query,
       dateRange: range,
+      withAttribution: withAttribution.value,
     }
     localStorage.setItem(focusTaskStorageKey.value, JSON.stringify(state))
   }
@@ -157,6 +167,7 @@ function restoreFocusTask() {
     currentTaskId.value = state.taskId
     queryName.value = state.queryName || ''
     dateRange.value = state.dateRange || null
+    withAttribution.value = !!state.withAttribution
     taskStatus.value = 'pending'
     taskStage.value = '正在恢复检测进度'
     lastError.value = ''
@@ -272,6 +283,7 @@ async function submitTask() {
     const fd = new FormData()
     fd.append('queryName', query)
     fd.append('detectionDateRange', JSON.stringify(submittedRange))
+    fd.append('withAttribution', String(withAttribution.value))
     const resp = await fetch(`${API_BASE}/focus-impersonation-tasks`, {
       method: 'POST',
       body: fd,
@@ -460,6 +472,14 @@ onBeforeUnmount(() => {
                 @open-change="onOpenChange"
               />
             </a-form-item>
+            <a-form-item>
+              <a-checkbox v-model:checked="withAttribution">
+                归因到组织
+              </a-checkbox>
+              <div class="attribution-help">
+                勾选后，对检测结果中标记为恶意的域名实时补全 DNS、RDAP、TLS、IP/ASN 和 Web 应用指纹，并基于历史图谱归因。
+              </div>
+            </a-form-item>
             <div class="action-row">
               <a-button type="primary" :loading="submitLoading || isTaskRunning" @click="submitTask">
                 创建检测任务
@@ -569,6 +589,11 @@ onBeforeUnmount(() => {
                   <div class="detail-line">
                     官方域名：{{ item.官方域名 || item.目标域名 || '未知' }}；匹配类型：{{ item.匹配类型 || '未知' }}
                   </div>
+                  <div v-if="resultData?.attribution_enabled" class="detail-line">
+                    归因组织：{{ item.归因组织 || 'unknown' }}；
+                    归因级别：{{ item.归因级别 || '未归因' }}；
+                    APT置信度：{{ item.APT置信度 ?? 0 }}
+                  </div>
                 </div>
               </template>
               <a-empty v-else description="暂无仿冒域名命中结果" />
@@ -622,6 +647,13 @@ onBeforeUnmount(() => {
 
 .task-form {
   margin-top: 18px;
+}
+
+.attribution-help {
+  margin-top: 6px;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .action-row,

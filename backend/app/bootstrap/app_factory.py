@@ -204,6 +204,10 @@ def create_app() -> FastAPI:
 
     fastapi_app.include_router(domain_lookup_router)
 
+    from app.api.domain_attribution import router as domain_attribution_router
+
+    fastapi_app.include_router(domain_attribution_router)
+
     @fastapi_app.on_event("startup")
     async def startup_event():
         """应用启动时初始化订阅调度器"""

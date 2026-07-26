@@ -81,6 +81,10 @@ services:
         USE_CN_MIRROR: ${USE_CN_MIRROR:-0}
     container_name: apthunter-backend
     restart: unless-stopped
+    command:
+      - /bin/sh
+      - -c
+      - python /app/scripts/db_bootstrap.py && exec uvicorn main:app --host 0.0.0.0 --port 8000
     environment:
       # MinIO 配置
       MINIO_ENDPOINT: minio:9000
@@ -97,6 +101,26 @@ services:
       # 模型配置
       IMPERSONATION_MODEL_NAME: impersonation_detector
       IMPERSONATION_FULL_WHITELIST_PATH: ${IMPERSONATION_FULL_WHITELIST_PATH:-/app/app/data/official_domains/full_whitelist.csv}
+      # APT 历史图谱归因（仅只读本地图谱；不连接 OpenCTI）
+      APT_ATTRIBUTION_GRAPH_DIR: /app/app/data/apt_attribution/historical_graph
+      APT_ATTRIBUTION_REALTIME_ALLOWED: ${APT_ATTRIBUTION_REALTIME_ALLOWED:-true}
+      APT_ATTRIBUTION_DNS_ENABLED: ${APT_ATTRIBUTION_DNS_ENABLED:-true}
+      APT_ATTRIBUTION_DNS_RECORDS_ENABLED: ${APT_ATTRIBUTION_DNS_RECORDS_ENABLED:-true}
+      APT_ATTRIBUTION_RDAP_ENABLED: ${APT_ATTRIBUTION_RDAP_ENABLED:-true}
+      APT_ATTRIBUTION_TLS_ENABLED: ${APT_ATTRIBUTION_TLS_ENABLED:-true}
+      APT_ATTRIBUTION_CT_ENABLED: ${APT_ATTRIBUTION_CT_ENABLED:-true}
+      APT_ATTRIBUTION_IPINTEL_ENABLED: ${APT_ATTRIBUTION_IPINTEL_ENABLED:-true}
+      APT_ATTRIBUTION_WEB_ENABLED: ${APT_ATTRIBUTION_WEB_ENABLED:-true}
+      APT_ATTRIBUTION_REQUEST_TIMEOUT_SEC: ${APT_ATTRIBUTION_REQUEST_TIMEOUT_SEC:-12}
+      APT_ATTRIBUTION_REQUEST_RETRIES: ${APT_ATTRIBUTION_REQUEST_RETRIES:-1}
+      APT_ATTRIBUTION_MAX_WORKERS: ${APT_ATTRIBUTION_MAX_WORKERS:-4}
+      APT_ATTRIBUTION_API_MAX_DOMAINS: ${APT_ATTRIBUTION_API_MAX_DOMAINS:-100}
+      APT_ATTRIBUTION_CERTIFICATE_LIMIT: ${APT_ATTRIBUTION_CERTIFICATE_LIMIT:-10}
+      APT_ATTRIBUTION_DNS_TRANSPORT: ${APT_ATTRIBUTION_DNS_TRANSPORT:-auto}
+      APT_ATTRIBUTION_DOH_ENDPOINT: ${APT_ATTRIBUTION_DOH_ENDPOINT:-https://cloudflare-dns.com/dns-query}
+      APT_ATTRIBUTION_CT_RATE_LIMIT_SEC: ${APT_ATTRIBUTION_CT_RATE_LIMIT_SEC:-0.5}
+      APT_ATTRIBUTION_HISTORICAL_MAX_HOPS: ${APT_ATTRIBUTION_HISTORICAL_MAX_HOPS:-4}
+      APT_ATTRIBUTION_HISTORICAL_MAX_PATHS: ${APT_ATTRIBUTION_HISTORICAL_MAX_PATHS:-20}
       # SMTP 配置（从宿主机 .env 注入；不要在此硬编码密码）
       SMTP_HOST: ${SMTP_HOST:-smtp.example.com}
       SMTP_PORT: ${SMTP_PORT:-587}
@@ -139,6 +163,7 @@ services:
       # 每日域名 zip：与宿主机 ./backend/app/daily_data 双向同步（含其下新建子目录）
       - ./backend/app/daily_data:/app/app/daily_data
       - ./backend/app/data/official_domains:/app/app/data/official_domains
+      - ${APT_ATTRIBUTION_GRAPH_HOST_DIR:-./backend/app/data/apt_attribution/historical_graph}:/app/app/data/apt_attribution/historical_graph:ro
       - backend_data:/app/data
     networks:
       - apthunter-network
@@ -184,6 +209,25 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       IMPERSONATION_MODEL_NAME: impersonation_detector
       IMPERSONATION_FULL_WHITELIST_PATH: ${IMPERSONATION_FULL_WHITELIST_PATH:-/app/app/data/official_domains/full_whitelist.csv}
+      APT_ATTRIBUTION_GRAPH_DIR: /app/app/data/apt_attribution/historical_graph
+      APT_ATTRIBUTION_REALTIME_ALLOWED: ${APT_ATTRIBUTION_REALTIME_ALLOWED:-true}
+      APT_ATTRIBUTION_DNS_ENABLED: ${APT_ATTRIBUTION_DNS_ENABLED:-true}
+      APT_ATTRIBUTION_DNS_RECORDS_ENABLED: ${APT_ATTRIBUTION_DNS_RECORDS_ENABLED:-true}
+      APT_ATTRIBUTION_RDAP_ENABLED: ${APT_ATTRIBUTION_RDAP_ENABLED:-true}
+      APT_ATTRIBUTION_TLS_ENABLED: ${APT_ATTRIBUTION_TLS_ENABLED:-true}
+      APT_ATTRIBUTION_CT_ENABLED: ${APT_ATTRIBUTION_CT_ENABLED:-true}
+      APT_ATTRIBUTION_IPINTEL_ENABLED: ${APT_ATTRIBUTION_IPINTEL_ENABLED:-true}
+      APT_ATTRIBUTION_WEB_ENABLED: ${APT_ATTRIBUTION_WEB_ENABLED:-true}
+      APT_ATTRIBUTION_REQUEST_TIMEOUT_SEC: ${APT_ATTRIBUTION_REQUEST_TIMEOUT_SEC:-12}
+      APT_ATTRIBUTION_REQUEST_RETRIES: ${APT_ATTRIBUTION_REQUEST_RETRIES:-1}
+      APT_ATTRIBUTION_MAX_WORKERS: ${APT_ATTRIBUTION_MAX_WORKERS:-4}
+      APT_ATTRIBUTION_API_MAX_DOMAINS: ${APT_ATTRIBUTION_API_MAX_DOMAINS:-100}
+      APT_ATTRIBUTION_CERTIFICATE_LIMIT: ${APT_ATTRIBUTION_CERTIFICATE_LIMIT:-10}
+      APT_ATTRIBUTION_DNS_TRANSPORT: ${APT_ATTRIBUTION_DNS_TRANSPORT:-auto}
+      APT_ATTRIBUTION_DOH_ENDPOINT: ${APT_ATTRIBUTION_DOH_ENDPOINT:-https://cloudflare-dns.com/dns-query}
+      APT_ATTRIBUTION_CT_RATE_LIMIT_SEC: ${APT_ATTRIBUTION_CT_RATE_LIMIT_SEC:-0.5}
+      APT_ATTRIBUTION_HISTORICAL_MAX_HOPS: ${APT_ATTRIBUTION_HISTORICAL_MAX_HOPS:-4}
+      APT_ATTRIBUTION_HISTORICAL_MAX_PATHS: ${APT_ATTRIBUTION_HISTORICAL_MAX_PATHS:-20}
       SMTP_HOST: ${SMTP_HOST:-smtp.example.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
@@ -207,6 +251,7 @@ services:
       - ./backend/app/models/saved_model:/app/app/models/saved_model
       - ./backend/app/daily_data:/app/app/daily_data
       - ./backend/app/data/official_domains:/app/app/data/official_domains
+      - ${APT_ATTRIBUTION_GRAPH_HOST_DIR:-./backend/app/data/apt_attribution/historical_graph}:/app/app/data/apt_attribution/historical_graph:ro
       - backend_data:/app/data
     networks:
       - apthunter-network

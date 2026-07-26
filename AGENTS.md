@@ -142,6 +142,12 @@ pnpm lint
 - 触发外部 LLM 或网络请求的逻辑必须有超时、重试和日志；批处理要控制并发，参考现有 `PHISHING_LLM_*` 配置。
 - 无 API Key 时应降级为明确错误或跳过可选能力，不要让后台任务无限重试。
 
+## 旧归因模块状态
+
+- 现有组织归因、组织关联和组织画像属于旧兼容实现，产品侧标记为**未在使用、待整体替换**。旧代码仍可能被历史检测或预警流程调用，因此不要直接删除或改变其兼容行为。
+- 旧实现主要包括 `backend/app/services/actor_matcher/`、`backend/app/api/domain_matches.py`、`backend/app/api/dashboard_organization.py`、`frontend/src/pages/dashboard/profile/`，以及检测结果中现存的组织关联展示逻辑。
+- 新功能不得把旧归因分数、组织画像缓存或旧匹配结果作为设计基础，也不要为其新增规则或字段。域名追踪只负责采集和保存可复用的基础设施与应用指纹，新的归因链路以后独立设计和接入。
+
 ## Git 与交付
 
 - 本仓库可能长期存在未提交业务改动。Agent 只提交/描述自己本轮产生的变更。

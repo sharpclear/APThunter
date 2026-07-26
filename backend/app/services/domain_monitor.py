@@ -7,8 +7,10 @@ import logging
 import os
 import re
 import socket
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from http.cookies import SimpleCookie
+from statistics import median
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 from urllib.parse import urljoin, urlparse
 
@@ -31,6 +33,8 @@ DOMAIN_MONITOR_RETRY_HOURS = int(os.getenv("DOMAIN_MONITOR_RETRY_HOURS", "6"))
 WEB_TIMEOUT_SECONDS = float(os.getenv("DOMAIN_MONITOR_WEB_TIMEOUT_SECONDS", "8"))
 WEB_MAX_BYTES = int(os.getenv("DOMAIN_MONITOR_WEB_MAX_BYTES", str(1024 * 1024)))
 WEB_MAX_REDIRECTS = int(os.getenv("DOMAIN_MONITOR_WEB_MAX_REDIRECTS", "3"))
+WEB_ASSET_MAX_BYTES = int(os.getenv("DOMAIN_MONITOR_WEB_ASSET_MAX_BYTES", str(256 * 1024)))
+WEB_MAX_FAVICONS = int(os.getenv("DOMAIN_MONITOR_WEB_MAX_FAVICONS", "2"))
 WEB_USER_AGENT = os.getenv(
     "DOMAIN_MONITOR_WEB_USER_AGENT",
     "APTHunter-Domain-Monitor/1.0",
@@ -97,6 +101,20 @@ def _json_compatible(value: Any) -> Any:
     if isinstance(value, (list, tuple, set)):
         return [_json_compatible(v) for v in value]
     return str(value)
+
+
+def _sha256_json(value: Any) -> str:
+    payload = json.dumps(
+        _json_compatible(value),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _sorted_unique(values: Iterable[Any]) -> List[str]:
+    return sorted({str(value).strip() for value in values if str(value or "").strip()})
 
 
 def _domain_from_risk_record(record: Mapping[str, Any]) -> Optional[str]:
@@ -332,17 +350,46 @@ def _parse_lookup_response(domain: str) -> Dict[str, Any]:
 def _normalize_whois_snapshot(value: Any) -> Optional[Dict[str, Any]]:
     if not isinstance(value, Mapping):
         return None
+    registrar = str(value.get("registrar") or "").strip() or None
+    name_servers = _sorted_unique(
+        str(item).strip().lower().rstrip(".") for item in value.get("nameServers") or []
+    )
+    emails = _sorted_unique(str(item).strip().lower() for item in value.get("emails") or [])
+    registrant = value.get("registrant") if isinstance(value.get("registrant"), Mapping) else None
+    privacy_text = json.dumps(
+        _json_compatible({"registrant": registrant, "emails": emails}),
+        ensure_ascii=False,
+    ).lower()
+    privacy_markers = (
+        "privacy",
+        "proxy",
+        "redacted",
+        "whoisguard",
+        "data protected",
+        "contact privacy",
+    )
     return _json_compatible(
         {
             "domain": value.get("domain"),
-            "registrar": value.get("registrar"),
+            "registrar": registrar,
+            "registrar_normalized": registrar.lower() if registrar else None,
             "registration_date": value.get("registrationDate"),
             "expiration_date": value.get("expirationDate"),
             "updated_date": value.get("updatedDate"),
-            "name_servers": sorted(value.get("nameServers") or []),
-            "status": sorted(value.get("status") or []),
-            "registrant": value.get("registrant"),
-            "emails": sorted(value.get("emails") or []),
+            "name_servers": name_servers,
+            "name_server_set_sha256": _sha256_json(name_servers) if name_servers else None,
+            "status": _sorted_unique(value.get("status") or []),
+            "registrant": registrant,
+            "registrant_identity_sha256": _sha256_json(registrant) if registrant else None,
+            "emails": emails,
+            "email_domains": _sorted_unique(
+                email.rsplit("@", 1)[1] for email in emails if "@" in email
+            ),
+            "privacy_proxy_detected": (
+                any(marker in privacy_text for marker in privacy_markers)
+                if registrant or emails
+                else None
+            ),
         }
     )
 
@@ -354,9 +401,10 @@ def _normalize_dns_snapshot(value: Any) -> Optional[Dict[str, Any]]:
     for item in value.get("records") or []:
         if not isinstance(item, Mapping):
             continue
+        record_type = str(item.get("type") or "").upper() or None
         records.append(
             {
-                "type": item.get("type"),
+                "type": record_type,
                 "name": item.get("name"),
                 "value": item.get("value"),
                 "ttl": item.get("ttl"),
@@ -372,7 +420,90 @@ def _normalize_dns_snapshot(value: Any) -> Optional[Dict[str, Any]]:
             str(item.get("priority") or ""),
         )
     )
-    return _json_compatible({"domain": value.get("domain"), "records": records})
+    record_counts: Dict[str, int] = {}
+    ipv4_addresses: List[str] = []
+    ipv6_addresses: List[str] = []
+    cnames: List[str] = []
+    name_servers: List[str] = []
+    mail_servers: List[Dict[str, Any]] = []
+    ttl_values: List[int] = []
+    for record in records:
+        record_type = str(record.get("type") or "")
+        record_counts[record_type] = record_counts.get(record_type, 0) + 1
+        value_text = str(record.get("value") or "").strip().rstrip(".")
+        if record_type in {"A", "AAAA"} and value_text:
+            try:
+                parsed_ip = ipaddress.ip_address(value_text)
+                if parsed_ip.version == 4:
+                    ipv4_addresses.append(str(parsed_ip))
+                else:
+                    ipv6_addresses.append(str(parsed_ip))
+            except ValueError:
+                pass
+        elif record_type == "CNAME" and value_text:
+            cnames.append(value_text.lower())
+        elif record_type == "NS" and value_text:
+            name_servers.append(value_text.lower())
+        elif record_type == "MX" and value_text:
+            mail_servers.append(
+                {
+                    "host": value_text.lower(),
+                    "priority": record.get("priority"),
+                }
+            )
+        try:
+            if record.get("ttl") is not None:
+                ttl_values.append(int(record["ttl"]))
+        except (TypeError, ValueError):
+            pass
+
+    ipv4_addresses = _sorted_unique(ipv4_addresses)
+    ipv6_addresses = _sorted_unique(ipv6_addresses)
+    resolved_ips = ipv4_addresses + ipv6_addresses
+    network_prefixes = [
+        str(ipaddress.ip_network(f"{address}/24", strict=False))
+        for address in ipv4_addresses
+    ] + [
+        str(ipaddress.ip_network(f"{address}/48", strict=False))
+        for address in ipv6_addresses
+    ]
+    stable_records = [
+        {
+            "type": item.get("type"),
+            "name": item.get("name"),
+            "value": item.get("value"),
+            "priority": item.get("priority"),
+        }
+        for item in records
+    ]
+    ttl_profile = None
+    if ttl_values:
+        ttl_profile = {
+            "min": min(ttl_values),
+            "max": max(ttl_values),
+            "median": median(ttl_values),
+            "unique_values": sorted(set(ttl_values)),
+        }
+    return _json_compatible(
+        {
+            "domain": value.get("domain"),
+            "records": records,
+            "record_counts": dict(sorted(record_counts.items())),
+            "ipv4_addresses": ipv4_addresses,
+            "ipv6_addresses": ipv6_addresses,
+            "resolved_ips": resolved_ips,
+            "network_prefixes": _sorted_unique(network_prefixes),
+            "cnames": _sorted_unique(cnames),
+            "name_servers": _sorted_unique(name_servers),
+            "mail_servers": sorted(
+                mail_servers,
+                key=lambda item: (str(item.get("priority") or ""), item["host"]),
+            ),
+            "ttl_profile": ttl_profile,
+            "record_set_sha256": _sha256_json(stable_records) if stable_records else None,
+            "resolved_ip_set_sha256": _sha256_json(resolved_ips) if resolved_ips else None,
+        }
+    )
 
 
 def _normalize_certificate_snapshot(value: Any) -> Optional[Dict[str, Any]]:
@@ -390,6 +521,12 @@ def _normalize_certificate_snapshot(value: Any) -> Optional[Dict[str, Any]]:
             "key_size": value.get("keySize"),
             "serial_number": value.get("serialNumber"),
             "fingerprint": value.get("fingerprint"),
+            "spki_fingerprint": value.get("spkiFingerprint"),
+            "public_key_type": value.get("publicKeyType"),
+            "tls_version": value.get("tlsVersion"),
+            "cipher": value.get("cipher"),
+            "alpn_protocol": value.get("alpnProtocol"),
+            "connected_ip": value.get("connectedIp"),
             "san_names": sorted(value.get("sanNames") or []),
             "is_expired": value.get("isExpired"),
             "is_self_signed": value.get("isSelfSigned"),
@@ -462,40 +599,202 @@ def _validate_fetch_url(url: str) -> str:
 
 def _read_limited_response(response: requests.Response, max_bytes: int) -> tuple[bytes, bool]:
     chunks: List[bytes] = []
-    total = 0
+    captured = 0
     truncated = False
     for chunk in response.iter_content(chunk_size=16384):
         if not chunk:
             continue
-        total += len(chunk)
-        if total > max_bytes:
-            remaining = max(0, max_bytes - sum(len(item) for item in chunks))
+        if captured + len(chunk) > max_bytes:
+            remaining = max(0, max_bytes - captured)
             if remaining:
                 chunks.append(chunk[:remaining])
             truncated = True
             break
         chunks.append(chunk)
+        captured += len(chunk)
     return b"".join(chunks), truncated
 
 
-def _extract_web_page_summary(content: bytes, content_type: str) -> Dict[str, Any]:
+def _normalized_resource_url(raw_url: Any, page_url: str) -> Optional[str]:
+    raw_text = str(raw_url or "").strip()
+    if not raw_text or raw_text.startswith(("data:", "javascript:", "mailto:", "tel:")):
+        return None
+    absolute = urljoin(page_url, raw_text)
+    parsed = urlparse(absolute)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return None
+    return parsed._replace(query="", fragment="").geturl()
+
+
+def _extract_analytics_identifiers(html: str) -> Dict[str, List[str]]:
+    patterns = {
+        "google_analytics": r"\b(?:UA-\d{4,}-\d+|G-[A-Z0-9]{6,})\b",
+        "google_tag_manager": r"\bGTM-[A-Z0-9]{4,}\b",
+        "baidu_tongji": r"hm\.baidu\.com/hm\.js\?([a-fA-F0-9]{16,})",
+        "facebook_pixel": r"fbq\s*\(\s*['\"]init['\"]\s*,\s*['\"](\d{5,})['\"]",
+    }
+    identifiers: Dict[str, List[str]] = {}
+    for name, pattern in patterns.items():
+        values = _sorted_unique(re.findall(pattern, html, flags=re.IGNORECASE))
+        if values:
+            identifiers[name] = values
+    return identifiers
+
+
+def _extract_web_page_summary(content: bytes, content_type: str, page_url: str) -> Dict[str, Any]:
     encoding = "utf-8"
     text = content.decode(encoding, errors="replace")
     title = None
     body_text = ""
+    dom_structure_sha256 = None
+    generator = None
+    favicon_urls: List[str] = []
+    script_urls: List[str] = []
+    stylesheet_urls: List[str] = []
+    form_targets: List[Dict[str, str]] = []
     if "html" in (content_type or "").lower() or text.lstrip().startswith("<"):
         soup = BeautifulSoup(text, "lxml")
         if soup.title and soup.title.string:
             title = re.sub(r"\s+", " ", soup.title.string).strip()
         body_text = re.sub(r"\s+", " ", soup.get_text(" ", strip=True)).strip()
+        structure = []
+        for element in soup.find_all(True, limit=5000):
+            attribute_names = ",".join(sorted(str(name).lower() for name in element.attrs))
+            structure.append(f"{element.name.lower()}[{attribute_names}]")
+        if structure:
+            dom_structure_sha256 = hashlib.sha256("\n".join(structure).encode("utf-8")).hexdigest()
+
+        generator_meta = soup.find("meta", attrs={"name": re.compile(r"^generator$", re.I)})
+        if generator_meta:
+            generator = str(generator_meta.get("content") or "").strip() or None
+
+        for link in soup.find_all("link", href=True):
+            rel_values = {str(item).lower() for item in (link.get("rel") or [])}
+            normalized_url = _normalized_resource_url(link.get("href"), page_url)
+            if not normalized_url:
+                continue
+            if any("icon" in rel for rel in rel_values):
+                favicon_urls.append(normalized_url)
+            if "stylesheet" in rel_values:
+                stylesheet_urls.append(normalized_url)
+        for script in soup.find_all("script", src=True):
+            normalized_url = _normalized_resource_url(script.get("src"), page_url)
+            if normalized_url:
+                script_urls.append(normalized_url)
+        for form in soup.find_all("form", limit=30):
+            action = _normalized_resource_url(form.get("action") or page_url, page_url)
+            if action:
+                form_targets.append(
+                    {
+                        "method": str(form.get("method") or "get").strip().upper(),
+                        "action": action,
+                    }
+                )
     else:
         body_text = re.sub(r"\s+", " ", text).strip()
+
+    if not favicon_urls:
+        fallback_favicon = _normalized_resource_url("/favicon.ico", page_url)
+        if fallback_favicon:
+            favicon_urls.append(fallback_favicon)
+    script_urls = _sorted_unique(script_urls)[:100]
+    stylesheet_urls = _sorted_unique(stylesheet_urls)[:100]
+    resource_urls = script_urls + stylesheet_urls
+    page_hostname = (urlparse(page_url).hostname or "").lower()
+    external_resource_hosts = _sorted_unique(
+        (urlparse(url).hostname or "").lower()
+        for url in resource_urls
+        if (urlparse(url).hostname or "").lower() != page_hostname
+    )
     return {
         "title": title,
         "text_hash": hashlib.sha256(body_text.encode("utf-8", errors="ignore")).hexdigest(),
         "html_hash": hashlib.sha256(content).hexdigest(),
+        "dom_structure_sha256": dom_structure_sha256,
         "body_excerpt": body_text[:1000] if body_text else None,
+        "generator": generator,
+        "favicon_urls": _sorted_unique(favicon_urls),
+        "script_urls": script_urls,
+        "stylesheet_urls": stylesheet_urls,
+        "resource_url_set_sha256": _sha256_json(resource_urls) if resource_urls else None,
+        "external_resource_hosts": external_resource_hosts,
+        "form_targets": form_targets,
+        "analytics_identifiers": _extract_analytics_identifiers(text),
     }
+
+
+def _selected_response_headers(response: requests.Response) -> Dict[str, str]:
+    selected_names = (
+        "server",
+        "x-powered-by",
+        "via",
+        "x-aspnet-version",
+        "x-generator",
+        "content-language",
+        "content-security-policy",
+    )
+    return {
+        name: str(response.headers[name]).strip()
+        for name in selected_names
+        if response.headers.get(name)
+    }
+
+
+def _cookie_fingerprints(response: requests.Response) -> List[Dict[str, Any]]:
+    raw_headers = getattr(response.raw, "headers", None)
+    set_cookie_headers: List[str] = []
+    if raw_headers is not None and hasattr(raw_headers, "getlist"):
+        set_cookie_headers = list(raw_headers.getlist("Set-Cookie"))
+    elif response.headers.get("Set-Cookie"):
+        set_cookie_headers = [str(response.headers["Set-Cookie"])]
+
+    fingerprints: Dict[str, Dict[str, Any]] = {}
+    for header in set_cookie_headers:
+        cookie = SimpleCookie()
+        try:
+            cookie.load(header)
+        except Exception:
+            continue
+        for name, morsel in cookie.items():
+            fingerprints[name] = {
+                "name": name,
+                "domain": morsel["domain"] or None,
+                "path": morsel["path"] or None,
+                "secure": bool(morsel["secure"]),
+                "http_only": bool(morsel["httponly"]),
+                "same_site": morsel["samesite"] or None,
+            }
+    return [fingerprints[name] for name in sorted(fingerprints)]
+
+
+def _collect_asset_fingerprint(session: requests.Session, url: str) -> Optional[Dict[str, Any]]:
+    response: Optional[requests.Response] = None
+    try:
+        _validate_fetch_url(url)
+        response = session.get(
+            url,
+            headers={"User-Agent": WEB_USER_AGENT},
+            timeout=WEB_TIMEOUT_SECONDS,
+            allow_redirects=False,
+            stream=True,
+            verify=False,
+        )
+        content, truncated = _read_limited_response(response, WEB_ASSET_MAX_BYTES)
+        if int(response.status_code) >= 400 or not content:
+            return None
+        return {
+            "url": url,
+            "status_code": int(response.status_code),
+            "content_type": response.headers.get("content-type") or None,
+            "content_length": len(content),
+            "truncated": truncated,
+            "sha256": hashlib.sha256(content).hexdigest(),
+        }
+    except Exception:
+        return None
+    finally:
+        if response is not None:
+            response.close()
 
 
 def collect_web_snapshot(domain: str) -> Dict[str, Any]:
@@ -504,41 +803,59 @@ def collect_web_snapshot(domain: str) -> Dict[str, Any]:
         current_url = f"{scheme}://{domain}/"
         redirect_chain = []
         try:
-            session = requests.Session()
-            session.trust_env = False
-            for _ in range(WEB_MAX_REDIRECTS + 1):
-                _validate_fetch_url(current_url)
-                response = session.get(
-                    current_url,
-                    headers={"User-Agent": WEB_USER_AGENT},
-                    timeout=WEB_TIMEOUT_SECONDS,
-                    allow_redirects=False,
-                    stream=True,
-                    verify=False,
-                )
-                status_code = int(response.status_code)
-                redirect_chain.append({"url": current_url, "status_code": status_code})
-                if status_code in {301, 302, 303, 307, 308} and response.headers.get("Location"):
-                    current_url = urljoin(current_url, response.headers["Location"])
-                    continue
+            with requests.Session() as session:
+                session.trust_env = False
+                for _ in range(WEB_MAX_REDIRECTS + 1):
+                    _validate_fetch_url(current_url)
+                    response = session.get(
+                        current_url,
+                        headers={"User-Agent": WEB_USER_AGENT},
+                        timeout=WEB_TIMEOUT_SECONDS,
+                        allow_redirects=False,
+                        stream=True,
+                        verify=False,
+                    )
+                    status_code = int(response.status_code)
+                    redirect_chain.append({"url": current_url, "status_code": status_code})
+                    if status_code in {301, 302, 303, 307, 308} and response.headers.get("Location"):
+                        next_url = urljoin(current_url, response.headers["Location"])
+                        response.close()
+                        current_url = next_url
+                        continue
 
-                content, truncated = _read_limited_response(response, WEB_MAX_BYTES)
-                content_type = response.headers.get("content-type") or ""
-                summary = _extract_web_page_summary(content, content_type)
-                return _json_compatible(
-                    {
-                        "status": "collected",
-                        "scheme": scheme,
-                        "status_code": status_code,
-                        "final_url": current_url,
-                        "redirect_chain": redirect_chain,
-                        "content_type": content_type,
-                        "content_length": len(content),
-                        "truncated": truncated,
-                        "fetched_at": _now().isoformat(),
-                        **summary,
-                    }
-                )
+                    content, truncated = _read_limited_response(response, WEB_MAX_BYTES)
+                    content_type = response.headers.get("content-type") or ""
+                    summary = _extract_web_page_summary(content, content_type, current_url)
+                    headers = _selected_response_headers(response)
+                    cookies = _cookie_fingerprints(response)
+                    response.close()
+                    favicon_urls = summary.pop("favicon_urls", [])
+                    favicons = []
+                    for favicon_url in favicon_urls[:max(0, WEB_MAX_FAVICONS)]:
+                        fingerprint = _collect_asset_fingerprint(session, favicon_url)
+                        if fingerprint:
+                            favicons.append(fingerprint)
+                    return _json_compatible(
+                        {
+                            "status": "collected",
+                            "scheme": scheme,
+                            "status_code": status_code,
+                            "final_url": current_url,
+                            "redirect_chain": redirect_chain,
+                            "content_type": content_type,
+                            "content_length": len(content),
+                            "truncated": truncated,
+                            "response_headers": headers,
+                            "response_header_sha256": _sha256_json(headers) if headers else None,
+                            "cookies": cookies,
+                            "cookie_name_set_sha256": _sha256_json(
+                                [item["name"] for item in cookies]
+                            ) if cookies else None,
+                            "favicons": favicons,
+                            "fetched_at": _now().isoformat(),
+                            **summary,
+                        }
+                    )
             errors.append(f"{scheme.upper()} 重定向超过限制")
         except Exception as exc:
             errors.append(f"{scheme.upper()}: {exc}")
@@ -547,6 +864,137 @@ def collect_web_snapshot(domain: str) -> Dict[str, Any]:
         "errors": errors,
         "fetched_at": _now().isoformat(),
     }
+
+
+def _parse_snapshot_datetime(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text_value = str(value or "").strip()
+        if not text_value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text_value.replace("Z", "+00:00"))
+        except ValueError:
+            try:
+                parsed = datetime.strptime(text_value[:10], "%Y-%m-%d")
+            except ValueError:
+                return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
+def _days_between(start: Any, end: Any) -> Optional[int]:
+    start_time = _parse_snapshot_datetime(start)
+    end_time = _parse_snapshot_datetime(end)
+    if start_time is None or end_time is None:
+        return None
+    return int((end_time - start_time).total_seconds() // 86400)
+
+
+def _build_fingerprint_snapshot(
+    *,
+    domain: str,
+    whois: Optional[Mapping[str, Any]],
+    dns: Optional[Mapping[str, Any]],
+    certificate: Optional[Mapping[str, Any]],
+    web: Optional[Mapping[str, Any]],
+) -> Dict[str, Any]:
+    whois = whois or {}
+    dns = dns or {}
+    certificate = certificate or {}
+    web = web or {}
+    favicons = [
+        item
+        for item in web.get("favicons") or []
+        if isinstance(item, Mapping)
+    ]
+    cookies = [
+        item
+        for item in web.get("cookies") or []
+        if isinstance(item, Mapping)
+    ]
+
+    registration = {
+        "registrar": whois.get("registrar_normalized"),
+        "name_server_set_sha256": whois.get("name_server_set_sha256"),
+        "registrant_identity_sha256": whois.get("registrant_identity_sha256"),
+        "email_domains": whois.get("email_domains") or [],
+        "privacy_proxy_detected": whois.get("privacy_proxy_detected"),
+    }
+    network = {
+        "record_counts": dns.get("record_counts") or {},
+        "resolved_ips": dns.get("resolved_ips") or [],
+        "network_prefixes": dns.get("network_prefixes") or [],
+        "cnames": dns.get("cnames") or [],
+        "name_servers": dns.get("name_servers") or [],
+        "mail_servers": dns.get("mail_servers") or [],
+        "ttl_profile": dns.get("ttl_profile"),
+        "record_set_sha256": dns.get("record_set_sha256"),
+        "resolved_ip_set_sha256": dns.get("resolved_ip_set_sha256"),
+    }
+    tls = {
+        "connected_ip": certificate.get("connected_ip"),
+        "tls_version": certificate.get("tls_version"),
+        "cipher": certificate.get("cipher"),
+        "alpn_protocol": certificate.get("alpn_protocol"),
+        "certificate_sha256": certificate.get("fingerprint"),
+        "spki_sha256": certificate.get("spki_fingerprint"),
+        "serial_number": certificate.get("serial_number"),
+        "issuer": certificate.get("issuer"),
+        "subject": certificate.get("subject"),
+        "san_names": certificate.get("san_names") or [],
+        "signature_algorithm": certificate.get("algorithm"),
+        "public_key_type": certificate.get("public_key_type"),
+        "key_size": certificate.get("key_size"),
+    }
+    application = {
+        "title": web.get("title"),
+        "generator": web.get("generator"),
+        "html_sha256": web.get("html_hash"),
+        "text_sha256": web.get("text_hash"),
+        "dom_structure_sha256": web.get("dom_structure_sha256"),
+        "response_header_sha256": web.get("response_header_sha256"),
+        "response_headers": web.get("response_headers") or {},
+        "cookie_name_set_sha256": web.get("cookie_name_set_sha256"),
+        "cookie_names": _sorted_unique(item.get("name") for item in cookies),
+        "favicon_sha256": _sorted_unique(item.get("sha256") for item in favicons),
+        "resource_url_set_sha256": web.get("resource_url_set_sha256"),
+        "external_resource_hosts": web.get("external_resource_hosts") or [],
+        "analytics_identifiers": web.get("analytics_identifiers") or {},
+        "form_targets": web.get("form_targets") or [],
+        "redirect_chain": web.get("redirect_chain") or [],
+    }
+    temporal = {
+        "registration_to_update_days": _days_between(
+            whois.get("registration_date"), whois.get("updated_date")
+        ),
+        "registration_to_certificate_days": _days_between(
+            whois.get("registration_date"), certificate.get("not_before")
+        ),
+        "domain_registration_period_days": _days_between(
+            whois.get("registration_date"), whois.get("expiration_date")
+        ),
+        "certificate_validity_days": _days_between(
+            certificate.get("not_before"), certificate.get("not_after")
+        ),
+    }
+    return _json_compatible(
+        {
+            "schema_version": "1.0",
+            "domain": domain,
+            "registration": registration,
+            "network": network,
+            "tls": tls,
+            "application": application,
+            "temporal": temporal,
+            "collection_scope": {
+                "active_port_scan": False,
+                "external_ip_enrichment": False,
+            },
+        }
+    )
 
 
 def _stable_compare_value(section_name: str, value: Any) -> Any:
@@ -590,6 +1038,7 @@ def _snapshot_hashes(snapshot: Optional[DomainMonitorSnapshot] = None, sections:
             "dns": snapshot.dns_snapshot if snapshot else None,
             "certificate": snapshot.certificate_snapshot if snapshot else None,
             "web": snapshot.web_snapshot if snapshot else None,
+            "fingerprint": snapshot.fingerprint_snapshot if snapshot else None,
         }
     return {name: _section_hash(name, value) for name, value in sections.items()}
 
@@ -646,11 +1095,19 @@ def collect_domain_monitor_snapshot(target_id: int) -> Dict[str, Any]:
         if web_snapshot.get("status") == "failed":
             errors.extend(str(item) for item in web_snapshot.get("errors") or [])
 
+        fingerprint_snapshot = _build_fingerprint_snapshot(
+            domain=target.normalized_domain,
+            whois=whois_snapshot,
+            dns=dns_snapshot,
+            certificate=certificate_snapshot,
+            web=web_snapshot,
+        )
         sections = {
             "whois": whois_snapshot,
             "dns": dns_snapshot,
             "certificate": certificate_snapshot,
             "web": web_snapshot,
+            "fingerprint": fingerprint_snapshot,
         }
         previous = (
             db.query(DomainMonitorSnapshot)
@@ -682,6 +1139,7 @@ def collect_domain_monitor_snapshot(target_id: int) -> Dict[str, Any]:
             dns_snapshot=dns_snapshot,
             certificate_snapshot=certificate_snapshot,
             web_snapshot=web_snapshot,
+            fingerprint_snapshot=fingerprint_snapshot,
             changed_fields=changed_fields,
             raw_lookup_errors=raw_lookup_errors or None,
             error_message=error_message,

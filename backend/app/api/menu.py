@@ -226,6 +226,17 @@ async def get_menu(authorization: str | None = Header(None)):
             "locale": "menu.dashboard.profile",
         },
         {
+            "id": 59,
+            "parentId": 1,
+            "path": "/dashboard/profile/:id",
+            "component": "/dashboard/profile/detail",
+            "title": "组织详情",
+            "name": "DashboardOrganizationDetail",
+            "keepAlive": False,
+            "hideInMenu": True,
+            "parentKeys": ["/dashboard/profile"],
+        },
+        {
             "id": 58,
             "parentId": 1,
             "path": "/dashboard/domain-monitor",

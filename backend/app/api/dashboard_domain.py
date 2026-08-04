@@ -19,7 +19,8 @@ class DomainQueryRequest(BaseModel):
 @router.get("/list")
 def get_domain_list(
     organization_id: Optional[int] = Query(None, description="组织ID"),
-    organization_name: Optional[str] = Query(None, description="组织名称"),
+    organization_name: Optional[str] = Query(None, description="组织名称或别名关键词"),
+    domain_keyword: Optional[str] = Query(None, description="域名关键词"),
     malicious_only: bool = Query(False, description="仅返回恶意域名")
 ):
     """获取数据库中有数据的域名列表（至少有WHOIS、DNS或SSL证书信息之一）"""
@@ -32,9 +33,16 @@ def get_domain_list(
                 where_clauses.append("d.organization_id = :org_id")
                 params["org_id"] = organization_id
 
-            if organization_name:
-                where_clauses.append("o.name LIKE :org_name")
-                params["org_name"] = f"%{organization_name}%"
+            if organization_name and organization_name.strip():
+                where_clauses.append(
+                    "(o.name LIKE :org_name "
+                    "OR JSON_SEARCH(o.alias, 'one', :org_name) IS NOT NULL)"
+                )
+                params["org_name"] = f"%{organization_name.strip()}%"
+
+            if domain_keyword and domain_keyword.strip():
+                where_clauses.append("d.domain_name LIKE :domain_keyword")
+                params["domain_keyword"] = f"%{domain_keyword.strip()}%"
 
             if malicious_only:
                 where_clauses.append("d.is_malicious = 1")

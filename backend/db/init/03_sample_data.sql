@@ -87,7 +87,7 @@ CREATE TABLE _stg_apt_events (
 
 LOAD DATA INFILE '/docker-entrypoint-initdb.d/apt_events.csv'
 INTO TABLE _stg_apt_events
-CHARACTER SET gbk
+CHARACTER SET utf8mb4
 FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"' ESCAPED BY '"'
 LINES TERMINATED BY '\n'
 IGNORE 1 LINES;
@@ -97,7 +97,10 @@ INSERT INTO apt_events (
 	event_date,
 	title,
 	description,
+	link,
 	event_type,
+	threat_type,
+	releasing_product,
 	region,
 	latitude,
 	longitude,
@@ -109,10 +112,13 @@ SELECT
 	STR_TO_DATE(NULLIF(TRIM(e.event_date), ''), '%Y/%c/%e'),
 	LEFT(TRIM(e.title), 255),
 	NULLIF(e.description, ''),
+	NULLIF(TRIM(e.link), ''),
 	CASE
 		WHEN COALESCE(TRIM(e.threat_type), '') IN ('供应链攻击', '漏洞利用', '勒索软件', 'APT攻击') THEN 'major'
 		ELSE 'normal'
 	END,
+	COALESCE(NULLIF(TRIM(e.threat_type), ''), '未分类'),
+	NULLIF(TRIM(e.releasing_product), ''),
 	COALESCE(NULLIF(TRIM(o.region), ''), '未知'),
 	NULL,
 	NULL,
@@ -129,6 +135,16 @@ FROM _stg_apt_events e
 LEFT JOIN apt_organizations o ON o.id = CAST(NULLIF(TRIM(e.organization_id), '') AS UNSIGNED);
 
 DROP TABLE IF EXISTS _stg_apt_events;
+
+-- 组织 CSV 中的事件数可能早于事件 CSV 更新；以实际关联事件为准重新统计。
+UPDATE apt_organizations o
+LEFT JOIN (
+	SELECT organization_id, COUNT(*) AS event_count
+	FROM apt_events
+	WHERE organization_id IS NOT NULL
+	GROUP BY organization_id
+) e ON e.organization_id = o.id
+SET o.event_count = COALESCE(e.event_count, 0);
 
 -- ============================================
 -- 地区事件统计（由事件+组织聚合）

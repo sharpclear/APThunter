@@ -5,7 +5,6 @@ import { GlobalOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import type { DomainAttributes, DnsInfo, WhoisInfo, CertificateInfo, DnsRecord, DomainListItem, LookupResult } from '~/api/dashboard/attributes'
 import { getDomainListApi, lookupDomainAllApi, queryDomainAttributesApi } from '~/api/dashboard/attributes'
-import { queryOrganizationsApi } from '~/api/dashboard/profile'
 
 defineOptions({ name: 'DashboardAttributes' })
 
@@ -23,6 +22,7 @@ const currentPage = ref(1)
 const pageSize = 30
 const orgFilterName = ref<string>('')
 const orgFilterId = ref<number | null>(null)
+const appliedOrgFilterName = ref<string>('')
 
 // 查询结果
 const domainData = ref<DomainAttributes | null>(null)
@@ -77,6 +77,17 @@ const sortedDomainList = computed<DomainListItem[]>(() => {
   })
 })
 
+const matchedOrganizationNames = computed(() => {
+  if (!appliedOrgFilterName.value && orgFilterId.value == null)
+    return []
+
+  return Array.from(new Set(
+    domainList.value
+      .map(item => item.organizationName?.trim())
+      .filter((name): name is string => Boolean(name)),
+  ))
+})
+
 const pagedDomainList = computed<DomainListItem[]>(() => {
   const start = (currentPage.value - 1) * pageSize
   const end = start + pageSize
@@ -93,23 +104,12 @@ function toBool(value: unknown) {
   return false
 }
 
-// 验证域名格式
-function isValidDomain(domain: string): boolean {
-  const domainRegex = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/i
-  return domainRegex.test(domain.trim())
-}
+// 按完整域名查询属性；仅在用户点击具体域名或确认实时查询时调用
+async function queryExactDomain(domainValue: string) {
+  const domain = domainValue.trim()
 
-// 查询域名属性
-async function handleQuery() {
-  const domain = domainInput.value.trim()
-  
   if (!domain) {
     message.warning('请输入要查询的域名')
-    return
-  }
-
-  if (!isValidDomain(domain)) {
-    message.error('请输入有效的域名格式')
     return
   }
 
@@ -185,6 +185,16 @@ async function handleQuery() {
   }
 }
 
+// 域名关键词模糊搜索，不要求输入完整域名格式
+async function handleQuery() {
+  resetDomainDetail()
+  queryErrors.value = []
+  await loadDomainList()
+
+  if (domainInput.value.trim() && domainList.value.length === 0)
+    message.info('未找到匹配的域名')
+}
+
 function goBackToList() {
   resetDomainDetail()
   queryErrors.value = []
@@ -207,7 +217,7 @@ async function handleDatabaseQuery(domain: string) {
         content: response.msg || `域名 ${domain} 暂无本地 WHOIS/DNS/SSL 信息，是否发起实时查询？`,
         okText: '实时查询',
         cancelText: '取消',
-        onOk: () => handleQuery(),
+        onOk: () => queryExactDomain(domain),
       })
     }
     else {
@@ -224,7 +234,7 @@ async function handleDatabaseQuery(domain: string) {
         content: payload.msg || `域名 ${domain} 暂无本地 WHOIS/DNS/SSL 信息，是否发起实时查询？`,
         okText: '实时查询',
         cancelText: '取消',
-        onOk: () => handleQuery(),
+        onOk: () => queryExactDomain(domain),
       })
     }
     else if (payload?.msg) {
@@ -332,11 +342,13 @@ async function loadDomainList() {
   domainListLoading.value = true
   try {
     const response = await getDomainListApi({
+      domainKeyword: domainInput.value.trim() || undefined,
       organizationId: orgFilterId.value ?? undefined,
       organizationName: orgFilterName.value?.trim() || undefined,
     })
     if (response.code === 200 && response.data) {
       domainList.value = response.data
+      appliedOrgFilterName.value = orgFilterName.value.trim()
       currentPage.value = 1
     }
   }
@@ -348,46 +360,23 @@ async function loadDomainList() {
   }
 }
 
-async function isValidOrganizationName(name: string): Promise<boolean> {
-  const keyword = name.trim()
-  if (!keyword)
-    return true
-
-  try {
-    const response = await queryOrganizationsApi({
-      keyword,
-      page: 1,
-      pageSize: 50,
-    })
-
-    const list = response.data?.list || []
-    return list.some(item => item.name === keyword)
-  }
-  catch (error) {
-    console.error('校验组织名称失败:', error)
-    return false
-  }
-}
-
 async function applyOrgFilter() {
   domainData.value = null
   const keyword = orgFilterName.value.trim()
 
-  if (keyword) {
-    const valid = await isValidOrganizationName(keyword)
-    if (!valid) {
-      message.error('无效的组织名')
-      return
-    }
+  if (keyword)
     orgFilterId.value = null
-  }
 
-  loadDomainList()
+  await loadDomainList()
+
+  if (keyword && domainList.value.length === 0)
+    message.info('未找到名称或别名匹配的组织域名')
 }
 
 function clearOrgFilter() {
   orgFilterId.value = null
   orgFilterName.value = ''
+  appliedOrgFilterName.value = ''
   applyOrgFilter()
 }
 
@@ -403,14 +392,24 @@ function syncOrgFilterFromRoute() {
     orgFilterId.value = null
   }
 
-  if (typeof queryOrgName === 'string')
-    orgFilterName.value = queryOrgName
+  orgFilterName.value = typeof queryOrgName === 'string' ? queryOrgName : ''
+}
+
+async function syncPageFromRoute() {
+  syncOrgFilterFromRoute()
+  const queryDomain = route.query.domain
+  const domain = typeof queryDomain === 'string' ? queryDomain.trim() : ''
+
+  domainInput.value = domain
+  resetDomainDetail()
+  await loadDomainList()
+
+  if (domain)
+    await handleDatabaseQuery(domain)
 }
 
 // 点击域名项进行查询
 function handleDomainClick(item: DomainListItem) {
-  domainInput.value = item.domain
-
   const hasLocalData = toBool(item.hasWhois) || toBool(item.hasDns) || toBool(item.hasSsl)
   if (hasLocalData) {
     handleDatabaseQuery(item.domain)
@@ -422,21 +421,19 @@ function handleDomainClick(item: DomainListItem) {
     content: `域名 ${item.domain} 暂无本地 WHOIS/DNS/SSL 信息，是否继续发起实时查询并保存到数据库？`,
     okText: '继续查询',
     cancelText: '取消',
-    onOk: () => handleQuery(),
+    onOk: () => queryExactDomain(item.domain),
   })
 }
 
 // 页面加载时获取域名列表
 onMounted(() => {
-  syncOrgFilterFromRoute()
-  loadDomainList()
+  syncPageFromRoute()
 })
 
 watch(
   () => route.query,
   () => {
-    syncOrgFilterFromRoute()
-    loadDomainList()
+    syncPageFromRoute()
   },
 )
 </script>
@@ -449,7 +446,7 @@ watch(
         <a-space :size="16" style="width: 100%;">
           <a-input
             v-model:value="domainInput"
-            placeholder="请输入域名查询"
+            placeholder="请输入域名关键词（支持模糊搜索）"
             :style="{ flex: 1, minWidth: '300px' }"
             size="large"
             @press-enter="handleQuery"
@@ -461,7 +458,7 @@ watch(
           <a-button
             type="primary"
             size="large"
-            :loading="loading"
+            :loading="domainListLoading || loading"
             @click="handleQuery"
           >
             <template #icon>
@@ -485,16 +482,16 @@ watch(
 
     <!-- 域名列表 -->
     <a-card
-      v-if="!domainData && domainList.length > 0"
+      v-if="!domainData"
       title="域名列表"
       :bordered="false"
       :style="{ marginBottom: '24px' }"
       :loading="domainListLoading"
     >
-      <a-space :size="12" style="margin-bottom: 16px; width: 100%;">
+      <a-space :size="12" wrap style="margin-bottom: 16px; width: 100%;">
         <a-input
           v-model:value="orgFilterName"
-          placeholder="按组织名称筛选"
+          placeholder="按组织名称或别名模糊筛选"
           style="max-width: 320px;"
           @press-enter="applyOrgFilter"
         />
@@ -504,9 +501,16 @@ watch(
         <a-button @click="clearOrgFilter">
           清除
         </a-button>
-        <a-tag v-if="orgFilterName" color="blue">
-          当前组织：{{ orgFilterName }}
-        </a-tag>
+        <template v-if="matchedOrganizationNames.length > 0">
+          <span>当前匹配组织：</span>
+          <a-tag
+            v-for="organizationName in matchedOrganizationNames"
+            :key="organizationName"
+            color="blue"
+          >
+            {{ organizationName }}
+          </a-tag>
+        </template>
       </a-space>
       <a-list
         :data-source="pagedDomainList"

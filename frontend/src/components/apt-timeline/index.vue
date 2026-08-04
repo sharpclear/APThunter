@@ -12,7 +12,8 @@ export interface AptEvent {
   title: string
   description?: string
   reportUrl?: string
-  type?: 'major' | 'normal' // major: 重要事件（实心盾形），normal: 普通事件（圆形轮廓）
+  releasingProduct?: string
+  type?: 'major' | 'normal'
   organization?: string
 }
 
@@ -237,18 +238,11 @@ const yearRange = computed(() => {
       <template v-for="event in sortedEvents" :key="event.id">
         <div
           class="event-marker"
-          :class="{
-            'event-major': event.type === 'major',
-            'event-normal': event.type !== 'major',
-          }"
           :style="{ left: `${getEventPosition(event.date)}%` }"
           :title="`${event.title}${event.organization ? ' - ' + event.organization : ''}`"
           @click="handleEventClick(event)"
         >
-          <div v-if="event.type === 'major'" class="event-shield">
-            <div class="shield-content" />
-          </div>
-          <div v-else class="event-circle" />
+          <div class="event-circle" />
           <!-- 事件标题提示 -->
           <div class="event-tooltip">{{ event.title }}</div>
         </div>
@@ -403,37 +397,6 @@ const yearRange = computed(() => {
   box-shadow: 0 1px 4px rgba(82, 196, 26, 0.4);
 }
 
-.event-shield {
-  width: 18px;
-  height: 22px;
-  position: relative;
-  
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 0;
-    height: 0;
-    border-left: 9px solid transparent;
-    border-right: 9px solid transparent;
-    border-top: 7px solid #52c41a;
-  }
-  
-  .shield-content {
-    position: absolute;
-    top: 7px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 18px;
-    height: 15px;
-    background: #52c41a;
-    border-radius: 0 0 3px 3px;
-    box-shadow: 0 2px 6px rgba(82, 196, 26, 0.5);
-  }
-}
-
 .events-list {
   margin-top: 32px;
   padding-top: 24px;
@@ -468,4 +431,3 @@ const yearRange = computed(() => {
   }
 }
 </style>
-

@@ -8,7 +8,9 @@ export interface SpatialEvent {
 	title: string
 	description?: string
 	reportUrl?: string
+	releasingProduct?: string
 	eventType: 'major' | 'normal'
+	threatType?: string
 	region?: string
 	latitude?: number
 	longitude?: number
@@ -64,7 +66,7 @@ export interface MapDataPoint {
 	recentEvents?: SpatialEvent[]
 }
 
-const SPATIAL_EVENT_TEXT_FIELDS = ['title', 'description', 'organizationName', 'organization', 'region'] as const
+const SPATIAL_EVENT_TEXT_FIELDS = ['title', 'description', 'threatType', 'releasingProduct', 'organizationName', 'organization', 'region'] as const
 const SPATIAL_REGION_TEXT_FIELDS = ['region'] as const
 
 function normalizeSpatialEvent<T extends Record<string, any>>(event: T): T {

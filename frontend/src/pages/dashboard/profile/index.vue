@@ -1,16 +1,12 @@
 <script setup lang="ts">
 import { Pie } from '@antv/g2plot'
-import { DownloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import { SearchOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import { onMounted, nextTick, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { OrganizationProfile } from '~/api/dashboard/profile'
-import { exportOrganizationCsvApi, queryOrganizationsApi } from '~/api/dashboard/profile'
-import { queryEventsApi } from '~/api/dashboard/spatial'
-import type { DomainListItem } from '~/api/dashboard/attributes'
-import { getDomainListApi } from '~/api/dashboard/attributes'
-import AptTimeline, { type AptEvent } from '~/components/apt-timeline/index.vue'
+import { queryOrganizationsApi } from '~/api/dashboard/profile'
 
 defineOptions({ name: 'DashboardProfile' })
 
@@ -28,13 +24,6 @@ const loading = ref(false)
 // 组织列表
 const organizationList = ref<OrganizationProfile[]>([])
 const total = ref(0)
-const detailVisible = ref(false)
-const detailLoading = ref(false)
-const selectedOrganization = ref<OrganizationProfile | null>(null)
-const selectedOrgEvents = ref<AptEvent[]>([])
-const selectedOrgDomains = ref<DomainListItem[]>([])
-const selectedOrgDomainsLoading = ref(false)
-const exportLoading = ref(false)
 const router = useRouter()
 const route = useRoute()
 const activeOnly = ref(false)
@@ -393,96 +382,11 @@ function handlePageChange(page: number) {
 }
 
 
-function mapToTimelineEvents(events: any[], orgName: string): AptEvent[] {
-  return (events || []).map((event: any) => ({
-    id: `event-${event.id}`,
-    date: event.eventDate || event.event_date,
-    title: event.title || '未命名事件',
-    description: event.description || '-',
-    type: event.eventType || event.event_type || 'normal',
-    organization: event.organizationName || event.organization_name || orgName,
-  }))
-}
-
-async function openOrganizationDetail(org: OrganizationProfile) {
-  selectedOrganization.value = org
-  selectedOrgEvents.value = []
-  selectedOrgDomains.value = []
-  detailVisible.value = true
-  detailLoading.value = true
-  const orgId = Number(org.id)
-
-  try {
-    if (!Number.isNaN(orgId)) {
-      const result = await queryEventsApi({
-        organizationId: orgId,
-        page: 1,
-        pageSize: 200,
-      })
-      selectedOrgEvents.value = mapToTimelineEvents(result.data?.list || [], org.name)
-    }
-  }
-  catch (error) {
-    console.error('加载组织事件时间轴失败:', error)
-    message.error('加载组织事件时间轴失败，请稍后重试')
-  }
-  finally {
-    detailLoading.value = false
-  }
-
-  if (!Number.isNaN(orgId)) {
-    selectedOrgDomainsLoading.value = true
-    try {
-      const response = await getDomainListApi({
-        organizationId: orgId,
-        maliciousOnly: true,
-      })
-      if (response.code === 200 && response.data) {
-        selectedOrgDomains.value = response.data
-      }
-    }
-    catch (error) {
-      console.error('加载组织恶意域名失败:', error)
-      message.error('加载组织恶意域名失败，请稍后重试')
-    }
-    finally {
-      selectedOrgDomainsLoading.value = false
-    }
-  }
-}
-
-function goToOrganizationDomains(org: OrganizationProfile) {
+function openOrganizationDetail(org: OrganizationProfile) {
   router.push({
-    path: '/dashboard/attributes',
-    query: {
-      orgId: String(org.id),
-      orgName: org.name,
-    },
+    name: 'DashboardOrganizationDetail',
+    params: { id: String(org.id) },
   })
-}
-
-async function exportOrganizationInfo(org: OrganizationProfile) {
-  exportLoading.value = true
-  try {
-    const blob = await exportOrganizationCsvApi(org.id)
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    const safeName = org.name.replace(/[\\/:*?"<>|]/g, '_').replace(/[. ]+$/g, '') || '组织信息'
-    link.href = url
-    link.download = `${safeName}.csv`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
-    message.success('组织信息已开始下载')
-  }
-  catch (error) {
-    console.error('导出组织信息失败:', error)
-    message.error('导出组织信息失败，请稍后重试')
-  }
-  finally {
-    exportLoading.value = false
-  }
 }
 
 // 搜索防抖定时器
@@ -821,119 +725,6 @@ watch(
       />
     </a-spin>
 
-    <a-drawer
-      v-model:open="detailVisible"
-      :width="900"
-      title="组织详情"
-      placement="right"
-      destroy-on-close
-    >
-      <a-spin :spinning="detailLoading">
-        <template v-if="selectedOrganization">
-          <a-card :bordered="false" style="margin-bottom: 16px;">
-            <template #title>
-              <div class="org-header" style="justify-content: space-between; width: 100%;">
-                <div class="org-header">
-                  <a-tag color="green" style="margin-right: 8px;">APT</a-tag>
-                  <a-typography-title :level="4" style="margin: 0; display: inline;">
-                    {{ selectedOrganization.name }}
-                  </a-typography-title>
-                </div>
-                <a-space>
-                  <a-button
-                    :loading="exportLoading"
-                    @click="exportOrganizationInfo(selectedOrganization)"
-                  >
-                    <template #icon>
-                      <DownloadOutlined />
-                    </template>
-                    导出信息
-                  </a-button>
-                  <a-button type="primary" @click="goToOrganizationDomains(selectedOrganization)">
-                    查看该组织域名
-                  </a-button>
-                </a-space>
-              </div>
-            </template>
-
-            <div class="org-content">
-              <div v-if="selectedOrganization.alias && selectedOrganization.alias.length > 0" class="org-section">
-                <a-typography-text type="secondary" strong>
-                  别名：
-                </a-typography-text>
-                <a-space wrap style="margin-top: 4px;">
-                  <a-tag v-for="(alias, index) in selectedOrganization.alias" :key="index" color="blue">
-                    {{ alias }}
-                  </a-tag>
-                </a-space>
-              </div>
-
-              <div class="org-section">
-                <a-typography-paragraph :ellipsis="{ rows: 4, expandable: false }" :style="{ marginBottom: 0 }">
-                  {{ selectedOrganization.description }}
-                </a-typography-paragraph>
-              </div>
-
-              <div class="org-section">
-                <a-space :size="24">
-                  <span>
-                    <a-typography-text type="secondary">关联恶意域名：</a-typography-text>
-                    <a-typography-text strong>
-                      {{ formatMaliciousDomainCount(selectedOrganization.maliciousDomainCount ?? selectedOrganization.iocCount) }} 个
-                    </a-typography-text>
-                  </span>
-                  <span>
-                    <a-typography-text type="secondary">关联事件：</a-typography-text>
-                    <a-typography-text strong>{{ selectedOrganization.eventCount ?? 0 }} 个</a-typography-text>
-                  </span>
-                </a-space>
-              </div>
-
-              <div class="org-section">
-                <a-space wrap>
-                  <a-tag v-if="selectedOrganization.region" color="cyan">区域：{{ selectedOrganization.region }}</a-tag>
-                  <a-tag v-if="selectedOrganization.origin" color="orange">来源：{{ selectedOrganization.origin }}</a-tag>
-                </a-space>
-              </div>
-
-              <div class="org-section">
-                <a-typography-text type="secondary" strong>
-                  相关恶意域名：
-                </a-typography-text>
-                <div style="margin-top: 8px;">
-                  <a-spin :spinning="selectedOrgDomainsLoading">
-                    <a-space v-if="selectedOrgDomains.length > 0" wrap>
-                      <a-tag
-                        v-for="item in selectedOrgDomains"
-                        :key="item.domain"
-                        color="red"
-                        style="font-family: monospace; font-size: 11px;"
-                      >
-                        {{ item.domain }}
-                      </a-tag>
-                    </a-space>
-                    <a-typography-text v-else type="secondary">
-                      暂无恶意域名
-                    </a-typography-text>
-                  </a-spin>
-                </div>
-              </div>
-
-              <div class="org-section" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0f0f0;">
-                <a-typography-text type="secondary" style="font-size: 12px;">
-                  最近活跃时间：{{ formatDate(selectedOrganization.latestEventDate || selectedOrganization.updateTime) }}
-                </a-typography-text>
-              </div>
-            </div>
-          </a-card>
-
-          <a-card :bordered="false" title="APT事件时间轴">
-            <AptTimeline :events="selectedOrgEvents" show-events-list @event-click="() => {}" />
-          </a-card>
-        </template>
-      </a-spin>
-    </a-drawer>
-    
   </page-container>
 </template>
 

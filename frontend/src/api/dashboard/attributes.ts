@@ -136,6 +136,7 @@ export interface DomainListItem {
 }
 
 export interface DomainListQueryParams {
+	domainKeyword?: string
 	organizationId?: number
 	organizationName?: string
 	maliciousOnly?: boolean
@@ -145,6 +146,7 @@ export interface DomainListQueryParams {
 export async function getDomainListApi(params?: DomainListQueryParams) {
 	const query = params
 		? {
+				domain_keyword: params.domainKeyword,
 				organization_id: params.organizationId,
 				organization_name: params.organizationName,
 				malicious_only: params.maliciousOnly,

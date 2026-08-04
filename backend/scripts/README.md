@@ -187,3 +187,29 @@ services:
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       - MYSQL_URL=${MYSQL_URL}
 ```
+
+## APT 组织与事件参考数据导入
+
+`import_apt_reference.py` 从 `backend/db/init/apt_organizations.csv` 和
+`backend/db/init/apt_events.csv` 读取参考数据，通过记录 ID 幂等更新组织和事件，并重新统计各组织的事件数量。
+导入在一个数据库事务内完成，不会清空事件表、组织表或其他业务数据。
+
+更新后端镜像并执行数据库迁移：
+
+```bash
+docker compose build backend
+docker compose up -d --no-deps backend
+docker compose exec -T backend python /app/scripts/db_bootstrap.py --skip-init --skip-seed
+```
+
+先预演并核对新增、更新数量：
+
+```bash
+docker compose exec -T backend python /app/scripts/import_apt_reference.py --dry-run
+```
+
+确认后执行正式导入；同一批数据可安全重复执行：
+
+```bash
+docker compose exec -T backend python /app/scripts/import_apt_reference.py
+```

@@ -98,6 +98,7 @@ function toAptEvent(event: any): AptEvent & { organizationId?: number } {
     date: event.eventDate || event.event_date,
     title: event.title || '未命名事件',
     reportUrl: event.reportUrl || event.report_url,
+    releasingProduct: event.releasingProduct || event.releasing_product,
     organizationId: event.organizationId || event.organization_id,
     organization: event.organizationName || event.organization_name || '未知组织',
     description: event.description || '-',
@@ -1056,6 +1057,14 @@ onMounted(async () => {
             </a-typography-text>
             <a-typography-text style="margin-left: 8px;">
               {{ selectedEvent.description }}
+            </a-typography-text>
+          </div>
+          <div>
+            <a-typography-text type="secondary">
+              披露厂商：
+            </a-typography-text>
+            <a-typography-text style="margin-left: 8px;">
+              {{ selectedEvent.releasingProduct || '-' }}
             </a-typography-text>
           </div>
           <div v-if="selectedEvent.reportUrl">

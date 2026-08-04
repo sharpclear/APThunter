@@ -195,7 +195,7 @@ def list_organizations(
                         GROUP BY organization_id
                     ) md ON md.organization_id = o.id
                     WHERE {where_sql}
-                    ORDER BY COALESCE(o.update_time, '1970-01-01') DESC, o.id DESC
+                    ORDER BY latest_event_date IS NULL ASC, latest_event_date DESC, o.id ASC
                     LIMIT :limit OFFSET :offset
                 """),
                 params

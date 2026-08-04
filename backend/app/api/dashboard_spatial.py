@@ -14,7 +14,35 @@ from app.services.apt_event_text import normalize_apt_event_record
 router = APIRouter(prefix="/api/dashboard/spatio-temporal", tags=["spatio-temporal"])
 
 
-def has_report_url_column(conn) -> bool:
+def get_event_report_url_select(conn, table_alias: str = "e") -> str:
+    """兼容不同版本 apt_events 表中的原报告链接字段。"""
+    rows = conn.execute(
+        text(
+            """
+            SELECT COLUMN_NAME
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'apt_events'
+              AND COLUMN_NAME IN ('report_url', 'link')
+            """
+        )
+    ).fetchall()
+    columns = {row[0] for row in rows}
+
+    if "report_url" in columns and "link" in columns:
+        return (
+            f"COALESCE(NULLIF(TRIM({table_alias}.report_url), ''), "
+            f"NULLIF(TRIM({table_alias}.link), '')) AS reportUrl,"
+        )
+    if "report_url" in columns:
+        return f"NULLIF(TRIM({table_alias}.report_url), '') AS reportUrl,"
+    if "link" in columns:
+        return f"NULLIF(TRIM({table_alias}.link), '') AS reportUrl,"
+    return "NULL AS reportUrl,"
+
+
+def get_event_threat_type_select(conn, table_alias: str = "e") -> str:
+    """读取事件业务类型，并兼容尚未增加 threat_type 字段的旧环境。"""
     result = conn.execute(
         text(
             """
@@ -22,11 +50,31 @@ def has_report_url_column(conn) -> bool:
             FROM information_schema.COLUMNS
             WHERE TABLE_SCHEMA = DATABASE()
               AND TABLE_NAME = 'apt_events'
-              AND COLUMN_NAME = 'report_url'
+              AND COLUMN_NAME = 'threat_type'
             """
         )
     ).scalar()
-    return bool(result)
+    if result:
+        return f"NULLIF(TRIM({table_alias}.threat_type), '') AS threatType,"
+    return "NULL AS threatType,"
+
+
+def get_event_releasing_product_select(conn, table_alias: str = "e") -> str:
+    """读取事件披露厂商，并兼容尚未增加 releasing_product 字段的旧环境。"""
+    result = conn.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'apt_events'
+              AND COLUMN_NAME = 'releasing_product'
+            """
+        )
+    ).scalar()
+    if result:
+        return f"NULLIF(TRIM({table_alias}.releasing_product), '') AS releasingProduct,"
+    return "NULL AS releasingProduct,"
 
 
 def convert_to_json_serializable(obj):
@@ -51,7 +99,9 @@ def get_events(
     """获取事件列表"""
     try:
         with engine.connect() as conn:
-            report_url_select = "e.report_url AS reportUrl," if has_report_url_column(conn) else "NULL AS reportUrl,"
+            report_url_select = get_event_report_url_select(conn)
+            threat_type_select = get_event_threat_type_select(conn)
+            releasing_product_select = get_event_releasing_product_select(conn)
             where_clauses = []
             params = {}
             
@@ -96,7 +146,9 @@ def get_events(
                 text(f"""
                     SELECT e.id, e.event_date AS eventDate, e.title, e.description, 
                            {report_url_select}
-                           e.event_type AS eventType, e.region, e.latitude, e.longitude,
+                           e.event_type AS eventType, {threat_type_select}
+                           {releasing_product_select}
+                           e.region, e.latitude, e.longitude,
                            e.severity, o.name AS organizationName, e.organization_id AS organizationId
                     FROM apt_events e
                     LEFT JOIN apt_organizations o ON e.organization_id = o.id
@@ -200,7 +252,9 @@ def get_timeline(
     """获取事件时间线"""
     try:
         with engine.connect() as conn:
-            report_url_select = "e.report_url AS reportUrl," if has_report_url_column(conn) else "NULL AS reportUrl,"
+            report_url_select = get_event_report_url_select(conn)
+            threat_type_select = get_event_threat_type_select(conn)
+            releasing_product_select = get_event_releasing_product_select(conn)
             where_clause = "WHERE e.organization_id = :org_id" if organization_id else "WHERE 1=1"
             params = {"org_id": organization_id} if organization_id else {}
             
@@ -208,7 +262,9 @@ def get_timeline(
                 text(f"""
                     SELECT e.id, e.event_date AS date, e.title, e.description,
                           {report_url_select}
-                          e.event_type AS type, o.name AS organization,
+                          e.event_type AS type, {threat_type_select}
+                          {releasing_product_select}
+                          o.name AS organization,
                            e.region, e.severity
                     FROM apt_events e
                     LEFT JOIN apt_organizations o ON e.organization_id = o.id

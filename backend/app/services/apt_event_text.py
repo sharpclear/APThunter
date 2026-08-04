@@ -47,7 +47,7 @@ def _load_seed_events() -> dict[int, dict[str, str]]:
             continue
 
         try:
-            with path.open("r", encoding="gb18030", newline="") as file:
+            with path.open("r", encoding="utf-8-sig", newline="") as file:
                 rows = csv.DictReader(file)
                 seed_events: dict[int, dict[str, str]] = {}
                 for row in rows:
@@ -59,6 +59,8 @@ def _load_seed_events() -> dict[int, dict[str, str]]:
                     seed_events[event_id] = {
                         "title": (row.get("title") or "").strip(),
                         "description": (row.get("description") or "").strip(),
+                        "threatType": (row.get("threat_type") or "").strip(),
+                        "releasingProduct": (row.get("releasing_product") or "").strip(),
                     }
                 return seed_events
         except Exception as exc:
@@ -82,7 +84,7 @@ def normalize_apt_event_record(record: Mapping[str, Any]) -> dict[str, Any]:
     if not seed_event:
         return normalized
 
-    for field in ("title", "description"):
+    for field in ("title", "description", "threatType", "releasingProduct"):
         if _looks_mojibake(normalized.get(field)) and seed_event.get(field):
             normalized[field] = seed_event[field]
 

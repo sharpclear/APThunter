@@ -446,7 +446,7 @@ watch(
         <a-space :size="16" style="width: 100%;">
           <a-input
             v-model:value="domainInput"
-            placeholder="请输入域名关键词（支持模糊搜索）"
+            placeholder="请输入域名关键词"
             :style="{ flex: 1, minWidth: '300px' }"
             size="large"
             @press-enter="handleQuery"
@@ -491,7 +491,7 @@ watch(
       <a-space :size="12" wrap style="margin-bottom: 16px; width: 100%;">
         <a-input
           v-model:value="orgFilterName"
-          placeholder="按组织名称或别名模糊筛选"
+          placeholder="请输入组织名称或别名"
           style="max-width: 320px;"
           @press-enter="applyOrgFilter"
         />

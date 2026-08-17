@@ -1,6 +1,6 @@
 # APTHunter 远程虚拟机部署简要流程
 
-本文从“本地已经构建 Docker 镜像，并通过 `docker compose up -d` 验证项目正常运行”之后开始说明。部署目标是让远程虚拟机上的代码、镜像和数据库与本地本次验证版本对齐。
+本文说明“先把同一提交推送到 GitHub，再由本地构建并上传 Linux 镜像，最后在虚拟机加载并增量替换应用容器”的流程。部署目标是让远程虚拟机上的代码、镜像和数据库结构与本次发布版本对齐，同时保留 MySQL、MinIO、Redis 和全部数据卷。
 
 ## 1. 确认本地发布版本
 
@@ -28,16 +28,27 @@ export DEPLOY_TAG=manual-$(date +%Y%m%d-%H%M)
 
 ## 2. 本地打包并上传镜像
 
-先 dry-run，确认脚本选择的本地镜像会被重命名为远程 Compose 使用的 `apthunter-*` 镜像名：
+如果镜像尚未从本次 Git 提交构建，直接使用 `--build` 完成 Linux/amd64 构建、打包和上传：
 
 ```bash
-./scripts/deploy-local.sh --dry-run --tag "$DEPLOY_TAG"
+bash scripts/deploy-local.sh \
+  --build \
+  --tag "$DEPLOY_TAG" \
+  --remote-host 192.168.32.219 \
+  --remote-user mlz \
+  --ssh-key ~/.ssh/apthunter_vm_ed25519
 ```
 
-确认无误后打包并上传：
+如果已经手工构建并验证过全部镜像，可先 dry-run，确认脚本选择的镜像会被重命名为远程 Compose 使用的 `apthunter-*` 镜像名：
 
 ```bash
-./scripts/deploy-local.sh \
+bash scripts/deploy-local.sh --dry-run --tag "$DEPLOY_TAG"
+```
+
+确认无误后省略 `--build`，只打包并上传已有镜像：
+
+```bash
+bash scripts/deploy-local.sh \
   --tag "$DEPLOY_TAG" \
   --remote-host <远程IP或域名> \
   --remote-port 22 \
@@ -47,7 +58,7 @@ export DEPLOY_TAG=manual-$(date +%Y%m%d-%H%M)
 如果使用 SSH key：
 
 ```bash
-./scripts/deploy-local.sh \
+bash scripts/deploy-local.sh \
   --tag "$DEPLOY_TAG" \
   --remote-host <远程IP或域名> \
   --remote-port 22 \
@@ -60,6 +71,8 @@ export DEPLOY_TAG=manual-$(date +%Y%m%d-%H%M)
 - `apthunter-images-${DEPLOY_TAG}.tar.gz`
 - `apthunter-images-${DEPLOY_TAG}.tar.gz.sha256`
 - `manifest-${DEPLOY_TAG}.env`
+
+归档包含 MySQL、backend、Celery worker、Celery beat、Lazarus collector 和 frontend 六个项目镜像。Redis 与 MinIO 继续使用公开镜像，不装入归档。
 
 默认远程上传目录是：
 
@@ -101,6 +114,16 @@ cat releases/manifest-${DEPLOY_TAG}.env
 
 注意：远程 `.env` 通常保存部署环境的密钥、邮箱、飞书、LLM 等配置，不通过 GitHub 或镜像包覆盖。
 
+首次部署 Lazarus 前，至少确认 `.env` 中有以下配置：
+
+```dotenv
+LAZARUS_DAY_API_KEY=<至少32字符，建议使用 openssl rand -hex 32>
+LAZARUS_EVENT_SYNC_ENABLED=true
+LAZARUS_EVENT_AUTO_IMPORT=false
+```
+
+如果启用了 Qianxin 同步，远程脚本还会要求 `QIANXIN_API_URL` 和 `QIANXIN_API_KEY` 有效。这里的 URL 应填写虚拟机能访问到的本机内网地址，而不是 `127.0.0.1`。
+
 ## 4. 对齐数据库
 
 数据库对齐分两种情况，按实际部署目标选择一种。
@@ -113,7 +136,7 @@ cat releases/manifest-${DEPLOY_TAG}.env
 - 通过后端镜像执行 `/app/scripts/db_bootstrap.py`
 - 对齐当前表结构、当前官方模型/初始账号数据，并记录已由 bootstrap 覆盖的历史 migration
 - 自动执行未来新增且尚未记录的 migration
-- 重建 backend、celery-worker、frontend 容器
+- 重建 backend、celery-worker、celery-beat、lazarus-collector、frontend 容器
 
 这种情况不需要导入本地完整数据库，直接执行第 5 步即可。
 
@@ -169,25 +192,32 @@ gzip -dc "releases/apthunter_new-${DEPLOY_TAG}.sql.gz" \
 
 ```bash
 cd /home/mlz/APTHunter
-./scripts/deploy-remote.sh --tag "$DEPLOY_TAG"
+bash scripts/deploy-remote.sh --tag "$DEPLOY_TAG"
 ```
 
 脚本会：
 
+- 校验远程 Git 提交与镜像 manifest 一致，并拒绝有未提交的 tracked 修改
+- 校验 Lazarus 密钥；启用 Qianxin 时同时校验 Qianxin URL 和密钥
+- 检查是否存在正在执行的分析、训练或 Lazarus 采集任务
+- 在 `backups/` 创建迁移前的 MySQL 压缩备份
+- 为当前应用容器镜像保留 `rollback-${DEPLOY_TAG}` 标签
 - 校验镜像包 sha256
 - `docker load` 导入镜像
-- 按 manifest 中的 `TARGET_IMAGES` 确认目标镜像存在
+- 按 manifest 中的 `TARGET_IMAGES` 确认目标镜像存在并校验为 `linux/amd64`
 - 拉取或复用 Redis、MinIO 镜像
-- 启动基础服务
+- 使用 `--no-recreate` 确保 MySQL、Redis、MinIO 在线，不因加载了新镜像而替换现有容器
 - 通过后端镜像执行 `/app/scripts/db_bootstrap.py`，完成表结构兼容、初始账号/模型数据和后续 migration
-- 使用 `--no-build --force-recreate` 重建应用容器
-- 等待 backend、celery-worker、frontend 健康检查
+- 使用 `--no-build --no-deps --force-recreate` 分阶段仅重建应用容器，避免 Compose 因镜像标签变化替换基础设施依赖
+- 等待 backend、celery-worker、celery-beat、lazarus-collector、frontend 健康检查
 - 如存在 `scripts/compose-verify.sh`，执行接口验证
+
+这不是“增量镜像”：上传的仍是完整镜像。增量指部署时只替换应用容器，不执行 `docker compose down`，也不删除或重建数据卷。正常情况下 MySQL、Redis、MinIO 不停机；应用容器会有一次短暂重启。
 
 如果只想先执行数据库 bootstrap/migration，不加载镜像和重建应用：
 
 ```bash
-./scripts/deploy-remote.sh --migrations-only
+bash scripts/deploy-remote.sh --migrations-only
 ```
 
 ## 6. 部署后检查
@@ -203,6 +233,8 @@ docker compose -p apthunter ps
 ```bash
 docker compose -p apthunter logs --tail=100 backend
 docker compose -p apthunter logs --tail=100 celery-worker
+docker compose -p apthunter logs --tail=100 celery-beat
+docker compose -p apthunter logs --tail=100 lazarus-collector
 docker compose -p apthunter logs --tail=100 frontend
 ```
 
@@ -225,14 +257,26 @@ http://<远程IP或域名>/
 
 常见回退方式：
 
-1. 远程代码切回上一个 Git 提交或分支。
-2. 重新执行上一版镜像包：
+1. 本次部署前的应用镜像会保留为 `rollback-${DEPLOY_TAG}`。如需立即恢复镜像，先检查标签，再逐一重新标记为 `latest`：
 
 ```bash
-./scripts/deploy-remote.sh --tag <上一版DEPLOY_TAG>
+for service in backend celery-worker celery-beat lazarus-collector frontend; do
+  rollback="apthunter-${service}:rollback-${DEPLOY_TAG}"
+  docker image inspect "$rollback" >/dev/null 2>&1 || continue
+  docker tag "$rollback" "apthunter-${service}:latest"
+done
+docker compose -p apthunter up -d --no-build --no-deps --force-recreate \
+  backend lazarus-collector celery-worker celery-beat frontend
 ```
 
-3. 如本次导入了数据库 dump，需要确认后再恢复部署前备份：
+2. 远程代码切回上一个 Git 提交或分支。
+3. 或重新执行上一版镜像包：
+
+```bash
+bash scripts/deploy-remote.sh --tag <上一版DEPLOY_TAG>
+```
+
+4. 如迁移必须回退，需要确认后再恢复部署前备份：
 
 ```bash
 gzip -dc "backups/apthunter_new-before-${DEPLOY_TAG}.sql.gz" \

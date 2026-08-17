@@ -85,6 +85,14 @@ docker-compose ps
 | MinIO API | 9000 | 对象存储 API |
 | MinIO Console | 9001 | MinIO 管理控制台 |
 
+APT 事件采集支持 Compose 内的 Lazarus.day 数据源，以及通过内网连接 Windows 主机的 Qianxin 数据源。
+Lazarus 的架构、候选审核和虚拟机部署步骤见
+[`backend/app/docs/lazarus_event_ingestion.md`](backend/app/docs/lazarus_event_ingestion.md)。
+Qianxin 首次接入默认只写审核候选，配置和验收步骤见
+[`backend/app/docs/qianxin_event_ingestion.md`](backend/app/docs/qianxin_event_ingestion.md)。
+完整的 GitHub + 镜像包远程部署流程见
+[`REMOTE_DEPLOYMENT_GUIDE.md`](REMOTE_DEPLOYMENT_GUIDE.md)。
+
 ## 常用命令
 
 ### 启动和停止

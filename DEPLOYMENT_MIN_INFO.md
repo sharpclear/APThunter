@@ -37,8 +37,8 @@ The local Docker server platform linux/x86_64 maps to the build platform linux/a
 For the first scriptable version, keep the workflow small:
 
 1. Git pull/checkout on the remote machine is done manually before deployment.
-2. The local script packages and uploads already-built Docker image archives only. Image builds are done manually before packaging.
-3. The remote script loads uploaded images, bootstraps the database through the backend image, and starts containers from those images.
+2. The local script can build all project images with `--build`, or package already-built images when that flag is omitted.
+3. The remote script loads uploaded images, backs up and bootstraps the database through the backend image, and recreates only application containers.
 4. The remote script does not delete Docker volumes.
 5. The remote script uses the remote `.env` file if present, but does not upload secrets.
 
@@ -53,6 +53,8 @@ The local packaging script may package images built under the local Compose proj
 | MySQL init image | `apthunter-mysql:latest` |
 | Backend image | `apthunter-backend:latest` |
 | Celery worker image | `apthunter-celery-worker:latest` |
+| Celery beat image | `apthunter-celery-beat:latest` |
+| Lazarus collector image | `apthunter-lazarus-collector:latest` |
 | Frontend image | `apthunter-frontend:latest` |
 | Redis image | `redis:7-alpine` |
 | MinIO image | `minio/minio:latest` |
@@ -63,8 +65,8 @@ For repeatable deployment, consider replacing `minio/minio:latest` with a fixed 
 
 | Script | Purpose |
 | --- | --- |
-| `scripts/deploy-local.sh` | Package already-built local images into `apthunter-images-${DEPLOY_TAG}.tar.gz`, write checksum/manifest files, and upload them to the remote VM. By default it chooses the newest per-service image between the local Compose image prefix, target `apthunter-*`, and the current local Compose container image, then retags it as `apthunter-*` for remote Compose. |
-| `scripts/deploy-remote.sh` | Load the uploaded image archive on the remote VM, run the image-contained database bootstrap/migration entrypoint, recreate app containers with `--no-build`, and report health-check failures without rollback. |
+| `scripts/deploy-local.sh` | Optionally build with `--build`, package six project images into `apthunter-images-${DEPLOY_TAG}.tar.gz`, write checksum/manifest files, verify Linux platform, and upload them to the remote VM. |
+| `scripts/deploy-remote.sh` | Verify Git/image alignment and runtime keys, block active-task interruption, back up MySQL, load the archive, run migrations, preserve infrastructure containers, recreate five app services with `--no-build`, and retain rollback image tags. |
 
 ## Local Script Inputs
 
@@ -80,7 +82,7 @@ REMOTE_UPLOAD_DIR=
 SSH_KEY=
 ```
 
-Before running `scripts/deploy-local.sh`, manually build and verify the local images that will be packaged. Run `./scripts/deploy-local.sh --dry-run --tag <tag>` first to confirm source-to-target image mapping. If you need to force one source prefix, use `--source-project apthunter`; otherwise the script uses `--source-project auto`.
+After committing and pushing the release source, run `bash scripts/deploy-local.sh --build --tag <tag> --ssh-key <key>` to build, package, and upload in one step. If the images were already built and verified, omit `--build` and run `bash scripts/deploy-local.sh --dry-run --tag <tag>` first to confirm source-to-target image mapping.
 
 ## Remote Info Needed
 

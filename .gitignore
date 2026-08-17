@@ -71,6 +71,7 @@ lerna-debug.log*
 .dockerignore
 !backend/.dockerignore
 !frontend/.dockerignore
+!collectors/lazarus_day/.dockerignore
 docker-compose.override.yml
 
 # Database
@@ -99,6 +100,8 @@ coverage/
 
 # Build artifacts
 .deploy/
+/backups/
+/releases/
 *.tar
 *.tar.gz
 *.zip

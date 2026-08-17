@@ -1,5 +1,6 @@
 import os
 
+
 def _load_local_dotenv_if_present():
     """
     本地直接启动后端服务时，尽早从 .env 读取配置。
@@ -13,7 +14,9 @@ def _load_local_dotenv_if_present():
         config_dir = os.path.dirname(os.path.abspath(__file__))  # backend/app/core
         app_dir = os.path.abspath(os.path.join(config_dir, ".."))  # backend/app
         backend_root = os.path.abspath(os.path.join(config_dir, "..", ".."))  # backend
-        project_root = os.path.abspath(os.path.join(config_dir, "..", "..", ".."))  # apthunter
+        project_root = os.path.abspath(
+            os.path.join(config_dir, "..", "..", "..")
+        )  # apthunter
         cwd = os.getcwd()
         explicit = os.getenv("DOTENV_PATH")
         candidates = []
@@ -33,6 +36,8 @@ def _load_local_dotenv_if_present():
                 break
     except Exception:
         return
+
+
 _load_local_dotenv_if_present()
 
 # 配置通过环境变量设置
@@ -75,6 +80,53 @@ def _env_bool(name: str, default: bool) -> bool:
     return v.strip().lower() in ("1", "true", "yes", "on")
 
 
+# ---------- Lazarus.day 事件采集 ----------
+# Compose 内默认通过服务名访问；本地开发可改为 http://127.0.0.1:8788。
+LAZARUS_DAY_API_URL = (
+    os.getenv("LAZARUS_DAY_API_URL", "http://lazarus-collector:8788")
+    .strip()
+    .rstrip("/")
+)
+LAZARUS_DAY_API_KEY = (os.getenv("LAZARUS_DAY_API_KEY") or "").strip()
+LAZARUS_EVENT_SYNC_ENABLED = _env_bool("LAZARUS_EVENT_SYNC_ENABLED", False)
+LAZARUS_EVENT_AUTO_IMPORT = _env_bool("LAZARUS_EVENT_AUTO_IMPORT", False)
+LAZARUS_EVENT_HTTP_TIMEOUT_SEC = max(
+    1.0, float(os.getenv("LAZARUS_EVENT_HTTP_TIMEOUT_SEC", "30"))
+)
+LAZARUS_EVENT_PAGE_LIMIT = max(
+    1, min(200, int(os.getenv("LAZARUS_EVENT_PAGE_LIMIT", "100")))
+)
+LAZARUS_EVENT_MAX_PAGES_PER_SYNC = max(
+    1, int(os.getenv("LAZARUS_EVENT_MAX_PAGES_PER_SYNC", "20"))
+)
+LAZARUS_EVENT_SYNC_INTERVAL_SEC = max(
+    60, int(os.getenv("LAZARUS_EVENT_SYNC_INTERVAL_SEC", "600"))
+)
+
+
+# ---------- Qianxin 事件采集 ----------
+# Qianxin 采集器运行在可访问原浏览器登录态的 Windows 主机，APTHunter 通过内网访问。
+QIANXIN_API_URL = (os.getenv("QIANXIN_API_URL") or "").strip().rstrip("/")
+QIANXIN_API_KEY = (os.getenv("QIANXIN_API_KEY") or "").strip()
+QIANXIN_EVENT_SYNC_ENABLED = _env_bool("QIANXIN_EVENT_SYNC_ENABLED", False)
+QIANXIN_COLLECTION_TRIGGER_ENABLED = _env_bool(
+    "QIANXIN_COLLECTION_TRIGGER_ENABLED", False
+)
+QIANXIN_EVENT_AUTO_IMPORT = _env_bool("QIANXIN_EVENT_AUTO_IMPORT", False)
+QIANXIN_EVENT_HTTP_TIMEOUT_SEC = max(
+    1.0, float(os.getenv("QIANXIN_EVENT_HTTP_TIMEOUT_SEC", "30"))
+)
+QIANXIN_EVENT_PAGE_LIMIT = max(
+    1, min(200, int(os.getenv("QIANXIN_EVENT_PAGE_LIMIT", "100")))
+)
+QIANXIN_EVENT_MAX_PAGES_PER_SYNC = max(
+    1, int(os.getenv("QIANXIN_EVENT_MAX_PAGES_PER_SYNC", "20"))
+)
+QIANXIN_EVENT_SYNC_INTERVAL_SEC = max(
+    60, int(os.getenv("QIANXIN_EVENT_SYNC_INTERVAL_SEC", "600"))
+)
+
+
 # ---------- 基于历史图谱的域名 APT 归因 ----------
 # 图谱目录必须包含 graph_nodes.csv 和 graph_edges.csv。候选域名只做只读匹配，
 # 历史图谱的替换/更新由管理员在该目录中人工完成。
@@ -112,9 +164,7 @@ APT_ATTRIBUTION_WEB_ENABLED = _env_bool("APT_ATTRIBUTION_WEB_ENABLED", True)
 APT_ATTRIBUTION_REQUEST_TIMEOUT_SEC = float(
     os.getenv("APT_ATTRIBUTION_REQUEST_TIMEOUT_SEC", "12")
 )
-APT_ATTRIBUTION_REQUEST_RETRIES = int(
-    os.getenv("APT_ATTRIBUTION_REQUEST_RETRIES", "1")
-)
+APT_ATTRIBUTION_REQUEST_RETRIES = int(os.getenv("APT_ATTRIBUTION_REQUEST_RETRIES", "1"))
 APT_ATTRIBUTION_MAX_WORKERS = int(os.getenv("APT_ATTRIBUTION_MAX_WORKERS", "4"))
 APT_ATTRIBUTION_API_MAX_DOMAINS = int(
     os.getenv("APT_ATTRIBUTION_API_MAX_DOMAINS", "100")
@@ -125,12 +175,10 @@ APT_ATTRIBUTION_CERTIFICATE_LIMIT = int(
 APT_ATTRIBUTION_DNS_TRANSPORT = (
     os.getenv("APT_ATTRIBUTION_DNS_TRANSPORT", "auto").strip().lower()
 )
-APT_ATTRIBUTION_DOH_ENDPOINT = (
-    os.getenv(
-        "APT_ATTRIBUTION_DOH_ENDPOINT",
-        "https://cloudflare-dns.com/dns-query",
-    ).strip()
-)
+APT_ATTRIBUTION_DOH_ENDPOINT = os.getenv(
+    "APT_ATTRIBUTION_DOH_ENDPOINT",
+    "https://cloudflare-dns.com/dns-query",
+).strip()
 APT_ATTRIBUTION_CT_RATE_LIMIT_SEC = float(
     os.getenv("APT_ATTRIBUTION_CT_RATE_LIMIT_SEC", "0.5")
 )
@@ -149,9 +197,7 @@ FEISHU_ENABLE_PUSH = _env_bool("FEISHU_ENABLE_PUSH", False)
 FEISHU_WEBHOOK_URL = (os.getenv("FEISHU_WEBHOOK_URL") or "").strip()
 FEISHU_BOT_SECRET = (os.getenv("FEISHU_BOT_SECRET") or "").strip()
 FEISHU_PUSH_ONLY_ON_ALERT = _env_bool("FEISHU_PUSH_ONLY_ON_ALERT", True)
-FEISHU_PUSH_IMPERSONATION_ALERTS = _env_bool(
-    "FEISHU_PUSH_IMPERSONATION_ALERTS", False
-)
+FEISHU_PUSH_IMPERSONATION_ALERTS = _env_bool("FEISHU_PUSH_IMPERSONATION_ALERTS", False)
 # 可选：逗号分隔 channels，例如 email,feishu（用于与 ALERT_*_ENABLED 组合理解；当前逻辑以各 ENABLED 为准）
 ALERT_NOTIFY_CHANNELS = os.getenv("ALERT_NOTIFY_CHANNELS", "")
 

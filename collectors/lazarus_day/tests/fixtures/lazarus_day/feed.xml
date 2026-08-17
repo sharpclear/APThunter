@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Everyday is lazarus.day</title>
+    <link>https://lazarus.day/reports/</link>
+    <description>Offline test fixture.</description>
+    <item>
+      <title>Kimsuky phishing activity fixture</title>
+      <link>https://lazarus.day/reports/kimsuky-phishing-fixture-AbC12/</link>
+      <description>Kimsuky used a phishing document in a documented attack. | Source: https://asec.example/research/kimsuky-fixture (AhnLab) | Tags: Kimsuky, Phishing, LNK</description>
+      <dc:creator>AhnLab</dc:creator>
+      <pubDate>Thu, 23 Jul 2026 00:00:00 +0000</pubDate>
+      <guid>https://lazarus.day/reports/kimsuky-phishing-fixture-AbC12/</guid>
+    </item>
+    <item>
+      <title>Updated Cyber Threat Actor Naming System</title>
+      <link>https://lazarus.day/reports/naming-system-fixture-DeF34/</link>
+      <description>A naming convention update without a concrete attack. | Source: https://cloud.google.example/naming (Google) | Tags: Neptune</description>
+      <dc:creator>Google</dc:creator>
+      <pubDate>Wed, 22 Jul 2026 00:00:00 +0000</pubDate>
+      <guid>https://lazarus.day/reports/naming-system-fixture-DeF34/</guid>
+    </item>
+  </channel>
+</rss>

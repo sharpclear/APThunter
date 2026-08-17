@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Package existing local Docker images and upload the archive to the VM.
+# Optionally build, package, and upload local Docker images to the VM.
 # Git operations are intentionally manual and are not handled here.
 set -Eeuo pipefail
 
@@ -22,6 +22,8 @@ Options:
   --remote-upload-dir DIR   Remote upload directory. Default: /home/mlz/APTHunter/releases
   --ssh-key PATH            SSH private key path. Default: password login
   --output-dir DIR          Local output directory. Default: .deploy/TAG
+  --build                   Build all packaged services before selecting images
+  --allow-dirty             Allow packaging when the Git worktree is not clean
   --no-upload               Package only; do not upload
   --dry-run                 Show selected image mapping; do not tag, save, or upload
   -h, --help                Show this help
@@ -30,8 +32,12 @@ Environment overrides:
   LOCAL_COMPOSE_PROJECT_NAME   Default: current directory name
   SOURCE_COMPOSE_PROJECT_NAME  Default: auto
   TARGET_COMPOSE_PROJECT_NAME  Default: apthunter
+  TARGET_PLATFORM              Default: linux/amd64
+  BUILD_IMAGES                 Default: 0
+  REQUIRE_CLEAN_GIT            Default: 1
 
-This script does not build images. Build and verify the images manually first.
+This script packages already-built images by default. Pass --build to build the
+release images from the current Git checkout before packaging.
 In auto mode, each service uses the newest image found between LOCAL_COMPOSE_PROJECT_NAME-*, TARGET_COMPOSE_PROJECT_NAME-*, and the current local Compose container image.
 EOF
 }
@@ -101,6 +107,14 @@ choose_source_image() {
   printf '%s' "$best_image"
 }
 
+verify_image_platform() {
+  local image="$1"
+  local actual
+  actual="$(docker image inspect -f '{{.Os}}/{{.Architecture}}' "$image")"
+  [[ "$actual" == "$TARGET_PLATFORM" ]] \
+    || fail "image $image has platform $actual; expected $TARGET_PLATFORM"
+}
+
 DEPLOY_TAG="${DEPLOY_TAG:-manual-$(date +%Y%m%d-%H%M%S)}"
 REMOTE_HOST="${REMOTE_HOST:-192.168.32.219}"
 REMOTE_PORT="${REMOTE_PORT:-22}"
@@ -114,6 +128,9 @@ TARGET_COMPOSE_PROJECT_NAME="${TARGET_COMPOSE_PROJECT_NAME:-${COMPOSE_PROJECT_NA
 OUTPUT_DIR="${OUTPUT_DIR:-}"
 UPLOAD="${UPLOAD:-1}"
 DRY_RUN="${DRY_RUN:-0}"
+BUILD_IMAGES="${BUILD_IMAGES:-0}"
+REQUIRE_CLEAN_GIT="${REQUIRE_CLEAN_GIT:-1}"
+TARGET_PLATFORM="${TARGET_PLATFORM:-linux/amd64}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -157,6 +174,14 @@ while [[ $# -gt 0 ]]; do
       OUTPUT_DIR="${2:?--output-dir requires a value}"
       shift 2
       ;;
+    --build)
+      BUILD_IMAGES=1
+      shift
+      ;;
+    --allow-dirty)
+      REQUIRE_CLEAN_GIT=0
+      shift
+      ;;
     --no-upload)
       UPLOAD=0
       shift
@@ -196,6 +221,23 @@ require_cmd sed
 require_cmd date
 require_cmd awk
 
+if ! docker compose version >/dev/null 2>&1; then
+  fail "docker compose is required"
+fi
+
+docker compose config --quiet
+
+if [[ "$REQUIRE_CLEAN_GIT" == "1" ]] \
+  && command -v git >/dev/null 2>&1 \
+  && git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+  && [[ -n "$(git status --porcelain)" ]]; then
+  if [[ "$DRY_RUN" == "1" ]]; then
+    log "warning: Git worktree is not clean; a real package would require --allow-dirty"
+  else
+    fail "Git worktree is not clean; commit the release source or pass --allow-dirty explicitly"
+  fi
+fi
+
 if [[ "$UPLOAD" == "1" ]]; then
   require_cmd ssh
   require_cmd scp
@@ -208,8 +250,15 @@ services=(
   mysql
   backend
   celery-worker
+  celery-beat
+  lazarus-collector
   frontend
 )
+
+if [[ "$BUILD_IMAGES" == "1" ]]; then
+  log "building release images for $TARGET_PLATFORM"
+  DOCKER_DEFAULT_PLATFORM="$TARGET_PLATFORM" docker compose build "${services[@]}"
+fi
 
 source_images=()
 target_images=()
@@ -218,11 +267,16 @@ for service in "${services[@]}"; do
   target_images+=("${TARGET_COMPOSE_PROJECT_NAME}-${service}:latest")
 done
 
+for image in "${source_images[@]}"; do
+  verify_image_platform "$image"
+done
+
 log "project root: $ROOT"
 log "local image project: $LOCAL_COMPOSE_PROJECT_NAME"
 log "source image project: $SOURCE_COMPOSE_PROJECT_NAME"
 log "target image project: $TARGET_COMPOSE_PROJECT_NAME"
 log "deployment tag: $DEPLOY_TAG"
+log "target platform: $TARGET_PLATFORM"
 log "remote project directory: $REMOTE_PROJECT_DIR"
 
 if [[ "$DRY_RUN" == "1" ]]; then
@@ -270,6 +324,8 @@ ARCHIVE=$(basename "$archive")
 ARCHIVE_SHA256=$archive_sha256
 SOURCE_IMAGES=${source_images[*]}
 TARGET_IMAGES=${target_images[*]}
+REQUIRED_SERVICES=${services[*]}
+TARGET_PLATFORM=$TARGET_PLATFORM
 REMOTE_PROJECT_DIR=$REMOTE_PROJECT_DIR
 REMOTE_UPLOAD_DIR=$REMOTE_UPLOAD_DIR
 RUN_MIGRATIONS=1
@@ -309,7 +365,7 @@ After you manually update code on the remote machine, run:
 
   ssh -p $REMOTE_PORT $REMOTE_USER@$REMOTE_HOST
   cd $REMOTE_PROJECT_DIR
-  ./scripts/deploy-remote.sh --tag $DEPLOY_TAG
+  bash scripts/deploy-remote.sh --tag $DEPLOY_TAG
 
 EOF
 else

@@ -208,6 +208,10 @@ def create_app() -> FastAPI:
 
     fastapi_app.include_router(domain_attribution_router)
 
+    from app.api.event_ingestion import router as event_ingestion_router
+
+    fastapi_app.include_router(event_ingestion_router)
+
     @fastapi_app.on_event("startup")
     async def startup_event():
         """应用启动时初始化订阅调度器"""

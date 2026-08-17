@@ -98,6 +98,25 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+      # Lazarus.day 采集器（仅通过 Compose 内网访问）
+      LAZARUS_DAY_API_URL: http://lazarus-collector:8788
+      LAZARUS_DAY_API_KEY: ${LAZARUS_DAY_API_KEY:-}
+      LAZARUS_EVENT_SYNC_ENABLED: ${LAZARUS_EVENT_SYNC_ENABLED:-true}
+      LAZARUS_EVENT_AUTO_IMPORT: ${LAZARUS_EVENT_AUTO_IMPORT:-false}
+      LAZARUS_EVENT_SYNC_INTERVAL_SEC: ${LAZARUS_EVENT_SYNC_INTERVAL_SEC:-600}
+      LAZARUS_EVENT_PAGE_LIMIT: ${LAZARUS_EVENT_PAGE_LIMIT:-100}
+      LAZARUS_EVENT_MAX_PAGES_PER_SYNC: ${LAZARUS_EVENT_MAX_PAGES_PER_SYNC:-20}
+      LAZARUS_EVENT_HTTP_TIMEOUT_SEC: ${LAZARUS_EVENT_HTTP_TIMEOUT_SEC:-30}
+      # Qianxin 采集器运行在 Windows 主机，通过虚拟机可达的内网地址访问。
+      QIANXIN_API_URL: ${QIANXIN_API_URL:-}
+      QIANXIN_API_KEY: ${QIANXIN_API_KEY:-}
+      QIANXIN_EVENT_SYNC_ENABLED: ${QIANXIN_EVENT_SYNC_ENABLED:-false}
+      QIANXIN_COLLECTION_TRIGGER_ENABLED: ${QIANXIN_COLLECTION_TRIGGER_ENABLED:-false}
+      QIANXIN_EVENT_AUTO_IMPORT: ${QIANXIN_EVENT_AUTO_IMPORT:-false}
+      QIANXIN_EVENT_SYNC_INTERVAL_SEC: ${QIANXIN_EVENT_SYNC_INTERVAL_SEC:-600}
+      QIANXIN_EVENT_PAGE_LIMIT: ${QIANXIN_EVENT_PAGE_LIMIT:-100}
+      QIANXIN_EVENT_MAX_PAGES_PER_SYNC: ${QIANXIN_EVENT_MAX_PAGES_PER_SYNC:-20}
+      QIANXIN_EVENT_HTTP_TIMEOUT_SEC: ${QIANXIN_EVENT_HTTP_TIMEOUT_SEC:-30}
       # 模型配置
       IMPERSONATION_MODEL_NAME: impersonation_detector
       IMPERSONATION_FULL_WHITELIST_PATH: ${IMPERSONATION_FULL_WHITELIST_PATH:-/app/app/data/official_domains/full_whitelist.csv}
@@ -207,6 +226,23 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+      LAZARUS_DAY_API_URL: http://lazarus-collector:8788
+      LAZARUS_DAY_API_KEY: ${LAZARUS_DAY_API_KEY:-}
+      LAZARUS_EVENT_SYNC_ENABLED: ${LAZARUS_EVENT_SYNC_ENABLED:-true}
+      LAZARUS_EVENT_AUTO_IMPORT: ${LAZARUS_EVENT_AUTO_IMPORT:-false}
+      LAZARUS_EVENT_SYNC_INTERVAL_SEC: ${LAZARUS_EVENT_SYNC_INTERVAL_SEC:-600}
+      LAZARUS_EVENT_PAGE_LIMIT: ${LAZARUS_EVENT_PAGE_LIMIT:-100}
+      LAZARUS_EVENT_MAX_PAGES_PER_SYNC: ${LAZARUS_EVENT_MAX_PAGES_PER_SYNC:-20}
+      LAZARUS_EVENT_HTTP_TIMEOUT_SEC: ${LAZARUS_EVENT_HTTP_TIMEOUT_SEC:-30}
+      QIANXIN_API_URL: ${QIANXIN_API_URL:-}
+      QIANXIN_API_KEY: ${QIANXIN_API_KEY:-}
+      QIANXIN_EVENT_SYNC_ENABLED: ${QIANXIN_EVENT_SYNC_ENABLED:-false}
+      QIANXIN_COLLECTION_TRIGGER_ENABLED: ${QIANXIN_COLLECTION_TRIGGER_ENABLED:-false}
+      QIANXIN_EVENT_AUTO_IMPORT: ${QIANXIN_EVENT_AUTO_IMPORT:-false}
+      QIANXIN_EVENT_SYNC_INTERVAL_SEC: ${QIANXIN_EVENT_SYNC_INTERVAL_SEC:-600}
+      QIANXIN_EVENT_PAGE_LIMIT: ${QIANXIN_EVENT_PAGE_LIMIT:-100}
+      QIANXIN_EVENT_MAX_PAGES_PER_SYNC: ${QIANXIN_EVENT_MAX_PAGES_PER_SYNC:-20}
+      QIANXIN_EVENT_HTTP_TIMEOUT_SEC: ${QIANXIN_EVENT_HTTP_TIMEOUT_SEC:-30}
       IMPERSONATION_MODEL_NAME: impersonation_detector
       IMPERSONATION_FULL_WHITELIST_PATH: ${IMPERSONATION_FULL_WHITELIST_PATH:-/app/app/data/official_domains/full_whitelist.csv}
       APT_ATTRIBUTION_GRAPH_DIR: /app/app/data/apt_attribution/historical_graph
@@ -275,6 +311,99 @@ services:
       start_period: 90s
       retries: 3
 
+  # Lazarus.day 事件采集模块：采集产物保存在独立卷中，通过内部 API 提供给 APTHunter。
+  lazarus-collector:
+    build:
+      context: ./collectors/lazarus_day
+      dockerfile: Dockerfile
+      network: host
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+    container_name: apthunter-lazarus-collector
+    restart: unless-stopped
+    environment:
+      LAZARUS_DAY_API_KEY: ${LAZARUS_DAY_API_KEY:-}
+      LAZARUS_DAY_API_WORKER: "true"
+      LAZARUS_DAY_API_POLL_SECONDS: ${LAZARUS_DAY_API_POLL_SECONDS:-0.25}
+      LAZARUS_DAY_API_BUSY_RETRY_SECONDS: ${LAZARUS_DAY_API_BUSY_RETRY_SECONDS:-60}
+      LAZARUS_DAY_API_LEASE_SECONDS: ${LAZARUS_DAY_API_LEASE_SECONDS:-30}
+    expose:
+      - "8788"
+    volumes:
+      - lazarus_events:/collector/data/events
+      - lazarus_logs:/collector/logs
+      # 组织和存量事件快照由 APTHunter 管理，采集器只读。
+      - ./backend/db/init/apt_organizations.csv:/collector/data/reference/apt_organizations.csv:ro
+      - ./backend/db/init/apt_events.csv:/collector/data/reference/apt_events.csv:ro
+    networks:
+      - apthunter-network
+    mem_limit: 768m
+    cpus: 0.5
+
+  # Celery Beat 只负责投递周期任务；真正采集和导入由 collector/worker 执行。
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      network: host
+      args:
+        USE_CN_MIRROR: ${USE_CN_MIRROR:-0}
+    container_name: apthunter-celery-beat
+    restart: unless-stopped
+    working_dir: /app/app
+    command:
+      - celery
+      - -A
+      - app.celery_app:celery_app
+      - beat
+      - --loglevel=info
+      - --schedule=/app/data/celerybeat-schedule
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: 123456789
+      MINIO_BUCKET: uploads
+      MYSQL_URL: mysql+pymysql://apthunter:4CyUhr2zu6!@mysql:3306/apthunter_new
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      LAZARUS_DAY_API_URL: http://lazarus-collector:8788
+      LAZARUS_DAY_API_KEY: ${LAZARUS_DAY_API_KEY:-}
+      LAZARUS_EVENT_SYNC_ENABLED: ${LAZARUS_EVENT_SYNC_ENABLED:-true}
+      LAZARUS_EVENT_AUTO_IMPORT: ${LAZARUS_EVENT_AUTO_IMPORT:-false}
+      LAZARUS_EVENT_SYNC_INTERVAL_SEC: ${LAZARUS_EVENT_SYNC_INTERVAL_SEC:-600}
+      LAZARUS_EVENT_PAGE_LIMIT: ${LAZARUS_EVENT_PAGE_LIMIT:-100}
+      LAZARUS_EVENT_MAX_PAGES_PER_SYNC: ${LAZARUS_EVENT_MAX_PAGES_PER_SYNC:-20}
+      LAZARUS_EVENT_HTTP_TIMEOUT_SEC: ${LAZARUS_EVENT_HTTP_TIMEOUT_SEC:-30}
+      QIANXIN_API_URL: ${QIANXIN_API_URL:-}
+      QIANXIN_API_KEY: ${QIANXIN_API_KEY:-}
+      QIANXIN_EVENT_SYNC_ENABLED: ${QIANXIN_EVENT_SYNC_ENABLED:-false}
+      QIANXIN_COLLECTION_TRIGGER_ENABLED: ${QIANXIN_COLLECTION_TRIGGER_ENABLED:-false}
+      QIANXIN_EVENT_AUTO_IMPORT: ${QIANXIN_EVENT_AUTO_IMPORT:-false}
+      QIANXIN_EVENT_SYNC_INTERVAL_SEC: ${QIANXIN_EVENT_SYNC_INTERVAL_SEC:-600}
+      QIANXIN_EVENT_PAGE_LIMIT: ${QIANXIN_EVENT_PAGE_LIMIT:-100}
+      QIANXIN_EVENT_MAX_PAGES_PER_SYNC: ${QIANXIN_EVENT_MAX_PAGES_PER_SYNC:-20}
+      QIANXIN_EVENT_HTTP_TIMEOUT_SEC: ${QIANXIN_EVENT_HTTP_TIMEOUT_SEC:-30}
+    volumes:
+      - backend_data:/app/data
+    networks:
+      - apthunter-network
+    depends_on:
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      lazarus-collector:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
   # 前端 Vue 应用服务
   frontend:
     build:
@@ -315,6 +444,10 @@ volumes:
   redis_data:
     driver: local
   backend_data:
+    driver: local
+  lazarus_events:
+    driver: local
+  lazarus_logs:
     driver: local
 
 # 网络定义

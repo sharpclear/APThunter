@@ -38,6 +38,32 @@
 | `OFFICIAL_DOMAIN_RESOLVER_MAX_DOMAINS` | 事件名/单位名最多解析的官方域名数 | `20` | 否 |
 | `IMPERSONATION_LLM_MAX_RETRIES` | 仿冒域名 LLM 调用最大重试次数 | `3` | 否 |
 
+### Lazarus.day 事件采集
+
+| 变量名 | 说明 | 默认值 | 必需 |
+|--------|------|--------|------|
+| `LAZARUS_DAY_API_KEY` | APTHunter 与采集器之间的内部 API 密钥 | 无 | 是 |
+| `LAZARUS_EVENT_SYNC_ENABLED` | 启用 Celery Beat 周期采集和同步 | `true`（Compose） | 否 |
+| `LAZARUS_EVENT_AUTO_IMPORT` | 严格校验通过后写入正式事件表；关闭时仅写候选表 | `false` | 否 |
+| `LAZARUS_EVENT_SYNC_INTERVAL_SEC` | 拉取采集器变更流的间隔（秒，最小 60） | `600` | 否 |
+| `LAZARUS_EVENT_PAGE_LIMIT` | 单页变更数（1～200） | `100` | 否 |
+| `LAZARUS_EVENT_MAX_PAGES_PER_SYNC` | 单次任务最多同步页数 | `20` | 否 |
+| `LAZARUS_EVENT_HTTP_TIMEOUT_SEC` | 内部 API 请求超时（秒） | `30` | 否 |
+
+### Qianxin 事件采集
+
+| 变量名 | 说明 | 默认值 | 必需 |
+|--------|------|--------|------|
+| `QIANXIN_API_URL` | 虚拟机可访问的 Windows Qianxin API 地址 | 空 | 是（启用同步时） |
+| `QIANXIN_API_KEY` | 与 Windows 用户级 `QIANXIN_API_KEY` 相同的密钥 | 空 | 是（启用同步时） |
+| `QIANXIN_EVENT_SYNC_ENABLED` | 启用 Celery Beat 周期拉取事件候选 | `false` | 否 |
+| `QIANXIN_COLLECTION_TRIGGER_ENABLED` | 由 APTHunter 每周触发 Qianxin 采集；Windows 计划任务仍启用时应保持关闭 | `false` | 否 |
+| `QIANXIN_EVENT_AUTO_IMPORT` | 严格校验通过后写入正式事件表；首次接入应保持关闭 | `false` | 否 |
+| `QIANXIN_EVENT_SYNC_INTERVAL_SEC` | 拉取事件变更流的间隔（秒，最小60） | `600` | 否 |
+| `QIANXIN_EVENT_PAGE_LIMIT` | 单页变更数（1～200） | `100` | 否 |
+| `QIANXIN_EVENT_MAX_PAGES_PER_SYNC` | 单次任务最多同步页数 | `20` | 否 |
+| `QIANXIN_EVENT_HTTP_TIMEOUT_SEC` | 内网 API 请求超时（秒） | `30` | 否 |
+
 ### 前端服务
 
 前端生产镜像使用同源 `/api` 请求，并由 Nginx 反代到 `backend:8000`，无需单独配置浏览器可见的后端地址。
@@ -84,6 +110,18 @@ ACCESS_TOKEN_EXPIRE_MINUTES=1440
 DEEPSEEK_API_KEY=your_deepseek_api_key
 DEEPSEEK_MODEL=deepseek-v4-flash
 DEEPSEEK_API_URL=https://api.deepseek.com/chat/completions
+
+# Lazarus.day 采集模块（用 openssl rand -hex 32 生成，不要提交真实密钥）
+LAZARUS_DAY_API_KEY=replace_with_a_random_64_hex_secret
+LAZARUS_EVENT_SYNC_ENABLED=true
+LAZARUS_EVENT_AUTO_IMPORT=false
+
+# Qianxin 在 Windows 192.168.21.181 上运行；API Key 必须与该 Windows 用户环境一致。
+QIANXIN_API_URL=http://192.168.21.181:8787
+QIANXIN_API_KEY=replace_with_the_windows_qianxin_api_key
+QIANXIN_EVENT_SYNC_ENABLED=true
+QIANXIN_COLLECTION_TRIGGER_ENABLED=false
+QIANXIN_EVENT_AUTO_IMPORT=false
 ```
 
 2. 在 `docker-compose.yml` 中使用变量：

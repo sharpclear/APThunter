@@ -1,0 +1,8 @@
+# MinerU runs in a separate project-local .venv-mineru environment because its
+# CPU pipeline brings large Torch/ONNX dependencies that the downloader does not need.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.8.0+cpu; sys_platform == "win32"
+torchvision==0.23.0+cpu; sys_platform == "win32"
+onnxruntime==1.20.1; sys_platform == "win32"
+six>=1.16,<2
+mineru[pipeline]==3.4.4

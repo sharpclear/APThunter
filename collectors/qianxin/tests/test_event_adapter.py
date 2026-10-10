@@ -75,6 +75,27 @@ def test_ready_grounded_report_becomes_accepted_apt_event() -> None:
     assert value["structured_event"]["variants"][0]["organization_name"] == "APT28"
 
 
+def test_chinese_title_is_used_while_original_title_stays_in_evidence() -> None:
+    report = {**_report(), "report_title": "APT28 launches a phishing campaign"}
+    summary = _summary()
+    summary["summary"]["report_title"] = report["report_title"]
+    summary["summary"]["title_zh"] = "APT28 发起钓鱼攻击活动"
+
+    value = build_apt_event_product(
+        report,
+        summary,
+        {"status": "ready"},
+        {
+            "preview_url": "https://ti.qianxin.com/report?id=7",
+            "report_publisher": "Example Security",
+        },
+        allow_auto_accept=True,
+    )
+
+    assert value["apt_event"]["title"] == "APT28 发起钓鱼攻击活动"
+    assert value["evidence"][0]["title"] == report["report_title"]
+
+
 def test_description_uses_complete_chinese_sentences() -> None:
     summary = _summary()
     summary["summary"]["key_findings"].extend(

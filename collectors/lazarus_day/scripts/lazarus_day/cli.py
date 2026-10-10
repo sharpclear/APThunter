@@ -9,11 +9,12 @@ import sys
 from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Mapping
 from urllib.parse import urlencode
 
 from .client import LazarusHttpClient
 from .deduplicator import EventDeduplicator
+from .enrichment import EnrichmentError, LazarusEnrichmentClient
 from .matcher import (
     OrganizationMatcher,
     load_actor_alias_overrides,
@@ -59,6 +60,10 @@ from .storage import (
 
 
 LOGGER = logging.getLogger(__name__)
+
+NON_RETRYABLE_ENRICHMENT_ERRORS = {
+    "enrichment API rejected ungrounded model output",
+}
 
 REPORTS_URL = "https://lazarus.day/reports/"
 RSS_URL = "https://lazarus.day/reports/feed/"
@@ -112,6 +117,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--no-fetch-original-source", action="store_true")
     parser.add_argument(
+        "--enrichment-api-url",
+        default=os.environ.get("LAZARUS_ENRICHMENT_API_URL", ""),
+        help="可选的本地共享模型 API 根地址；不在日志中输出。",
+    )
+    parser.add_argument(
+        "--enrichment-api-key",
+        default=os.environ.get("LAZARUS_ENRICHMENT_API_KEY", ""),
+        help="共享模型 API 密钥；建议仅通过环境变量提供。",
+    )
+    parser.add_argument(
+        "--enrichment-timeout",
+        type=_positive_float,
+        default=float(os.environ.get("LAZARUS_ENRICHMENT_TIMEOUT", "900")),
+    )
+    parser.add_argument("--no-model-enrichment", action="store_true")
+    parser.add_argument(
         "--log-level",
         choices=("DEBUG", "INFO", "WARNING", "ERROR"),
         default="INFO",
@@ -136,6 +157,7 @@ def main(
     argv: list[str] | None = None,
     *,
     client_factory: Callable[..., Any] = LazarusHttpClient,
+    enrichment_client_factory: Callable[..., Any] = LazarusEnrichmentClient,
     now: datetime | None = None,
 ) -> int:
     parser = build_parser()
@@ -158,7 +180,12 @@ def main(
     )
     try:
         with exclusive_collector_lock(lock_path):
-            summary = run(args, client_factory=client_factory, now=now)
+            summary = run(
+                args,
+                client_factory=client_factory,
+                enrichment_client_factory=enrichment_client_factory,
+                now=now,
+            )
     except CollectorLockError as exc:
         LOGGER.warning("%s", exc)
         return 20
@@ -303,6 +330,7 @@ def run(
     args: argparse.Namespace,
     *,
     client_factory: Callable[..., Any] = LazarusHttpClient,
+    enrichment_client_factory: Callable[..., Any] = LazarusEnrichmentClient,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     now = now or datetime.now(timezone.utc)
@@ -363,6 +391,28 @@ def run(
     rejections: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
     processed_urls: list[str] = []
+    pending_enrichment = _load_pending_enrichment(state)
+    enrichment_enabled = bool(args.enrichment_api_url) and not bool(
+        args.no_model_enrichment
+    )
+    enrichment_client: Any | None = None
+    if enrichment_enabled and args.enrichment_api_key:
+        try:
+            enrichment_client = enrichment_client_factory(
+                base_url=args.enrichment_api_url,
+                api_key=args.enrichment_api_key,
+                timeout=args.enrichment_timeout,
+                cache_root=(
+                    None
+                    if args.dry_run
+                    else state_path.parent / "enrichment-cache"
+                ),
+            )
+        except (ValueError, OSError) as exc:
+            LOGGER.warning(
+                "模型补全客户端不可用，本批次保留原始结果：%s",
+                type(exc).__name__,
+            )
 
     client = client_factory(
         user_agent=args.user_agent,
@@ -383,6 +433,8 @@ def run(
                 for seed in seeds
                 if canonicalize_url(seed.detail_url) not in recently_processed
             ]
+        if enrichment_enabled:
+            seeds = _merge_pending_enrichment_seeds(seeds, pending_enrichment)
         stats.discovered = len(seeds)
         LOGGER.info("待处理报告：%s", len(seeds))
 
@@ -441,12 +493,51 @@ def run(
                 disabled=args.no_fetch_original_source,
             )
             raw_record = _raw_record(report, original)
+            enrichment = None
+            enrichment_error: str | None = None
+            if enrichment_enabled:
+                if enrichment_client is None:
+                    enrichment_error = "client_unavailable"
+                else:
+                    try:
+                        enrichment = enrichment_client.enrich(report, original)
+                    except EnrichmentError as exc:
+                        enrichment_error = str(exc) or type(exc).__name__
+                        LOGGER.warning(
+                            "报告 %s 的模型补全失败，已加入待补全队列：%s",
+                            report.source_record_id,
+                            enrichment_error,
+                        )
+                canonical_report_url = canonicalize_url(report.lazarus_day_url)
+                if enrichment is not None:
+                    pending_enrichment.pop(canonical_report_url, None)
+                    raw_record["model_enrichment"] = asdict(enrichment)
+                else:
+                    if enrichment_error in NON_RETRYABLE_ENRICHMENT_ERRORS:
+                        pending_enrichment.pop(canonical_report_url, None)
+                    else:
+                        pending_enrichment[canonical_report_url] = _seed_for_state(seed)
+                    raw_record["model_enrichment_error"] = enrichment_error
             match = matcher.match(
                 related_actors=report.related_actors,
                 tags=report.tags,
                 title=report.title,
             )
-            normalized = normalize_report(report, match, original)
+            if (
+                enrichment is not None
+                and not report.related_actors
+                and enrichment.actor_names
+            ):
+                enriched_match = matcher.match(
+                    related_actors=enrichment.actor_names,
+                    tags=report.tags,
+                    title=report.title,
+                )
+                if enriched_match.status == "matched":
+                    match = enriched_match
+            normalized = normalize_report(
+                report, match, original, enrichment=enrichment
+            )
             if normalized.event is None:
                 stats.rejected += 1
                 rejection = {
@@ -462,6 +553,12 @@ def run(
                 continue
 
             event = normalized.event
+            if enrichment_enabled and enrichment is None:
+                event["review_status"] = "needs_review"
+                event["collection_notes"] = _append_note(
+                    event.get("collection_notes"),
+                    "本地模型补全暂不可用，保留来源字段并等待后续批次重试",
+                )
             event_key = make_event_key(
                 canonical_link=str(event["link"]),
                 organization_id=event["organization_id"],
@@ -492,6 +589,13 @@ def run(
                 )
                 continue
             review_reasons = list(normalized.review_reasons)
+            if enrichment_enabled and enrichment is None:
+                if enrichment_error in NON_RETRYABLE_ENRICHMENT_ERRORS:
+                    review_reasons.append(
+                        "本地模型输出未通过证据校验，已保留确定性解析结果"
+                    )
+                else:
+                    review_reasons.append("本地模型补全暂不可用，已加入重试队列")
             if decision.status == "suspected_duplicate":
                 stats.suspected_duplicates += 1
                 review_reasons.append(decision.reason or "疑似重复")
@@ -530,6 +634,9 @@ def run(
         close = getattr(client, "close", None)
         if callable(close):
             close()
+        enrichment_close = getattr(enrichment_client, "close", None)
+        if callable(enrichment_close):
+            enrichment_close()
 
     if errors:
         failure_paths = write_failure_artifacts(
@@ -635,6 +742,7 @@ def run(
             "recent_report_urls": recent_urls,
             "collector_version": COLLECTOR_VERSION,
             "last_batch_stats": stats.as_dict(),
+            "pending_enrichment": list(pending_enrichment.values()),
         }
         write_state(state_path, new_state)
 
@@ -643,6 +751,80 @@ def run(
         "outputs": {key: str(value) for key, value in output_paths.items()},
         "checkpoint_updated": not args.dry_run,
     }
+
+
+def _seed_for_state(seed: ReportSeed) -> dict[str, Any]:
+    return {
+        "detail_url": canonicalize_url(seed.detail_url),
+        "title": seed.title,
+        "published_date": seed.published_date,
+        "date_precision": seed.date_precision,
+        "publisher": seed.publisher,
+        "summary": seed.summary,
+        "original_url": seed.original_url,
+        "tags": list(seed.tags),
+        "discovery_source": "pending-enrichment",
+    }
+
+
+def _load_pending_enrichment(
+    state: Mapping[str, Any],
+) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
+    values = state.get("pending_enrichment") or []
+    if not isinstance(values, list):
+        return result
+    for value in values:
+        if not isinstance(value, Mapping):
+            continue
+        try:
+            url = canonicalize_url(str(value.get("detail_url") or ""))
+        except ValidationError:
+            continue
+        title = str(value.get("title") or "").strip()
+        published_date = str(value.get("published_date") or "").strip()
+        if not title or not re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", published_date):
+            continue
+        result[url] = {
+            "detail_url": url,
+            "title": title,
+            "published_date": published_date,
+            "date_precision": str(value.get("date_precision") or "day"),
+            "publisher": str(value.get("publisher") or ""),
+            "summary": str(value.get("summary") or ""),
+            "original_url": value.get("original_url") or None,
+            "tags": [str(item) for item in value.get("tags") or []],
+            "discovery_source": "pending-enrichment",
+        }
+    return result
+
+
+def _merge_pending_enrichment_seeds(
+    seeds: list[ReportSeed],
+    pending: Mapping[str, Mapping[str, Any]],
+) -> list[ReportSeed]:
+    by_url = {canonicalize_url(seed.detail_url): seed for seed in seeds}
+    for url, value in pending.items():
+        if url in by_url:
+            continue
+        by_url[url] = ReportSeed(
+            detail_url=url,
+            title=str(value["title"]),
+            published_date=str(value["published_date"]),
+            date_precision=str(value.get("date_precision") or "day"),
+            publisher=str(value.get("publisher") or ""),
+            summary=str(value.get("summary") or ""),
+            original_url=(
+                str(value["original_url"])
+                if value.get("original_url")
+                else None
+            ),
+            tags=tuple(str(item) for item in value.get("tags") or []),
+            discovery_source="pending-enrichment",
+        )
+    return sorted(
+        by_url.values(), key=lambda item: item.published_date, reverse=True
+    )
 
 
 def _discover_reports(

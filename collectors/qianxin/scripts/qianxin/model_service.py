@@ -19,6 +19,7 @@ from .summarize_reports import LocalLlamaClient
 
 
 PROMPT_VERSION = "lazarus-event-enrichment-v1"
+TRANSLATION_PROMPT_VERSION = "apt-event-translation-v1"
 MODEL_NAME = "Qwen3-4B-Q4_K_M"
 THREAT_TYPES = (
     "钓鱼攻击",
@@ -345,6 +346,72 @@ class SharedModelRuntime:
             },
         }
 
+    def translate_events(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        raw_items = request.get("items")
+        if not isinstance(raw_items, list) or not 1 <= len(raw_items) <= 10:
+            raise ModelOutputError("items must contain between 1 and 10 events")
+
+        source_items: list[dict[str, str]] = []
+        source_ids: set[str] = set()
+        for raw_item in raw_items:
+            if not isinstance(raw_item, Mapping):
+                raise ModelOutputError("items contains an invalid event")
+            source_event_id = str(raw_item.get("source_event_id") or "").strip()
+            title = " ".join(str(raw_item.get("title") or "").split())
+            description = " ".join(str(raw_item.get("description") or "").split())
+            if not source_event_id or source_event_id in source_ids:
+                raise ModelOutputError("source_event_id is empty or duplicated")
+            if not title or not description:
+                raise ModelOutputError("title and description are required")
+            source_ids.add(source_event_id)
+            source_items.append(
+                {
+                    "source_event_id": source_event_id,
+                    "title": title,
+                    "description": description,
+                }
+            )
+
+        self.ensure_ready()
+        system = (
+            "你是 APTHunter 的本地威胁情报翻译模块。只翻译输入 JSON 中已有的标题和描述，"
+            "不得增加、推断或删除事实。APT 组织名、恶意软件名、产品名、CVE 编号、域名、"
+            "URL 和技术缩写保留原文；英文或韩文叙述翻译为简洁、自然的中文。已经是中文的"
+            "内容保持原意，仅修正明显的语句不完整问题。输出条数和顺序必须与输入完全一致；"
+            "不要输出事件 ID，只输出符合 JSON Schema 的对象。若标题翻译后只剩英文专名，"
+            "必须在末尾补充‘相关威胁活动’，保证标题包含中文。"
+        )
+        user = (
+            "逐条翻译以下事件。title_zh 是适合时间线展示的中文标题；description_zh 是完整、"
+            "客观的中文句子，以中文句号、问号或叹号结尾。\n"
+            + json.dumps(source_items, ensure_ascii=False)
+        )
+        with self._inference_lock:
+            try:
+                raw, timings = self.client.chat_json(
+                    system,
+                    user,
+                    max_tokens=min(3200, 420 * len(source_items)),
+                    schema=_event_translation_schema(),
+                )
+            except Exception as exc:
+                raise ModelOutputError(
+                    f"Local model request failed: {type(exc).__name__}"
+                ) from exc
+        translated = validate_event_translations(raw, source_items)
+        return {
+            "schema_version": "1.0",
+            "prompt_version": TRANSLATION_PROMPT_VERSION,
+            "model": MODEL_NAME,
+            "runtime": "llama.cpp",
+            "items": translated,
+            "timings": {
+                key: timings[key]
+                for key in ("prompt_n", "predicted_n")
+                if key in timings
+            },
+        }
+
 
 def _bounded_string(max_length: int, min_length: int = 1) -> dict[str, Any]:
     # llama.cpp expands bounded strings inside repeated array items into a very
@@ -402,6 +469,31 @@ def _lazarus_schema() -> dict[str, Any]:
                 "items": fact,
             },
             "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        },
+    }
+
+
+def _event_translation_schema() -> dict[str, Any]:
+    item = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["title_zh", "description_zh"],
+        "properties": {
+            "title_zh": _bounded_string(500),
+            "description_zh": _bounded_string(2000, 10),
+        },
+    }
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["items"],
+        "properties": {
+            "items": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10,
+                "items": item,
+            }
         },
     }
 
@@ -481,3 +573,36 @@ def validate_lazarus_output(
         "factual_points": facts,
         "confidence": round(float(confidence), 3),
     }
+
+
+def validate_event_translations(
+    raw: Mapping[str, Any], source_items: list[Mapping[str, Any]]
+) -> list[dict[str, str]]:
+    raw_items = raw.get("items")
+    if not isinstance(raw_items, list):
+        raise ModelOutputError("Translated items are missing")
+    if len(raw_items) != len(source_items):
+        raise ModelOutputError("The model did not translate every requested event")
+    result: list[dict[str, str]] = []
+    for source_item, raw_item in zip(source_items, raw_items):
+        if not isinstance(raw_item, Mapping):
+            raise ModelOutputError("Translated items contains an invalid event")
+        source_event_id = str(source_item.get("source_event_id") or "").strip()
+        title = " ".join(str(raw_item.get("title_zh") or "").split())
+        if title and not re.search(r"[\u4e00-\u9fff]", title):
+            suffix = " 相关威胁活动"
+            title = title[: 500 - len(suffix)].rstrip() + suffix
+        title = _display_text(title, "title_zh", maximum=500)
+        description = _display_text(
+            raw_item.get("description_zh"), "description_zh", maximum=2000
+        )
+        if description[-1] not in "。！？":
+            description = description.rstrip(".!?") + "。"
+        result.append(
+            {
+                "source_event_id": source_event_id,
+                "title_zh": title,
+                "description_zh": description,
+            }
+        )
+    return result

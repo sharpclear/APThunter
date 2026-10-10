@@ -10,6 +10,7 @@ import pytest
 
 from scripts.lazarus_day import cli as cli_module
 from scripts.lazarus_day.cli import _write_invocation_manifest, build_parser, run
+from scripts.lazarus_day.enrichment import EnrichmentError
 from scripts.lazarus_day.models import (
     CollectorError,
     CollectorLockError,
@@ -203,6 +204,68 @@ def test_checkpoint_updates_only_after_success_and_not_after_failure(
         )
     assert args.state_file.read_bytes() == state_before
     assert normalized_path.read_bytes() == normalized_before
+
+
+def test_model_failure_keeps_event_and_persists_retry_seed(tmp_path: Path) -> None:
+    args = _args(tmp_path, dry_run=False)
+    args.enrichment_api_url = "http://model.example:8787"
+    args.enrichment_api_key = "test-only-key"
+
+    class FailingEnrichmentClient:
+        def enrich(self, _report, _original):
+            raise EnrichmentError("offline")
+
+        def close(self):
+            pass
+
+    summary = run(
+        args,
+        client_factory=lambda **_kwargs: FixtureClient(),
+        enrichment_client_factory=lambda **_kwargs: FailingEnrichmentClient(),
+        now=NOW,
+    )
+    assert summary["stats"]["needs_review"] == 1
+    state = json.loads(args.state_file.read_text(encoding="utf-8"))
+    assert state["pending_enrichment"][0]["detail_url"] == DETAIL_URL.rstrip("/")
+    review = json.loads(
+        Path(summary["outputs"]["needs_review"])
+        .read_text(encoding="utf-8")
+        .strip()
+    )
+    assert "重试队列" in " ".join(review["review_context"]["reasons"])
+
+
+def test_ungrounded_model_output_is_not_retried_forever(tmp_path: Path) -> None:
+    args = _args(tmp_path, dry_run=False)
+    args.enrichment_api_url = "http://model.example:8787"
+    args.enrichment_api_key = "test-only-key"
+
+    class InvalidEnrichmentClient:
+        def enrich(self, _report, _original):
+            raise EnrichmentError(
+                "enrichment API rejected ungrounded model output"
+            )
+
+        def close(self):
+            pass
+
+    summary = run(
+        args,
+        client_factory=lambda **_kwargs: FixtureClient(),
+        enrichment_client_factory=lambda **_kwargs: InvalidEnrichmentClient(),
+        now=NOW,
+    )
+
+    state = json.loads(args.state_file.read_text(encoding="utf-8"))
+    assert state["pending_enrichment"] == []
+    review = json.loads(
+        Path(summary["outputs"]["needs_review"])
+        .read_text(encoding="utf-8")
+        .strip()
+    )
+    reasons = " ".join(review["review_context"]["reasons"])
+    assert "证据校验" in reasons
+    assert "重试队列" not in reasons
 
 
 def test_unmatched_actor_is_written_to_review_and_unmatched_files(

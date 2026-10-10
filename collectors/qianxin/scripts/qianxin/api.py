@@ -238,12 +238,28 @@ class LazarusEnrichmentRequest(BaseModel):
     source_content: str = Field(min_length=1, max_length=50000)
 
 
+class EventTranslationItem(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    source_event_id: str = Field(min_length=1, max_length=256)
+    title: str = Field(min_length=1, max_length=1000)
+    description: str = Field(min_length=1, max_length=4000)
+
+
+class EventTranslationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[EventTranslationItem] = Field(min_length=1, max_length=10)
+
+
 class ModelService(Protocol):
     def status(self) -> dict[str, Any]: ...
 
     def ensure_ready(self) -> dict[str, Any]: ...
 
     def enrich_lazarus(self, request: Mapping[str, Any]) -> dict[str, Any]: ...
+
+    def translate_events(self, request: Mapping[str, Any]) -> dict[str, Any]: ...
 
     def close(self) -> None: ...
 
@@ -1079,6 +1095,29 @@ def create_app(
             )
         try:
             return model_service.enrich_lazarus(value)
+        except ModelUnavailableError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "code": "model_unavailable",
+                    "message": str(exc),
+                },
+            ) from exc
+        except ModelOutputError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail={
+                    "code": "invalid_model_output",
+                    "message": str(exc),
+                },
+            ) from exc
+
+    @application.post(
+        "/api/v1/model/events/translate", dependencies=protected
+    )
+    def translate_events(request: EventTranslationRequest) -> dict[str, Any]:
+        try:
+            return model_service.translate_events(request.model_dump())
         except ModelUnavailableError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

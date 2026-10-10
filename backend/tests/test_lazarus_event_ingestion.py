@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from sqlalchemy import create_engine, text
 
 from app.services.event_ingestion.lazarus_adapter import (
     build_lazarus_candidates,
@@ -92,6 +93,68 @@ def test_review_required_event_cannot_be_auto_imported() -> None:
     assert "来源质量状态不是可自动导入的 accepted" in errors
     assert "组织 ID 与名称不一致" in errors
     assert "证据数量或来源等级不足" in errors
+
+
+def test_disabled_review_gate_allows_unmatched_org_and_level_d_evidence() -> None:
+    event = _accepted_event()
+    event["quality_status"] = "accepted_with_review"
+    event["review_required"] = True
+    variant = event["structured_event"]["variants"][0]
+    variant["organization_id"] = None
+    variant["organization_name"] = "Unmatched Actor"
+    variant["review_status"] = "needs_review"
+    variant["confidence"] = 0.45
+    variant["evidence"] = [{"url": "https://example.com", "source_level": "D"}]
+
+    candidate = build_lazarus_candidates(event)[0]
+    errors, clean = validate_lazarus_variant(
+        candidate,
+        set(),
+        today=date(2026, 8, 14),
+        enforce_review_gate=False,
+    )
+
+    assert errors == []
+    assert clean["organization_name"] == "Unmatched Actor"
+
+
+def test_internal_workflow_language_is_always_rejected() -> None:
+    event = _accepted_event()
+    event["quality_status"] = "needs_review"
+    event["review_required"] = True
+    variant = event["structured_event"]["variants"][0]
+    variant["review_status"] = "needs_review"
+    variant["description"] = (
+        "当前采集器未调用外部翻译或生成模型，具体技术细节应由人工复核。"
+    )
+    candidate = build_lazarus_candidates(event)[0]
+
+    errors, _ = validate_lazarus_variant(
+        candidate,
+        {"Lazarus Group"},
+        today=date(2026, 8, 14),
+        enforce_review_gate=False,
+    )
+
+    assert "标题或描述包含内部审核/采集流程措辞" in errors
+
+
+def test_untranslated_display_copy_is_rejected_even_without_review_gate() -> None:
+    event = _accepted_event()
+    variant = event["structured_event"]["variants"][0]
+    variant["title"] = "Kimsuky launches a phishing campaign"
+    variant["description"] = "The actor delivered a malicious document."
+    candidate = build_lazarus_candidates(event)[0]
+
+    errors, _ = validate_lazarus_variant(
+        candidate,
+        set(),
+        today=date(2026, 8, 14),
+        enforce_review_gate=False,
+    )
+
+    assert "标题未中文化" in errors
+    assert "描述未中文化" in errors
 
 
 class _Response:
@@ -217,6 +280,47 @@ def test_managed_event_can_resume_after_a_review_version(monkeypatch) -> None:
     assert stored["event_managed"] is True
 
 
+def test_sync_imports_unmatched_organization_when_review_gate_is_disabled(
+    monkeypatch,
+) -> None:
+    event = _accepted_event()
+    event["quality_status"] = "accepted_with_review"
+    event["review_required"] = True
+    variant = event["structured_event"]["variants"][0]
+    variant["organization_id"] = None
+    variant["organization_name"] = "Unmatched Actor"
+    variant["review_status"] = "needs_review"
+    variant["confidence"] = 0.45
+    variant["evidence"] = [{"url": "https://example.com", "source_level": "D"}]
+    candidate = build_lazarus_candidates(event)[0]
+    service = LazarusEventSyncService(
+        object(),  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        enforce_review_gate=False,
+    )
+    connection = _CandidateConnection(None)
+    inserted: dict = {}
+    stored: dict = {}
+    monkeypatch.setattr(service, "_find_duplicate", lambda *_: None)
+    monkeypatch.setattr(
+        service,
+        "_insert_event",
+        lambda _connection, clean: inserted.update(clean) or 31,
+    )
+    monkeypatch.setattr(
+        service,
+        "_store_candidate",
+        lambda *_args, **kwargs: stored.update(kwargs),
+    )
+
+    result = service._process_candidate(connection, candidate)  # type: ignore[arg-type]
+
+    assert result["counter"] == "events_inserted"
+    assert inserted["organization_id"] is None
+    assert inserted["region"] == "未知"
+    assert stored["decision"] == "auto_imported"
+
+
 def test_legacy_duplicate_is_linked_but_not_managed(monkeypatch) -> None:
     candidate = build_lazarus_candidates(_accepted_event())[0]
     service = LazarusEventSyncService(object(), object())  # type: ignore[arg-type]
@@ -244,3 +348,56 @@ def test_legacy_duplicate_is_linked_but_not_managed(monkeypatch) -> None:
     assert result["counter"] == "duplicates_linked"
     assert stored["apt_event_id"] == 21
     assert stored["event_managed"] is False
+
+
+def test_raw_source_title_links_cross_source_duplicate_on_adjacent_date() -> None:
+    event = _accepted_event()
+    event["title"] = "Kimsuky Integrates AI into Attack Operations"
+    variant = event["structured_event"]["variants"][0]
+    variant["organization_id"] = 53
+    variant["organization_name"] = "Kimsuky"
+    variant["title"] = "Kimsuky相关供应链攻击活动（来源报告）"
+    variant["evidence"][0]["title"] = event["title"]
+    candidate = build_lazarus_candidates(event)[0]
+    engine = create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE apt_events (
+                    id INTEGER PRIMARY KEY,
+                    event_key TEXT,
+                    organization_id INTEGER,
+                    event_date DATE,
+                    region TEXT,
+                    link TEXT,
+                    title TEXT
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO apt_events (
+                    id, event_key, organization_id, event_date,
+                    region, link, title
+                ) VALUES (
+                    1081, :event_key, 53, '2026-08-02',
+                    '东亚', :link, :title
+                )
+                """
+            ),
+            {
+                "event_key": "c" * 64,
+                "link": "https://another-source.example/report",
+                "title": event["title"],
+            },
+        )
+        duplicate = LazarusEventSyncService(
+            engine,
+            object(),  # type: ignore[arg-type]
+        )._find_duplicate(connection, candidate)
+
+    assert duplicate is not None
+    assert duplicate["id"] == 1081

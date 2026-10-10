@@ -72,6 +72,9 @@ bash scripts/deploy-remote.sh --tag "$DEPLOY_TAG"
 
 后端启动时会自动执行 `019_add_lazarus_event_ingestion.sql`。新的 `lazarus_events` 卷初始为空，首次采集会从公开来源生成采集器自己的历史记录，随后 APTHunter 从变更流起点同步；现有事件会被识别为重复并建立映射，只有严格合格且不存在的事件才可能新增。原本机采集目录里的运行数据不会被打进镜像，如需保留它们应单独迁移数据，而不是提交到 Git。
 
+`020_archive_legacy_lazarus_candidates.sql` 只把 2026-08-19 前、未关联正式事件且未由来源管理的旧 `needs_review`
+候选归档为 `rejected`。迁移保留候选 payload 和原审核原因，不删除候选或正式事件，也不会处理今后新产生的待审核记录。
+
 验证：
 
 ```bash
@@ -88,6 +91,29 @@ docker compose logs --tail=100 lazarus-collector celery-worker celery-beat
 - `POST /api/event-ingestion/lazarus/sync`：立即同步已经采集的变更。
 
 确认新链路连续成功运行后，应停用原 Windows Lazarus 计划任务，避免两套调度器同时采集。旧采集目录可以暂时保留作审计和必要的数据迁移来源。
+
+## 本地与虚拟机统一来源
+
+需要让本地和虚拟机展示完全相同的 Lazarus 事件时，以虚拟机的 `lazarus_events`
+数据卷为唯一基准。虚拟机 `.env` 配置：
+
+```dotenv
+LAZARUS_DAY_API_BIND=192.168.32.219
+LAZARUS_DAY_API_KEY=两端共用的密钥
+```
+
+本地 `.env` 配置：
+
+```dotenv
+LAZARUS_DAY_API_URL=http://192.168.32.219:8788
+LAZARUS_DAY_API_KEY=与虚拟机相同的密钥
+```
+
+Compose 默认只把采集 API 绑定到 `127.0.0.1`；只有虚拟机显式设置
+`LAZARUS_DAY_API_BIND` 后才向内网开放。本地 backend、worker 和 beat 从虚拟机 API
+读取同一条变更流，本地 `lazarus-collector` 不再作为正式数据源。首次切换来源时需要备份并清空
+本地 `apt_event_sync_state` 中 `source='lazarus.day'` 的旧游标，然后从虚拟机变更流起点重放一次；
+后续不得反复清空游标。
 
 ## 开关与回滚
 

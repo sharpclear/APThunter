@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.qianxin.model_service import ModelOutputError, validate_lazarus_output
+from scripts.qianxin.model_service import (
+    ModelOutputError,
+    validate_event_translations,
+    validate_lazarus_output,
+)
 
 
 SOURCE = (
@@ -66,3 +70,44 @@ def test_actor_name_must_be_verbatim_in_its_quote() -> None:
     ]
     with pytest.raises(ModelOutputError, match="not present"):
         validate_lazarus_output(invalid, SOURCE)
+
+
+def test_event_translation_requires_chinese_and_complete_id_set() -> None:
+    value = validate_event_translations(
+        {
+            "items": [
+                {
+                    "title_zh": "Kimsuky 利用钓鱼邮件发起攻击",
+                    "description_zh": "攻击者通过钓鱼邮件投递恶意文档",
+                }
+            ]
+        },
+        [{"source_event_id": "17"}],
+    )
+    assert value[0]["description_zh"].endswith("。")
+
+    proper_name_title = validate_event_translations(
+        {
+            "items": [
+                {
+                    "title_zh": "Kimsuky",
+                    "description_zh": "公开报告披露了相关攻击活动。",
+                }
+            ]
+        },
+        [{"source_event_id": "18"}],
+    )
+    assert proper_name_title[0]["title_zh"] == "Kimsuky 相关威胁活动"
+
+    with pytest.raises(ModelOutputError, match="not Chinese"):
+        validate_event_translations(
+            {
+                "items": [
+                    {
+                        "title_zh": "Kimsuky phishing campaign",
+                        "description_zh": "A malicious document was delivered.",
+                    }
+                ]
+            },
+            [{"source_event_id": "17"}],
+        )

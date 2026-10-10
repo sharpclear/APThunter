@@ -508,6 +508,70 @@ def test_index_is_idempotent_and_path_escape_is_rejected(tmp_path):
     assert response.status_code == 409
 
 
+def test_index_uses_structured_needs_review_variant(tmp_path):
+    root = make_project(tmp_path)
+    pending_path = (
+        root
+        / "data/events/review/lazarus-day.events.needs-review.jsonl"
+    )
+    pending_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "record_type": "event",
+                "db_id": None,
+                "event_date": "2026-08-13",
+                "date_precision": "day",
+                "title": "Kimsuky通过钓鱼邮件投递恶意软件",
+                "description": "研究人员披露Kimsuky通过钓鱼邮件投递恶意软件。",
+                "threat_type": "钓鱼攻击",
+                "organization_id": 53,
+                "organization_name": "Kimsuky",
+                "releasing_product": "Research Example",
+                "link": "https://research.example/stable-report",
+                "confidence": 0.72,
+                "review_status": "needs_review",
+                "evidence": [
+                    {
+                        "url": "https://research.example/stable-report",
+                        "source_level": "B",
+                    }
+                ],
+                "collection_notes": "置信度低于自动接受阈值。",
+                "collected_at": "2026-08-13T00:00:00Z",
+                "review_context": {
+                    "reasons": ["置信度 0.72 低于 0.75"],
+                    "lazarus_day_url": (
+                        f"https://lazarus.day/reports/{SOURCE_ID}/"
+                    ),
+                },
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    settings = make_settings(root)
+    store = ApiStore(settings.database_path)
+    app = create_app(settings=settings, store=store)
+
+    with TestClient(app) as client:
+        event = client.get(
+            f"/api/v1/events/{SOURCE_ID}", headers=AUTH
+        ).json()
+
+    assert event["quality_status"] == "needs_review"
+    assert event["review_required"] is True
+    variant = event["structured_event"]["variants"][0]
+    assert variant["organization_id"] == 53
+    assert variant["threat_type"] == "钓鱼攻击"
+    assert variant["confidence"] == 0.72
+    assert variant["review_status"] == "needs_review"
+    assert variant["review_reasons"] == ["置信度 0.72 低于 0.75"]
+    assert variant["evidence"][0]["source_level"] == "B"
+
+
 @pytest.mark.parametrize(
     ("exit_code", "native_status", "expected"),
     [(0, "completed", "completed"), (1, "failed", "failed")],

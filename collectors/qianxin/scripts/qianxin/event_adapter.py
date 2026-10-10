@@ -36,6 +36,7 @@ MAJOR_THREAT_TYPES = {"供应链攻击", "漏洞利用", "勒索软件", "APT攻
 SEVERITY_FOUR_TYPES = {"C2通信", "钓鱼攻击", "凭证窃取"}
 DESCRIPTION_SENTENCE_ENDINGS = ("。", "！", "？", ".", "!", "?", "…")
 DESCRIPTION_SEPARATOR_RE = re.compile(r"[；;]+")
+CHINESE_TEXT_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
 
 
 def _summary_body(summary: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -71,6 +72,7 @@ def _text_corpus(summary: Mapping[str, Any]) -> str:
     body = _summary_body(summary)
     values: list[str] = [
         str(body.get("report_title") or ""),
+        str(body.get("title_zh") or ""),
         str(body.get("executive_summary_zh") or ""),
     ]
     for field, keys in (
@@ -208,7 +210,9 @@ def build_apt_event_product(
     report_date = str(report.get("report_date") or "").strip()
     organization_id = str(report.get("organization_id") or "").strip()
     organization_name = str(report.get("organization_name") or "").strip()
-    title = str(report.get("report_title") or "").strip()
+    original_title = str(report.get("report_title") or "").strip()
+    title_zh = str(_summary_body(summary).get("title_zh") or "").strip()
+    title = title_zh or (original_title if CHINESE_TEXT_RE.search(original_title) else "")
     source_url = normalize_url(
         str(metadata.get("preview_url") or metadata.get("pdf_url") or "")
     )
@@ -224,7 +228,7 @@ def build_apt_event_product(
     evidence = _evidence(
         summary,
         url=source_url,
-        title=title,
+        title=original_title or title,
         publisher=publisher,
         report_date=report_date or None,
         accessed_at=str(report.get("collected_at") or "") or None,
@@ -243,12 +247,16 @@ def build_apt_event_product(
     if not organization_id or not organization_name:
         review_reasons.append("组织 ID 或组织名称缺失")
     if not title:
-        review_reasons.append("标题缺失")
+        review_reasons.append("中文标题缺失")
     elif len(title) > 500:
         review_reasons.append("标题超过 500 字符")
         title = title[:500]
+    elif not CHINESE_TEXT_RE.search(title):
+        review_reasons.append("标题未中文化")
     if not description:
         review_reasons.append("描述缺失")
+    elif not CHINESE_TEXT_RE.search(description):
+        review_reasons.append("描述未中文化")
     if not source_url.startswith(("http://", "https://")):
         review_reasons.append("缺少可由虚拟机访问的 HTTP(S) 报告链接")
     if not evidence:
@@ -278,7 +286,7 @@ def build_apt_event_product(
             link=source_url,
             organization_id=organization_id,
             event_date=report_date,
-            title=title,
+            title=original_title or title,
         ),
         "event_date": report_date or None,
         "date_precision": "publication_date" if report_date else None,

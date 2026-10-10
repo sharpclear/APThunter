@@ -16,6 +16,15 @@ from app.services.event_ingestion.lazarus_sync import LazarusEventSyncService
 
 logger = logging.getLogger("uvicorn.error")
 SHANGHAI_TIME = timezone(timedelta(hours=8), name="Asia/Shanghai")
+LAZARUS_COLLECTION_INTERVAL_HOURS = 6
+
+
+def _collection_idempotency_key(now: datetime) -> str:
+    local_now = now.astimezone(SHANGHAI_TIME)
+    slot_hour = (
+        local_now.hour // LAZARUS_COLLECTION_INTERVAL_HOURS
+    ) * LAZARUS_COLLECTION_INTERVAL_HOURS
+    return f"apthunter-lazarus-{local_now:%Y%m%d}-{slot_hour:02d}"
 
 
 def _client() -> LazarusDayClient:
@@ -33,6 +42,7 @@ def _sync_service() -> LazarusEventSyncService:
         page_limit=LAZARUS_EVENT_PAGE_LIMIT,
         max_pages=LAZARUS_EVENT_MAX_PAGES_PER_SYNC,
         auto_import=LAZARUS_EVENT_AUTO_IMPORT,
+        enforce_review_gate=False,
     )
 
 
@@ -46,8 +56,7 @@ def _sync_service() -> LazarusEventSyncService:
 )
 def trigger_lazarus_collection_job(self):
     now = datetime.now(SHANGHAI_TIME)
-    iso_year, iso_week, _ = now.isocalendar()
-    idempotency_key = f"apthunter-lazarus-{iso_year}-W{iso_week:02d}"
+    idempotency_key = _collection_idempotency_key(now)
     result = _client().create_incremental_run(idempotency_key)
     logger.info(
         "Lazarus.day 增量采集已提交 run_id=%s status=%s",

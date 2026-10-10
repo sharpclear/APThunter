@@ -10,7 +10,7 @@ Qianxin 的 Playwright 登录态、本地模型和报告产物保留在 Windows 
 Windows Qianxin collector/API (192.168.21.181:8787)
     -> APTHunter Celery Worker (192.168.32.219)
     -> apt_event_candidates, source=qianxin
-    -> 人工审核/历史去重
+    -> 结构校验/历史去重
     -> apt_events
 ```
 
@@ -31,16 +31,16 @@ QIANXIN_API_URL=http://192.168.21.181:8787
 QIANXIN_API_KEY=与Windows用户环境中完全相同的64位密钥
 QIANXIN_EVENT_SYNC_ENABLED=true
 QIANXIN_COLLECTION_TRIGGER_ENABLED=false
-QIANXIN_EVENT_AUTO_IMPORT=false
+QIANXIN_EVENT_AUTO_IMPORT=true
 QIANXIN_EVENT_SYNC_INTERVAL_SEC=600
 QIANXIN_EVENT_PAGE_LIMIT=100
 QIANXIN_EVENT_MAX_PAGES_PER_SYNC=20
 QIANXIN_EVENT_HTTP_TIMEOUT_SEC=30
 ```
 
-首次部署必须保持 `QIANXIN_EVENT_AUTO_IMPORT=false`。当前83份报告中包含已经以不同标题或链接进入
-`apt_events` 的历史内容；仅按事件键、链接或标题精确相等不足以排除全部重复。同步任务会保存来源 PDF
-SHA、版本、证据和审核原因，但不会把候选直接展示成正式事件。
+当前使用直接导入模式：Qianxin 来源记录即使标记为 `needs_review`，也不再受来源审核状态和 0.75
+置信度门槛阻挡。同步仍会校验日期、组织、链接、证据等结构字段，并执行事件键、链接、组织、日期和
+标题去重；结构有效且不是重复项的记录直接写入 `apt_events`，同时保留来源 PDF SHA、版本和证据。
 
 Windows 目前仍有 Qianxin 周期采集任务，因此 `QIANXIN_COLLECTION_TRIGGER_ENABLED=false`。如果以后明确由
 APTHunter 接管采集调度，应先禁用 Windows 的重复采集计划任务，再将该变量改为 `true`。事件同步与采集
@@ -68,8 +68,7 @@ Celery Beat 默认每600秒投递一次 `tasks.sync_qianxin_events`。每次同�
 - `POST /api/event-ingestion/qianxin/sync`：立即拉取已经生成的事件；
 - `POST /api/event-ingestion/qianxin/trigger`：让 Windows API 启动一次增量采集。
 
-前端事件时间线无需修改。只有进入 `apt_events` 的正式事件才会按现有逻辑展示；默认安全模式下的
-Qianxin 候选应先通过管理接口或数据库审核。
+前端事件时间线无需修改。直接导入成功后，Qianxin 事件会按现有 `apt_events` 查询逻辑展示。
 
 ## 验收
 
@@ -89,4 +88,4 @@ WHERE source = 'qianxin'
 GROUP BY source, decision;
 ```
 
-在完成历史去重前，预期候选为 `needs_review`，`apt_events` 不应因 Qianxin 首次同步新增记录。
+直接导入模式下，结构有效的新记录预期为 `auto_imported`，并在 `apt_events` 中存在对应事件。

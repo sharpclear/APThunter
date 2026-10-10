@@ -73,3 +73,29 @@ def test_batch_duplicate_and_same_day_suspected_duplicate(
     assert first.status == "unique"
     assert exact.status == "exact_duplicate"
     assert suspected.status == "suspected_duplicate"
+
+
+def test_legacy_row_without_link_still_uses_title_deduplication(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "events.csv"
+    path.write_text(
+        HEADER
+        + "1,2026-08-02,Existing title,description,APT,53,publisher,\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    deduplicator = EventDeduplicator.from_csv(path)
+    decision = deduplicator.check_and_register(
+        _event(
+            link="https://example.com/new-source",
+            title="Existing title",
+            event_date="2026-08-02",
+        ),
+        lazarus_day_url="https://lazarus.day/reports/example-AbC12/",
+    )
+
+    assert deduplicator.row_count == 1
+    assert decision.status == "exact_duplicate"
+    assert decision.existing_id == "1"

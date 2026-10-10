@@ -12,7 +12,12 @@
 - 产物位于 `data/events/{raw,normalized,review,reports,state}`，运行日志位于
   `logs/`。旧采集器不连接数据库；实施前已有每周任务
   `APTHunter-LazarusDay-Weekly` 和独立 checkpoint；
-- 数据源实现只使用 HTTP/HTML，不包含浏览器、OCR、本地模型或 PDF 处理；
+- API 索引同时读取正式的 `*.events.jsonl` 和结构化待复核的
+  `*.events.needs-review.jsonl`。后者保留 `needs_review` 状态与审核原因，
+  不会退化成缺少组织、威胁类型和证据的原始占位记录；
+- 数据源抓取仍只使用 HTTP/HTML，不包含浏览器、OCR 或 PDF 处理；可选的中文
+  结构化补全通过 Windows 奇安信 API 复用同一套 Qwen3-4B/llama.cpp 运行时，
+  虚拟机不加载模型；
 - 历史原始产物有 317 个互异来源记录。来源唯一键优先使用 lazarus.day 报告 URL
   中带平台后缀的完整 slug；无 slug 的已获取内容使用完整 SHA-256，失败抓取使用
   完整规范 URL SHA-256。禁止短哈希、标题、日期或文件名作为唯一键；
@@ -33,7 +38,9 @@
 - 原采集器文件锁和 SQLite 单 active run 约束共同防止并发采集；
 - 不连接业务数据库，不修改两个参考 CSV。
 
-本数据源没有 PDF、下载附件、OCR、浏览器或本地模型产物。因此提供 `/raw`、`/quality`、`/evidence`，不提供虚假的 PDF 或模型摘要接口。
+本数据源没有 PDF、下载附件、OCR 或浏览器产物。因此提供 `/raw`、`/quality`、
+`/evidence`，不提供虚假的 PDF 接口。模型补全及证据保存在原始事件产物中，
+最终结构化事件仍由本采集器按规范生成。
 
 ## 2. 安装和启动
 
@@ -71,6 +78,14 @@ data/events/state/api/lazarus-day-api.db
   重试间隔，通常保持默认；
 - `APTHUNTER_USER_AGENT`、`HTTP_PROXY`、`HTTPS_PROXY`：沿用原采集器的
   网络配置。
+- `LAZARUS_ENRICHMENT_API_URL`：可选，指向 Windows 奇安信 API 根地址；
+- `LAZARUS_ENRICHMENT_API_KEY`：共享模型端点密钥，不写入命令行或日志；
+- `LAZARUS_ENRICHMENT_TIMEOUT`：单次模型请求超时，默认 900 秒。
+
+模型请求失败不会使来源抓取失败。报告会保留在 checkpoint 的
+`pending_enrichment` 中，并在后续增量任务重试；缓存以来源 SHA-256 为键，
+不会保存 API 密钥。模型输出必须在 Windows API 和 Lazarus 容器两侧分别通过
+引文定位校验，组织 ID 仍由容器内现有组织索引精确匹配。
 
 服务进程的 stdout/stderr 由部署它的服务管理器收集。采集子进程日志位于
 `logs/api/`，每次原生采集产物位于

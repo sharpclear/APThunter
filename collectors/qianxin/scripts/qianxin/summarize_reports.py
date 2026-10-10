@@ -34,7 +34,7 @@ DEFAULT_INPUT_ROOT = PROJECT_ROOT / "data" / "parsed" / "merged"
 DEFAULT_OUTPUT_ROOT = PROJECT_ROOT / "data" / "summaries"
 DEFAULT_MODEL = PROJECT_ROOT / "data" / "models" / "llm" / "Qwen3-4B-Q4_K_M.gguf"
 DEFAULT_SERVER = PROJECT_ROOT / "tools" / "llama.cpp" / "b10278" / "llama-server.exe"
-PROMPT_VERSION = "qianxin-ti-summary-v3-grounded-fuzzy"
+PROMPT_VERSION = "qianxin-ti-summary-v4-chinese-title"
 SCHEMA_VERSION = 1
 VALIDATOR_VERSION = "qianxin-validator-v2-evidence-ioc"
 DIRECT_CONTEXT_RESERVE = 3200
@@ -668,6 +668,10 @@ SUMMARY_JSON_SCHEMA = {
     "type": "object",
     "properties": {
         "report_title": _bounded_string(200),
+        "title_zh": {
+            **_bounded_string(200),
+            "description": "忠实翻译的简洁中文标题；专有名词、恶意软件名和技术缩写保留原文",
+        },
         "executive_summary_zh": _bounded_string(240),
         "key_findings": _fact_array("key_findings", 3),
         "targets": _fact_array("targets", 2),
@@ -680,7 +684,7 @@ SUMMARY_JSON_SCHEMA = {
         "limitations": {"type": "array", "items": _bounded_string(160), "maxItems": 3},
     },
     "required": [
-        "report_title", "executive_summary_zh", "key_findings", "targets", "attribution",
+        "report_title", "title_zh", "executive_summary_zh", "key_findings", "targets", "attribution",
         "malware_tools", "vulnerabilities", "attack_chain", "timeline",
         "defensive_recommendations", "limitations",
     ],
@@ -747,6 +751,7 @@ def final_prompt(source: dict[str, Any], notes: Sequence[dict[str, Any]], indica
     return f"""将事实笔记合并。JSON 必须使用这些键：
 {{
   "report_title": "报告原文标题，无法确认则用 PDF 元数据标题",
+  "title_zh": "忠实翻译的简洁中文标题，专有名词、恶意软件名和技术缩写保留原文",
   "executive_summary_zh": "2至4句中文摘要",
   "key_findings": [{{"finding": "关键发现", "evidence_quote": "原文短引", "evidence_pages": []}}],
   "targets": [{{"name": "目标", "type": "类型", "evidence_quote": "原文短引", "evidence_pages": []}}],
@@ -777,6 +782,7 @@ def direct_prompt(source: dict[str, Any], report_text: str) -> str:
     return f"""直接分析整份报告。输出：
 {{
   "report_title": "原文标题",
+  "title_zh": "忠实翻译的简洁中文标题，专有名词、恶意软件名和技术缩写保留原文",
   "executive_summary_zh": "2至4句中文摘要",
   "key_findings": [{{"finding": "发现", "evidence_quote": "逐字原文短引"}}],
   "targets": [{{"name": "目标", "type": "country|sector|organization|person|group", "evidence_quote": "逐字原文短引"}}],
@@ -800,6 +806,7 @@ PDF 原文：
 def normalize_summary(value: dict[str, Any]) -> dict[str, Any]:
     result = dict(value)
     result["report_title"] = str(result.get("report_title") or "").strip()
+    result["title_zh"] = str(result.get("title_zh") or "").strip()
     result["executive_summary_zh"] = str(result.get("executive_summary_zh") or "").strip()
     for field in EMPTY_LIST_FIELDS:
         if not isinstance(result.get(field), list):
@@ -1550,6 +1557,8 @@ def summarize_report(
         warnings.append(f"已合并 {len(removed_duplicate_tools)} 个重复工具名称。")
     if not summary["executive_summary_zh"]:
         warnings.append("模型未生成执行摘要。")
+    if not re.search(r"[\u4e00-\u9fff]", summary["title_zh"]):
+        warnings.append("模型未生成中文标题。")
 
     generated_at = utc_now()
     result = {
@@ -1570,7 +1579,12 @@ def summarize_report(
         "parsed_content_sha256": parsed_content_sha256,
         "status": (
             "needs_review"
-            if invalid_evidence or unsupported or not summary["executive_summary_zh"]
+            if (
+                invalid_evidence
+                or unsupported
+                or not summary["executive_summary_zh"]
+                or not re.search(r"[\u4e00-\u9fff]", summary["title_zh"])
+            )
             else (
                 "ready_with_filtered_items"
                 if (

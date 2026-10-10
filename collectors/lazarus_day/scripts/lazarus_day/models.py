@@ -5,7 +5,7 @@ from datetime import date
 from typing import Any
 
 
-COLLECTOR_VERSION = "1.1.0"
+COLLECTOR_VERSION = "1.2.0"
 
 REQUIRED_EVENT_FIELDS = (
     "schema_version",
@@ -132,6 +132,28 @@ class OriginalSource:
     source_level: str = "C"
     raw_html: str | None = None
     error: str | None = None
+
+
+@dataclass(frozen=True)
+class ModelEnrichment:
+    source_sha256: str
+    prompt_version: str
+    title_zh: str
+    description_zh: str
+    threat_type: str
+    threat_type_evidence_quote: str
+    actor_mentions: tuple[dict[str, str], ...]
+    factual_points: tuple[dict[str, str], ...]
+    confidence: float
+    cached: bool = False
+
+    @property
+    def actor_names(self) -> tuple[str, ...]:
+        return tuple(
+            item["name"]
+            for item in self.actor_mentions
+            if item.get("name")
+        )
 
 
 @dataclass(frozen=True)

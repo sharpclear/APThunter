@@ -10,6 +10,7 @@ from .models import (
     REQUIRED_EVENT_FIELDS,
     THREAT_TYPES,
     MatchResult,
+    ModelEnrichment,
     NormalizationResult,
     OriginalSource,
     ReportRecord,
@@ -275,6 +276,7 @@ def normalize_report(
     original: OriginalSource | None,
     *,
     related_actors_split: bool = False,
+    enrichment: ModelEnrichment | None = None,
 ) -> NormalizationResult:
     is_event, classification_reason = classify_report(report)
     if not is_event:
@@ -287,7 +289,7 @@ def normalize_report(
         if organization
         else (report.related_actors[0] if report.related_actors else "未匹配组织")
     )
-    threat_type = infer_threat_type(report)
+    threat_type = enrichment.threat_type if enrichment else infer_threat_type(report)
     review_reasons: list[str] = []
     notes = [classification_reason]
     title_folded = report.title.casefold()
@@ -324,9 +326,9 @@ def normalize_report(
             f"原始来源等级为 {original.source_level}，不足以单独自动接受"
         )
 
-    chinese_context = _contains_chinese(report.summary) or _contains_chinese(
-        report.title
-    )
+    chinese_context = enrichment is not None or _contains_chinese(
+        report.summary
+    ) or _contains_chinese(report.title)
     if not chinese_context:
         review_reasons.append("非中文来源缺少可验证的中文客观概述")
     if len(report.related_actors) > 1 and not related_actors_split:
@@ -350,10 +352,22 @@ def normalize_report(
         if source_accessible and original
         else canonicalize_url(report.lazarus_day_url)
     )
-    title = _chinese_title(report, organization_name, threat_type)
-    description = _chinese_description(
-        report, organization_name, threat_type
-    )
+    if enrichment is not None:
+        title = enrichment.title_zh
+        description = enrichment.description_zh
+        if organization and organization.name not in title:
+            title = f"{organization.name}：{title}"
+        if organization and organization.name not in description:
+            description = f"{organization.name}相关活动中，{description}"
+        notes.append(
+            "本地模型补全已通过来源引文校验："
+            f"{enrichment.prompt_version}/{enrichment.source_sha256}"
+        )
+    else:
+        title = _chinese_title(report, organization_name, threat_type)
+        description = _chinese_description(
+            report, organization_name, threat_type
+        )
     evidence = [_lazarus_evidence(report)]
     if source_accessible and original:
         evidence.append(_original_evidence(report, original))
@@ -504,20 +518,16 @@ def _chinese_title(
         if organization_name.casefold() in report.title.casefold():
             return report.title
         return f"{organization_name}：{report.title}"
-    return f"{organization_name}相关{threat_type}活动（{report.publisher or '公开来源'}报告）"
+    return f"{organization_name}相关{threat_type}活动"
 
 
 def _chinese_description(
     report: ReportRecord, organization_name: str, threat_type: str
 ) -> str:
-    title = " ".join(report.title.split())
     publisher = report.publisher or "公开来源"
     return (
-        f"{publisher}于{report.published_date}发布报告《{title}》。"
-        f"lazarus.day 的公开页面将该报告与{organization_name}关联，"
-        f"并显示其涉及{threat_type}相关活动。当前采集器未调用外部翻译或"
-        "生成模型，未从来源中补写国家、目标、恶意软件或影响；"
-        "具体技术细节和攻击发生日期应由人工依据原始报告复核。"
+        f"{publisher}披露了与{organization_name}相关的{threat_type}活动，"
+        f"报告发布日期为{report.published_date}。"
     )
 
 

@@ -17,7 +17,7 @@ class QianxinEventSyncService(LazarusEventSyncService):
         *,
         page_limit: int = 100,
         max_pages: int = 20,
-        auto_import: bool = False,
+        auto_import: bool = True,
     ) -> None:
         super().__init__(
             engine,
@@ -25,6 +25,7 @@ class QianxinEventSyncService(LazarusEventSyncService):
             page_limit=page_limit,
             max_pages=max_pages,
             auto_import=auto_import,
+            enforce_review_gate=False,
             source=SOURCE,
             source_label="Qianxin",
             lock_name="apthunter:qianxin-event-sync",

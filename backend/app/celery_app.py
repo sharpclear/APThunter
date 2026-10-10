@@ -39,9 +39,9 @@ event_ingestion_schedule = dict(celery_app.conf.beat_schedule or {})
 if LAZARUS_EVENT_SYNC_ENABLED:
     event_ingestion_schedule.update(
         {
-            "trigger-lazarus-collection-weekly": {
+            "trigger-lazarus-collection-every-6-hours": {
                 "task": "tasks.trigger_lazarus_collection",
-                "schedule": crontab(minute=0, hour=9, day_of_week="sun"),
+                "schedule": crontab(minute=5, hour="0,6,12,18"),
             },
             "sync-lazarus-events": {
                 "task": "tasks.sync_lazarus_events",

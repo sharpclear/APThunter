@@ -34,6 +34,20 @@ TRACKING_QUERY_KEYS = {
     "source",
 }
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+PROHIBITED_DISPLAY_PHRASES = (
+    "需要人工复核",
+    "需人工审核",
+    "待审核",
+    "待确认",
+    "置信度不足",
+    "低于阈值",
+    "疑似重复，需判重",
+    "当前采集器",
+    "采集器未调用",
+    "未调用外部翻译或生成模型",
+    "lazarus.day 的公开页面将",
+    "具体技术细节应由人工",
+)
 
 
 @dataclass(frozen=True)
@@ -199,12 +213,18 @@ def validate_lazarus_variant(
     organization_names: set[str],
     *,
     today: date | None = None,
+    enforce_review_gate: bool = True,
 ) -> tuple[list[str], dict[str, Any]]:
     variant = candidate.variant
     errors: list[str] = []
-    if candidate.quality_status != "accepted" or candidate.review_required:
+    if enforce_review_gate and (
+        candidate.quality_status != "accepted" or candidate.review_required
+    ):
         errors.append("来源质量状态不是可自动导入的 accepted")
-    if str(variant.get("review_status") or "") != "accepted":
+    if (
+        enforce_review_gate
+        and str(variant.get("review_status") or "") != "accepted"
+    ):
         errors.append("variant 尚未接受")
 
     event_date_text = str(variant.get("event_date") or "").strip()
@@ -224,8 +244,18 @@ def validate_lazarus_variant(
     description = str(variant.get("description") or "").strip()
     if not title or len(title) > 500:
         errors.append("标题为空或超过 500 字符")
+    elif not re.search(r"[\u3400-\u4dbf\u4e00-\u9fff]", title):
+        errors.append("标题未中文化")
     if not description:
         errors.append("描述为空")
+    elif not re.search(r"[\u3400-\u4dbf\u4e00-\u9fff]", description):
+        errors.append("描述未中文化")
+    display_text = f"{title}\n{description}".casefold()
+    if any(
+        phrase.casefold() in display_text
+        for phrase in PROHIBITED_DISPLAY_PHRASES
+    ):
+        errors.append("标题或描述包含内部审核/采集流程措辞")
 
     threat_type = str(variant.get("threat_type") or "").strip()
     if threat_type not in THREAT_TYPES:
@@ -233,7 +263,7 @@ def validate_lazarus_variant(
 
     organization_name = str(variant.get("organization_name") or "").strip()
     normalized_org_names = {name.casefold() for name in organization_names if name}
-    if (
+    if enforce_review_gate and (
         not organization_name
         or organization_name.casefold() not in normalized_org_names
     ):
@@ -243,7 +273,7 @@ def validate_lazarus_variant(
         confidence = float(variant.get("confidence"))
         if not 0 <= confidence <= 1:
             raise ValueError
-        if confidence < 0.75:
+        if enforce_review_gate and confidence < 0.75:
             errors.append("置信度低于 0.75")
     except (TypeError, ValueError):
         confidence = None
@@ -253,7 +283,7 @@ def validate_lazarus_variant(
     if not link.startswith(("http://", "https://")):
         errors.append("来源链接无效")
     evidence = variant.get("evidence")
-    if not _evidence_is_sufficient(evidence):
+    if enforce_review_gate and not _evidence_is_sufficient(evidence):
         errors.append("证据数量或来源等级不足")
     releasing_product = str(variant.get("releasing_product") or "").strip()
     if not releasing_product:

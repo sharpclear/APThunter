@@ -288,7 +288,12 @@ def _variant_from_mapping(
             evidence = json.loads(str(value["evidence_json"]))
         except json.JSONDecodeError:
             evidence = []
-    review_reasons = value.get("review_reasons") or []
+    review_context = value.get("review_context")
+    review_reasons = value.get("review_reasons") or (
+        review_context.get("reasons")
+        if isinstance(review_context, Mapping)
+        else []
+    )
     if isinstance(review_reasons, str):
         review_reasons = [
             item.strip() for item in review_reasons.split("|") if item.strip()
@@ -355,7 +360,11 @@ def _load_review_variants(
                     )
         except (OSError, UnicodeError, csv.Error):
             continue
-    for path in sorted(settings.events_root.rglob("*.events.jsonl")):
+    structured_jsonl_paths = {
+        *settings.events_root.rglob("*.events.jsonl"),
+        *settings.events_root.rglob("*.events.needs-review.jsonl"),
+    }
+    for path in sorted(structured_jsonl_paths):
         if path.name.endswith(".raw.jsonl"):
             continue
         try:

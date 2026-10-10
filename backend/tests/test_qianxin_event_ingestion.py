@@ -80,6 +80,20 @@ def test_qianxin_review_candidate_cannot_auto_import() -> None:
     assert "置信度低于 0.75" in errors
 
 
+def test_qianxin_direct_import_skips_only_review_gate() -> None:
+    candidate = build_event_candidates(_event(), source="qianxin")[0]
+
+    errors, clean = validate_lazarus_variant(
+        candidate,
+        {"APT28"},
+        enforce_review_gate=False,
+    )
+
+    assert errors == []
+    assert clean["event_date"].isoformat() == "2026-08-12"
+    assert clean["confidence"] == 0.72
+
+
 class _Response:
     def raise_for_status(self) -> None:
         return None
@@ -113,9 +127,10 @@ def test_qianxin_client_uses_api_key_and_event_cursor() -> None:
     assert session.calls[0]["params"]["cursor"] == "opaque.current"
 
 
-def test_qianxin_sync_service_is_safe_by_default() -> None:
+def test_qianxin_sync_service_direct_imports_by_default() -> None:
     service = QianxinEventSyncService(object(), object())  # type: ignore[arg-type]
 
     assert service.source == "qianxin"
     assert service.lock_name == "apthunter:qianxin-event-sync"
-    assert service.auto_import is False
+    assert service.auto_import is True
+    assert service.enforce_review_gate is False

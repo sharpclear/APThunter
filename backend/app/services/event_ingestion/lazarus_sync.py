@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Mapping, Protocol
 
 from sqlalchemy import text
@@ -97,6 +97,7 @@ class LazarusEventSyncService:
         page_limit: int = 100,
         max_pages: int = 20,
         auto_import: bool = True,
+        enforce_review_gate: bool = True,
         source: str = SOURCE,
         source_label: str = "Lazarus.day",
         lock_name: str | None = None,
@@ -106,6 +107,7 @@ class LazarusEventSyncService:
         self.page_limit = max(1, min(200, int(page_limit)))
         self.max_pages = max(1, int(max_pages))
         self.auto_import = bool(auto_import)
+        self.enforce_review_gate = bool(enforce_review_gate)
         self.source = str(source or "").strip()
         if not self.source or len(self.source) > 64:
             raise ValueError("事件来源标识无效")
@@ -371,8 +373,11 @@ class LazarusEventSyncService:
         validation_errors, clean = validate_lazarus_variant(
             candidate,
             organization_names,
+            enforce_review_gate=self.enforce_review_gate,
         )
-        if organization_id is None or organization is None:
+        if self.enforce_review_gate and (
+            organization_id is None or organization is None
+        ):
             validation_errors.append("organization_id 不存在")
         clean["organization_id"] = organization_id
         clean["region"] = str((organization or {}).get("region") or "未知")
@@ -511,6 +516,47 @@ class LazarusEventSyncService:
                 return row
             if title and normalize_title(row.get("title")) == title:
                 return row
+
+        source_metadata = candidate.payload.get("source_metadata")
+        source_titles = {
+            normalize_title(
+                source_metadata.get("title")
+                if isinstance(source_metadata, Mapping)
+                else None
+            )
+        }
+        evidence = variant.get("evidence")
+        if isinstance(evidence, list):
+            source_titles.update(
+                normalize_title(item.get("title"))
+                for item in evidence
+                if isinstance(item, Mapping)
+            )
+        source_titles.discard("")
+        source_titles.discard(title)
+        if source_titles:
+            nearby_rows = (
+                connection.execute(
+                    text(
+                        """
+                    SELECT id, organization_id, event_date, region, link, title
+                    FROM apt_events
+                    WHERE organization_id = :organization_id
+                      AND event_date BETWEEN :start_date AND :end_date
+                    """
+                    ),
+                    {
+                        "organization_id": organization_id,
+                        "start_date": event_date - timedelta(days=1),
+                        "end_date": event_date + timedelta(days=1),
+                    },
+                )
+                .mappings()
+                .all()
+            )
+            for row in nearby_rows:
+                if normalize_title(row.get("title")) in source_titles:
+                    return row
         return None
 
     @staticmethod

@@ -64,20 +64,30 @@ class EventDeduplicator:
             event_id = (row.get("id") or "").strip()
             try:
                 date_value = normalize_legacy_date(row.get("event_date") or "")
-                link = canonicalize_url(row.get("link") or "")
             except ValidationError as exc:
                 raise ValidationError(
                     f"现有事件 CSV 第 {line_number} 行无效：{exc}"
                 ) from exc
+            link = ""
+            raw_link = (row.get("link") or "").strip()
+            if raw_link:
+                try:
+                    link = canonicalize_url(raw_link)
+                except ValidationError:
+                    # Legacy APTHunter rows may not have a usable source URL.
+                    # They can still participate in organization/date/title
+                    # deduplication and must not block a collection run.
+                    link = ""
             organization_id = (row.get("organization_id") or "").strip()
             title_key = normalize_title_for_key(row.get("title") or "")
-            instance._existing_links.setdefault(link, event_id)
-            instance._existing_link_org.setdefault(
-                (link, organization_id), event_id
-            )
-            instance._existing_link_org_date.setdefault(
-                (link, organization_id, date_value), event_id
-            )
+            if link:
+                instance._existing_links.setdefault(link, event_id)
+                instance._existing_link_org.setdefault(
+                    (link, organization_id), event_id
+                )
+                instance._existing_link_org_date.setdefault(
+                    (link, organization_id, date_value), event_id
+                )
             instance._existing_org_date_title.setdefault(
                 (organization_id, date_value, title_key), event_id
             )

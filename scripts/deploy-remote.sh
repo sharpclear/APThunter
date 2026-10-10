@@ -51,6 +51,8 @@ require_cmd() {
 }
 
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-apthunter}"
+COMPOSE_PROFILES="${COMPOSE_PROFILES:-vm}"
+export COMPOSE_PROFILES
 UPLOAD_DIR="${REMOTE_UPLOAD_DIR:-$ROOT/releases}"
 DEPLOY_TAG="${DEPLOY_TAG:-}"
 ARCHIVE="${ARCHIVE:-}"
@@ -68,7 +70,7 @@ ALLOW_CODE_MISMATCH="${ALLOW_CODE_MISMATCH:-0}"
 ALLOW_ACTIVE_TASKS="${ALLOW_ACTIVE_TASKS:-0}"
 MIGRATIONS_ONLY=0
 TARGET_IMAGES=()
-APP_SERVICES=(backend celery-worker celery-beat lazarus-collector frontend)
+APP_SERVICES=(backend celery-worker celery-beat lazarus-collector frontend qianxin-tunnel-proxy)
 ROLLBACK_TAG=""
 
 while [[ $# -gt 0 ]]; do
@@ -192,19 +194,32 @@ validate_runtime_config() {
     return
   fi
 
-  local lazarus_key qianxin_enabled qianxin_url qianxin_key
+  local lazarus_key qianxin_enabled qianxin_url qianxin_key enrichment_url enrichment_key
   lazarus_key="$(effective_env_value LAZARUS_DAY_API_KEY)"
   [[ ${#lazarus_key} -ge 32 ]] \
     || fail "LAZARUS_DAY_API_KEY must be configured with at least 32 characters in .env"
 
   qianxin_enabled="$(effective_env_value QIANXIN_EVENT_SYNC_ENABLED)"
+  qianxin_url="$(effective_env_value QIANXIN_API_URL)"
+  qianxin_key="$(effective_env_value QIANXIN_API_KEY)"
   if is_true "$qianxin_enabled"; then
-    qianxin_url="$(effective_env_value QIANXIN_API_URL)"
-    qianxin_key="$(effective_env_value QIANXIN_API_KEY)"
     [[ "$qianxin_url" == http://* || "$qianxin_url" == https://* ]] \
       || fail "QIANXIN_API_URL must be an http(s) URL when QIANXIN_EVENT_SYNC_ENABLED=true"
     [[ ${#qianxin_key} -ge 32 ]] \
       || fail "QIANXIN_API_KEY must contain at least 32 characters when QIANXIN_EVENT_SYNC_ENABLED=true"
+  fi
+
+  enrichment_url="$(effective_env_value LAZARUS_ENRICHMENT_API_URL)"
+  enrichment_key="$(effective_env_value LAZARUS_ENRICHMENT_API_KEY)"
+  enrichment_url="${enrichment_url:-$qianxin_url}"
+  enrichment_key="${enrichment_key:-$qianxin_key}"
+  if [[ -n "$enrichment_url" || -n "$enrichment_key" ]]; then
+    [[ "$enrichment_url" == http://* || "$enrichment_url" == https://* ]] \
+      || fail "LAZARUS_ENRICHMENT_API_URL (or QIANXIN_API_URL fallback) must be an http(s) URL"
+    [[ ${#enrichment_key} -ge 32 ]] \
+      || fail "LAZARUS_ENRICHMENT_API_KEY (or QIANXIN_API_KEY fallback) must contain at least 32 characters"
+  else
+    log "warning: Lazarus model enrichment is disabled because no enrichment/Qianxin API URL is configured"
   fi
 }
 
@@ -531,6 +546,24 @@ run_db_bootstrap() {
 }
 
 recreate_app_services() {
+  local proxy_name="apthunter-qianxin-tunnel-proxy"
+  local proxy_id=""
+  local proxy_project=""
+
+  proxy_id="$(docker ps -aq --filter "name=^/${proxy_name}$" | head -n 1)"
+  if [[ -n "$proxy_id" ]]; then
+    proxy_project="$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' "$proxy_id" 2>/dev/null || true)"
+    if [[ "$proxy_project" != "$COMPOSE_PROJECT_NAME" ]]; then
+      log "replacing legacy unmanaged Qianxin tunnel proxy"
+      docker rm -f "$proxy_id" >/dev/null
+    fi
+  fi
+
+  log "starting managed Qianxin tunnel proxy"
+  compose up -d --no-build --no-deps --force-recreate qianxin-tunnel-proxy
+  wait_for_service qianxin-tunnel-proxy "$HEALTH_TIMEOUT_SEC" \
+    || { show_rollback_hint; fail "qianxin-tunnel-proxy failed during staged startup"; }
+
   log "recreating app services without building or touching dependencies"
   compose up -d --no-build --no-deps --force-recreate backend lazarus-collector
   wait_for_service backend "$HEALTH_TIMEOUT_SEC" \
@@ -559,6 +592,7 @@ verify_services() {
   wait_for_service celery-beat "$HEALTH_TIMEOUT_SEC" || failed=1
   wait_for_service lazarus-collector "$HEALTH_TIMEOUT_SEC" || failed=1
   wait_for_service frontend "$HEALTH_TIMEOUT_SEC" || failed=1
+  wait_for_service qianxin-tunnel-proxy "$HEALTH_TIMEOUT_SEC" || failed=1
 
   log "current Compose status"
   compose ps
